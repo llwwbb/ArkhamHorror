@@ -1,0 +1,60 @@
+name: Build & Push Image (zh)
+
+# 在 GitHub 托管的原生 amd64 runner 上构建本 fork(zh 分支)的镜像,
+# 推送到 GHCR: ghcr.io/llwwbb/arkham-horror。包设为 public 后 server1 可免认证 pull。
+# 手动触发(Actions 页面 → Run workflow,或 `gh workflow run build-image.yml --ref zh`)。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write          # 用内置 GITHUB_TOKEN 推 GHCR,无需额外密钥
+
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space        # GHC 多阶段构建占盘大,清掉 runner 预装的无关工具(腾 ~20GB+)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          large-packages: true
+          docker-images: false
+          swap-storage: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/llwwbb/arkham-horror:zh
+            ghcr.io/llwwbb/arkham-horror:${{ github.sha }}
+          # 不烤 ASSET_HOST:前端默认即指官方 CDN,实际由运行时后端 /site-settings 决定,
+          # 在 server1 的 compose 里用 ASSET_HOST 环境变量控制(CDN/本地随时切,无需重建镜像)。
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
