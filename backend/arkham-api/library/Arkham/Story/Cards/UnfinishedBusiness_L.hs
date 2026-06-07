@@ -5,6 +5,7 @@ module Arkham.Story.Cards.UnfinishedBusiness_L (unfinishedBusiness_L) where
 import Arkham.Ability
 import Arkham.Card
 import Arkham.Enemy.Cards qualified as Enemies
+import Arkham.I18n (ikey', withI18n)
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Story.Cards qualified as Cards
@@ -28,7 +29,7 @@ instance RunMessage UnfinishedBusiness_L where
         then do
           batched \_ -> do
             checkWhen $ Window.ScenarioEvent "wouldBanish" (Just iid) (toJSON card)
-            send $ format card <> " was \"Banished\""
+            withI18n $ send $ format card <> " " <> ikey' "log.wasBanished"
             addToVictory iid attrs
         else afterStoryResolution attrs do
           removeStory attrs

@@ -444,10 +444,10 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     push CheckForRemainingInvestigators
     pure a
   Remember logKey -> do
-    send $ "Remember \"" <> format logKey <> "\""
+    withI18n $ send $ ikey' "log.remember" <> " \"" <> format logKey <> "\""
     pure $ a & logL %~ insertSet logKey
   Forget logKey -> do
-    send $ "Forgot \"" <> format logKey <> "\""
+    withI18n $ send $ ikey' "log.forgot" <> " \"" <> format logKey <> "\""
     pure $ a & logL %~ deleteSet logKey
   ScenarioCountSet logKey n -> do
     checkAfter $ Window.ScenarioCountIncremented logKey
@@ -1605,7 +1605,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       then do
         let defs = mapMaybe lookupCardDef $ recordedCardCodes recs
         for_ defs $ \def ->
-          send $ "Record \"" <> format (toName def) <> " " <> format key <> "\""
+          withI18n $ send $ ikey' "log.record" <> " \"" <> format (toName def) <> " " <> format key <> "\""
         pure $ case a ^. standaloneCampaignLogL . recordedSetsL . at key of
           Nothing -> a & standaloneCampaignLogL . recordedSetsL %~ insertMap key recs
           Just set ->

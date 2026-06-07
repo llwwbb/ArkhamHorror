@@ -3,6 +3,7 @@ module Arkham.Treachery.Cards.ThroughTheGates (throughTheGates) where
 import Arkham.Card
 import Arkham.Helpers (unDeck)
 import Arkham.Helpers qualified as Helpers
+import Arkham.I18n (ikey', withI18n)
 import Arkham.Investigator.Types (Field (..))
 import Arkham.Matcher
 import Arkham.Projection
@@ -22,7 +23,7 @@ instance RunMessage ThroughTheGates where
       (mcard, _) <- fieldMap InvestigatorDeck (Helpers.drawCard . unDeck) iid
       for_ mcard $ \(toCard -> card) -> do
         unless (card `cardMatch` WeaknessCard) do
-          send $ format (toCard attrs) <> " removed all copies of " <> format card <> " from the game"
+          withI18n $ send $ format (toCard attrs) <> " " <> ikey' "log.removedAllCopiesOf" <> " " <> format card <> " " <> ikey' "log.fromTheGame"
         focusCards [card] do
           prompt iid "Resolve Through the Gates" do
             if card `cardMatch` WeaknessCard

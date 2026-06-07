@@ -31,7 +31,7 @@ instance RunMessage CosmicRevelation1 where
       for_ investigators \iid' -> do
         cards <- select $ inHandOf NotForPlay iid' <> basic (NonWeakness <> matcher)
         iattrs <- getAttrs @Investigator iid'
-        send $ format iattrs <> " reveals " <> formatAsSentence cards
+        withI18n $ send $ format iattrs <> " " <> ikey' "log.reveals" <> " " <> formatAsSentence cards
       for_ investigators (`forTarget` msg)
       pure e
     ForTarget (InvestigatorTarget iid) (ForChoice n (PlayThisEvent _iid (is attrs -> True))) -> do

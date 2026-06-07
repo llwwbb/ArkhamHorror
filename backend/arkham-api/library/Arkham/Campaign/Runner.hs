@@ -312,7 +312,7 @@ defaultCampaignRunner msg a = case msg of
       . (logL . recordedCountsL %~ deleteMap key)
       . (logL . orderedKeysL %~ removeOrderedKey)
   Record key -> do
-    send $ "Record \"" <> format key <> "\""
+    withI18n $ send $ ikey' "log.record" <> " \"" <> format key <> "\""
     pure
       $ updateAttrs a
       $ ( logL
@@ -326,7 +326,7 @@ defaultCampaignRunner msg a = case msg of
   RecordSetInsert key recs -> do
     let defs = mapMaybe lookupCardDef $ recordedCardCodes recs
     for_ defs $ \def ->
-      send $ "Record \"" <> format (toName def) <> " " <> format key <> "\""
+      withI18n $ send $ ikey' "log.record" <> " \"" <> format (toName def) <> " " <> format key <> "\""
     pure $ case toAttrs a ^. logL . recordedSetsL . at key of
       Nothing ->
         updateAttrs a $ logL . recordedSetsL %~ insertMap key recs
@@ -360,7 +360,7 @@ defaultCampaignRunner msg a = case msg of
         )
         key
   RecordCount key int -> do
-    send $ "Record \"" <> format key <> "\" (" <> tshow int <> ")"
+    withI18n $ send $ ikey' "log.record" <> " \"" <> format key <> "\" (" <> tshow int <> ")"
     pure $ updateAttrs a $ logL . recordedCountsL %~ insertMap key int
   IncrementRecordCount key int ->
     pure $ updateAttrs a $ logL . recordedCountsL %~ alterMap (Just . maybe int (+ int)) key

@@ -4,6 +4,7 @@ import Arkham.Card
 import Arkham.ChaosToken
 import Arkham.Event.Cards qualified as Cards
 import Arkham.Event.Import.Lifted
+import Arkham.I18n (ikey', withI18n)
 import Arkham.Taboo
 
 newtype VoiceOfRa = VoiceOfRa EventAttrs
@@ -19,7 +20,7 @@ instance RunMessage VoiceOfRa where
       requestChaosTokens iid attrs 3
       pure e
     RequestedChaosTokens (isSource attrs -> True) (Just iid) (map chaosTokenFace -> tokens) -> do
-      send $ format (toCard attrs) <> " drew " <> toSentence (map chaosTokenLabel tokens)
+      withI18n $ send $ format (toCard attrs) <> " " <> ikey' "log.drew" <> " " <> toSentence (map chaosTokenLabel tokens)
       continue_ iid
       let valid =
             if tabooed TabooList20 attrs

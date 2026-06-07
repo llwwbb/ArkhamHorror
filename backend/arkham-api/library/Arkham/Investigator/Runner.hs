@@ -411,7 +411,7 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
   EndOfGame _ -> do
     pure $ a & placementL .~ Unplaced
   RecordForInvestigator iid key | iid == toId a -> do
-    send $ "Record \"" <> format investigatorName <> " " <> format key <> "\""
+    withI18n $ send $ ikey' "log.record" <> " \"" <> format investigatorName <> " " <> format key <> "\""
     pure $ a & (logL . recordedL %~ insertSet key) . (logL . orderedKeysL %~ (<> [key]))
   EndCheckWindow -> do
     depth <- getWindowDepth
@@ -761,7 +761,7 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
     excess <- getExcessInHandCount a
     when (excess > 0) $ do
       handSize <- getHandSize a
-      send $ format a <> " must discard down to " <> tshow handSize <> " cards"
+      withI18n $ send $ format a <> " " <> ikey' "log.mustDiscardDownTo" <> " " <> tshow handSize <> " " <> ikey' "log.cardsNoun"
       pushAll [SetActiveInvestigator iid, Do msg]
     pure a
   Do (CheckHandSize iid) | iid == investigatorId -> do

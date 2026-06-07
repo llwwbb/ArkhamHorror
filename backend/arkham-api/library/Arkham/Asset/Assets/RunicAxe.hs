@@ -166,7 +166,7 @@ instance RunMessage RunicAxe where
       pure a
     DoStep n (ChoseEnemy sid iid (isAbilitySource attrs 1 -> True) eid) -> do
       let inscription = toEnum n
-      send $ "Imbued Runic Axe with " <> tshow inscription
+      withI18n $ send $ ikey' "log.imbuedRunicAxeWith" <> " " <> tshow inscription
       case inscription of
         Accuracy -> skillTestModifier sid (attrs.ability 1) iid (SkillModifier #combat 2)
         Power -> skillTestModifier sid (attrs.ability 1) iid (DamageDealt 1)

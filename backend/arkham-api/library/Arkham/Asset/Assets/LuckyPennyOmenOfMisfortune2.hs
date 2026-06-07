@@ -6,6 +6,7 @@ import Arkham.Asset.Import.Lifted hiding (RevealChaosToken)
 import Arkham.ChaosToken
 import Arkham.Helpers.SkillTest (withSkillTest)
 import Arkham.Helpers.Window (getChaosToken)
+import Arkham.I18n (ikey', withI18n)
 import Arkham.Matcher
 import Arkham.Modifier
 
@@ -31,10 +32,10 @@ instance RunMessage LuckyPennyOmenOfMisfortune2 where
         coin <- sample $ Heads :| [Tails]
         case coin of
           Heads -> do
-            send $ "The coin lands on heads. Treating token as " <> format @ChaosTokenFace #bless
+            withI18n $ send $ ikey' "log.coinHeads" <> " " <> format @ChaosTokenFace #bless
             skillTestModifier sid attrs token (ChaosTokenFaceModifier [#bless])
           Tails -> do
-            send $ "The coin lands on tails. Treating token as " <> format @ChaosTokenFace #curse
+            withI18n $ send $ ikey' "log.coinTails" <> " " <> format @ChaosTokenFace #curse
             skillTestModifier sid attrs token (ChaosTokenFaceModifier [#curse])
             when (token.face == #bless) do
               drawCardsIfCan iid (attrs.ability 1) 1

@@ -92,7 +92,7 @@ instance RunMessage Subject5U21 where
             targeting card $ push $ Devoured iid card
       pure i
     Devoured iid card | iid == toId attrs -> do
-      send $ format attrs <> " devours " <> format card
+      withI18n $ send $ format attrs <> " " <> ikey' "log.devours" <> " " <> format card
       selectOne (assetIs Assets.ravenousControlledHunger) >>= \case
         Nothing -> do
           obtainCard card
