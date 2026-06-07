@@ -421,7 +421,9 @@ const handleResult = (result: ServerResult) => {
       }
       return
     case 'GameMessage':
-      gameLog.value = Object.freeze([...gameLog.value, localize(result.contents)])
+      // Store the raw token; GameMessage.vue localizes via handleEmbeddedI18n,
+      // which keeps params intact and re-renders reactively on language change.
+      gameLog.value = Object.freeze([...gameLog.value, result.contents])
       return
     case 'GameShowDiscard':
       emitter.emit('showDiscards', result.contents)
@@ -1037,13 +1039,6 @@ async function chooseAmounts(amounts: Record<string, number>): Promise<void> {
       }),
     )
   }
-}
-
-function localize(str: string): string {
-  if (str.startsWith('$')) {
-    return t(str.slice(1))
-  }
-  return str
 }
 
 async function update(state: Arkham.Game) {

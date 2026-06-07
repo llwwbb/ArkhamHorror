@@ -73,7 +73,7 @@ import Arkham.Label (mkLabel)
 import Arkham.Location.Grid
 import Arkham.Location.Types (Field (..))
 import Arkham.Matcher qualified as Matcher
-import Arkham.I18n (countVar, withI18n)
+import Arkham.I18n (countVar, ikey', withI18n)
 import Arkham.Message.Lifted hiding (discard)
 import Arkham.Message.Lifted.Choose
 import Arkham.Name hiding (labeled)
@@ -263,6 +263,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       Just (x : y : ys) -> do
         let fromAgendaId = AgendaId (toCardCode x)
         push $ ReplaceAgenda fromAgendaId y
+        withI18n $ send $ ikey' "log.agendaAdvancedTo" <> " " <> format y
         pure (x, y : ys)
       _ -> error "Can not advance agenda deck"
     pure
@@ -297,6 +298,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       Just (x : y : ys) -> do
         let fromActId = ActId $ toCardCode x
         push $ ReplaceAct fromActId y
+        withI18n $ send $ ikey' "log.actAdvancedTo" <> " " <> format y
         pure
           $ a
           & (actStackL . at n ?~ (y : ys))

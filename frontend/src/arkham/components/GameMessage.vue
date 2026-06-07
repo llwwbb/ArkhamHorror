@@ -4,6 +4,7 @@ import { imgsrc } from '@/arkham/helpers';
 import { cardArt } from '@/arkham/cardImages';
 import { Game } from '@/arkham/types/Game';
 import { handleEmbeddedI18n } from '@/arkham/i18n';
+import { useDbCardStore } from '@/stores/dbCards';
 
 function imageFor(tokenFace: string) {
   switch (tokenFace) {
@@ -56,6 +57,13 @@ export default defineComponent({
     msg: { type: String, required: true },
   },
   render() {
+    const dbCards = useDbCardStore();
+    // Localize a card/investigator chip's display text via the localized card DB
+    // (keyed by card code), falling back to the name embedded by the backend.
+    const localizedName = (code: string, fallback: string): string => {
+      const c = dbCards.getDbCard(code);
+      return c && c.name ? c.name : fallback;
+    };
     const msg = handleEmbeddedI18n(this.msg, this.$t);
     const splits = msg.split(/({[^}]+})/)
     const els = splits.map(split => {
@@ -64,7 +72,7 @@ export default defineComponent({
         if (found) {
           const [, cardName, cardId] = found
           if (cardName && cardId) {
-            return h('span', { 'data-image-id': cardId }, cardName.replace(/\\"/g, "\""))
+            return h('span', { 'data-image-id': cardId }, localizedName(cardId, cardName.replace(/\\"/g, "\"")))
           }
         }
       } else if (/{investigator:"((?:[^"]|\\.)+)":"([^"]+)"}/.test(split)) {
@@ -72,7 +80,7 @@ export default defineComponent({
         if (found) {
           const [, name, investigatorId ] = found
           if (investigatorId) {
-            return name ? h('span', { 'data-image-id': investigatorId, 'class': 'card--sideways' }, name.replace(/\\"/g, "\"")) : split
+            return name ? h('span', { 'data-image-id': investigatorId, 'class': 'card--sideways' }, localizedName(investigatorId, name.replace(/\\"/g, "\""))) : split
           }
         }
       } else if (/{enemy:"((?:[^"]|\\.)+)":(.+):"([^"]+)"}/.test(split)) {

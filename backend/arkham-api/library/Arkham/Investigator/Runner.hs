@@ -1229,7 +1229,7 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
           | notNull concealed -> chooseExposeConcealedAt iid iid (LocationWithId lid)
           | otherwise -> defaultDiscover
 
-        send $ format a <> " discovered " <> pluralize clueCount "clue"
+        withI18n $ send $ format a <> " " <> ikey' "log.discoveredVerb" <> " " <> tshow clueCount <> " " <> ikey' (if clueCount == 1 then "log.clueNoun" else "log.cluesNoun")
         pure a
       else pure a
   InvestigatorDiscardAllClues _ iid | iid == investigatorId -> do

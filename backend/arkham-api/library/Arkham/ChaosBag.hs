@@ -15,6 +15,7 @@ import Arkham.Helpers.Message
 import Arkham.Helpers.Modifiers (ModifierType (..), getModifiers, hasModifier)
 import Arkham.Helpers.Query (getActiveInvestigatorId, getInvestigators, getLead)
 import Arkham.Helpers.Window (checkWhen, checkWindows)
+import Arkham.I18n (ikey', withI18n)
 import Arkham.Id
 import Arkham.Investigator.Types (Investigator)
 import Arkham.Matcher (ChaosTokenMatcher (AnyChaosToken, ChaosTokenFaceIsNot, IncludeSealed))
@@ -869,12 +870,15 @@ instance RunMessage ChaosBag where
             Nothing -> pure []
           for_ miid \iid -> do
             investigator <- getAttrs @Investigator iid
-            send
+            withI18n
+              $ send
               $ format investigator
-              <> " draws "
+              <> " "
+              <> ikey' "log.drawsTokenVerb"
+              <> " "
               <> formatAsSentence tokens'
-              <> " chaos "
-              <> (if length tokens' == 1 then "token" else "tokens")
+              <> " "
+              <> ikey' (if length tokens' == 1 then "log.chaosTokenNoun" else "log.chaosTokensNoun")
 
           -- the skill test handles revealing its own tokens so we only reveal
           -- here if the source was something else and we have an investigator

@@ -1,3 +1,13 @@
 {
-  "retaliate": "{name} retaliates"
+  "retaliate": "{name} retaliates",
+  "encounteredVerb": "encountered",
+  "actAdvancedTo": "Act advances:",
+  "agendaAdvancedTo": "Agenda advances:",
+  "played": "played",
+  "drawsTokenVerb": "draws",
+  "chaosTokenNoun": "chaos token",
+  "chaosTokensNoun": "chaos tokens",
+  "discoveredVerb": "discovered",
+  "clueNoun": "clue",
+  "cluesNoun": "clues"
 }

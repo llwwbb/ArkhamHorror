@@ -1,3 +1,13 @@
 {
-  "retaliate": "{name}报复"
+  "retaliate": "{name}报复",
+  "encounteredVerb": "遭遇了",
+  "actAdvancedTo": "场景推进：",
+  "agendaAdvancedTo": "密谋推进：",
+  "played": "打出了",
+  "drawsTokenVerb": "抽取了",
+  "chaosTokenNoun": "混乱标记",
+  "chaosTokensNoun": "混乱标记",
+  "discoveredVerb": "发现了",
+  "clueNoun": "个线索",
+  "cluesNoun": "个线索"
 }

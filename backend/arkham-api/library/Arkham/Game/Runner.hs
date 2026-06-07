@@ -1525,7 +1525,7 @@ runGameMessage msg g = case msg of
         let owner = fromMaybe iid $ listToMaybe [o | PlayableCardOf o c <- mods, c == card]
         let controller = fromMaybe owner $ listToMaybe [c | PlayUnderControlOf c <- cardMods]
 
-        send $ format investigator' <> " played " <> format card
+        withI18n $ send $ format investigator' <> " " <> ikey' "log.played" <> " " <> format card
         g' <- runGameMessage (PutCardIntoPlay controller card mtarget payment windows') g
         let
           recordLimit g'' = \case
@@ -3028,6 +3028,9 @@ runGameMessage msg g = case msg of
         error $ "Currently not handling Revelations from type " <> show other
   ResolvedCard iid card -> do
     modifiers' <- getModifiers (toCardId card)
+    for_ (preview _EncounterCard card) \_ -> do
+      investigator <- getInvestigator iid
+      withI18n $ send $ format investigator <> " " <> ikey' "log.encounteredVerb" <> " " <> format card
     push $ After msg
     when
       ( NoSurge
