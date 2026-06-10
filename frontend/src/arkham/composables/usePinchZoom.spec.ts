@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pinchedZoom } from './usePinchZoom'
+import { pinchedZoom, wheelPinchedZoom } from './usePinchZoom'
 
 describe('pinchedZoom', () => {
   it('双指距离比例缩放', () => {
@@ -18,5 +18,26 @@ describe('pinchedZoom', () => {
 
   it('保留三位小数', () => {
     expect(pinchedZoom(1, 300, 100)).toBe(0.333)
+  })
+})
+
+describe('wheelPinchedZoom', () => {
+  it('deltaY 为负（张开）放大，为正（捏合）缩小', () => {
+    expect(wheelPinchedZoom(1, -10)).toBeGreaterThan(1)
+    expect(wheelPinchedZoom(1, 10)).toBeLessThan(1)
+  })
+
+  it('放大缩小互为逆操作（指数映射对称）', () => {
+    const zoomedIn = wheelPinchedZoom(1, -50)
+    expect(wheelPinchedZoom(zoomedIn, 50)).toBeCloseTo(1, 2)
+  })
+
+  it('夹在 [0.25, 6] 区间', () => {
+    expect(wheelPinchedZoom(5, -1000)).toBe(6)
+    expect(wheelPinchedZoom(0.3, 1000)).toBe(0.25)
+  })
+
+  it('currentZoom 为 0 时按 1 处理', () => {
+    expect(wheelPinchedZoom(0, 0)).toBe(1)
   })
 })

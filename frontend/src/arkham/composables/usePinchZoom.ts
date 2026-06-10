@@ -13,6 +13,13 @@ export function pinchedZoom(
   return Math.min(max, Math.max(min, parseFloat(next.toFixed(3))))
 }
 
+// 触摸板捏合（Chrome/Edge/Firefox 表示为 ctrl+wheel）的缩放：deltaY 指数映射，
+// 负值（张开）放大。区间与滑杆一致。
+export function wheelPinchedZoom(currentZoom: number, deltaY: number, min = 0.25, max = 6): number {
+  const next = (currentZoom || 1) * Math.exp(-deltaY * 0.01)
+  return Math.min(max, Math.max(min, parseFloat(next.toFixed(3))))
+}
+
 // 双指捏合驱动 zoom ref。pointerdown 绑在目标元素上，move/up 绑在 window
 // （与 Scenario 的地点拖拽同一模式），手指滑出元素也不丢事件。
 export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>) {
@@ -56,6 +63,15 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
     }
   }
 
+  // 触摸板捏合：浏览器表示为 ctrl+wheel（真实的 ctrl+滚轮语义相同——都是浏览器
+  // 页面缩放手势）。在地图区域内截获并改为缩放地图；Cmd +/- 页面缩放不受影响。
+  const onWheel = (e: WheelEvent) => {
+    if (!e.ctrlKey) return
+    e.preventDefault()
+    pendingZoom = wheelPinchedZoom(pendingZoom ?? zoom.value, e.deltaY)
+    rafId ??= requestAnimationFrame(flushZoom)
+  }
+
   const onPointerEnd = (e: PointerEvent) => {
     pointers.delete(e.pointerId)
     if (pointers.size < 2) {
@@ -83,7 +99,12 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
       // 保证解锁模式下双指捏合仍可触发。pinch 只读坐标，不调用 preventDefault/
       // stopPropagation，是安全的被动观察者，不影响拖拽逻辑。
       el.addEventListener('pointerdown', onPointerDown, { capture: true })
-      onCleanup(() => el.removeEventListener('pointerdown', onPointerDown, { capture: true }))
+      // wheel 需要 non-passive 才能 preventDefault 掉浏览器页面缩放
+      el.addEventListener('wheel', onWheel, { passive: false })
+      onCleanup(() => {
+        el.removeEventListener('pointerdown', onPointerDown, { capture: true })
+        el.removeEventListener('wheel', onWheel)
+      })
     },
     { immediate: true },
   )
