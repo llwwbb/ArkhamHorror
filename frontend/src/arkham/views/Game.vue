@@ -1,18 +1,7 @@
 <script lang="ts" setup>
-import {
-  computed,
-  onMounted,
-  onUnmounted,
-  provide,
-  ref,
-  shallowRef,
-  useTemplateRef,
-  watch,
-} from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import confetti from '@/effects/confetti'
-import { useWebSocket } from '@vueuse/core'
 import { MenuItem } from '@headlessui/vue'
 import {
   AdjustmentsHorizontalIcon,
@@ -35,7 +24,6 @@ import { LottieAnimation } from 'lottie-web-vue'
 import processingJSON from '@/assets/processing.json'
 import api from '@/api'
 import {
-  fetchGame,
   undoChoice,
   undoScenarioChoice,
   undoAction,
@@ -51,7 +39,6 @@ import useEmitter from '@/composable/useEmitter'
 import { useDebug } from '@/arkham/debug'
 import { imgsrc } from '@/arkham/helpers'
 import { getGameLocalStorageItem, setGameLocalStorageItem } from '@/arkham/localStorage'
-import * as Arkham from '@/arkham/types/Game'
 import * as ArkhamGame from '@/arkham/types/Game'
 import {
   choicesByPlayerKey,
@@ -59,11 +46,10 @@ import {
   choicesTooltipByPlayerKey,
 } from '@/arkham/composables/useGameChoices'
 import { buildGameIndexes, gameIndexesKey } from '@/arkham/composables/useGameIndexes'
-import { loadAllGameImages, preloadGameImages } from '@/arkham/gameImagePreload'
 import * as Message from '@/arkham/types/Message'
-import { type Question } from '@/arkham/types/Question'
 import type { Source } from '@/arkham/types/Source'
 import { useGameModals } from '@/arkham/composables/useGameModals'
+import { useGameSocket } from '@/arkham/composables/useGameSocket'
 import Campaign from '@/arkham/components/Campaign.vue'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
@@ -87,18 +73,6 @@ import Settings from '@/arkham/components/Settings.vue'
 import StandaloneScenario from '@/arkham/components/StandaloneScenario.vue'
 import Draggable from '@/components/Draggable.vue'
 import Menu from '@/components/Menu.vue'
-
-// TODO: contents should not be string
-type ServerResult =
-  | { tag: 'GameError'; contents: string }
-  | { tag: 'GameMessage'; contents: string }
-  | { tag: 'GameTarot'; contents: string }
-  | { tag: 'GameCard'; contents: string }
-  | { tag: 'GameCardOnly'; contents: string }
-  | { tag: 'GameUpdate'; contents: string }
-  | { tag: 'GameShowDiscard'; contents: string }
-  | { tag: 'GameShowUnder'; contents: string }
-  | { tag: 'GameUI'; contents: string }
 
 export interface Props {
   gameId: string
@@ -126,14 +100,37 @@ interface PlayabilityInfo {
   checks: [string, string | null][]
 }
 
-const game = shallowRef<Arkham.Game | null>(null)
 const modals = useGameModals()
-const { uiLock, gameCard, tarotCards, showTheSilenceModal, continueUI } = modals
+const { gameCard, tarotCards, showTheSilenceModal, continueUI } = modals
+const socket = useGameSocket({
+  gameId: () => props.gameId,
+  spectate: props.spectate,
+  modals,
+  emitter,
+})
+const {
+  game,
+  gameLog,
+  playerId,
+  ready,
+  solo,
+  error,
+  socketError,
+  processing,
+  send,
+  close,
+  choose,
+  chooseDeck,
+  chooseDeckList,
+  choosePaymentAmounts,
+  chooseAmounts,
+  setGameQuestion,
+  clearResultQueue,
+  skipAllTriggers,
+  skipAllAvailable,
+  switchInvestigator,
+} = socket
 const playabilityInfo = ref<PlayabilityInfo | null>(null)
-const gameLog = shallowRef<readonly string[]>(Object.freeze([]))
-const playerId = ref<string | null>(null)
-const ready = ref(false)
-const resultQueue = ref<any>([])
 const showLog = ref(false)
 const showShortcuts = ref(false)
 const { isTouch, size } = useDeviceLayout()
@@ -141,18 +138,12 @@ const isMobileViewport = () => size.value === 'phone'
 const showSidebar = ref(
   isMobileViewport() ? false : JSON.parse(getGameLocalStorageItem(props.gameId, 'showSidebar') ?? 'true'),
 )
-const socketError = ref(false)
-const error = ref<string | null>(null)
-const solo = ref(false)
 const showOtherPlayersHands = ref(getGameLocalStorageItem(props.gameId, 'showOtherPlayersHands') === 'true')
 watch(showOtherPlayersHands, (v) => {
   setGameLocalStorageItem(props.gameId, 'showOtherPlayersHands', v ? 'true' : 'false')
 })
 const showSettings = ref(false)
 const showHistory = ref(false)
-const processing = ref(false)
-const oldQuestion = ref<Record<string, Question> | null>(null)
-const skipAllPending = ref<Set<string>>(new Set())
 const { t } = useI18n()
 const sheetTap = ref<InterceptedTap | null>(null)
 let tapIntercept: TapIntercept | null = null
@@ -166,19 +157,6 @@ function confirmSheetAction() {
   const tap = sheetTap.value
   sheetTap.value = null
   if (tap) tapIntercept?.approve(tap)
-}
-
-function updateGameLog(nextLog: readonly string[]) {
-  const currentLog = gameLog.value
-  if (
-    currentLog.length === nextLog.length &&
-    currentLog[0] === nextLog[0] &&
-    currentLog[currentLog.length - 1] === nextLog[nextLog.length - 1]
-  ) {
-    return
-  }
-
-  gameLog.value = Object.freeze([...nextLog])
 }
 
 addEntry({
@@ -235,276 +213,6 @@ const question = computed(() => (playerId.value ? game.value?.question[playerId.
 const realityAcidLightActive = computed(() => {
   const scenario = game.value?.scenario
   return scenario?.id === 'c85001' && scenario.meta?.lightActive === true
-})
-
-function skipTriggerEntries(g: Arkham.Game): { playerId: string; choiceIdx: number }[] {
-  const result: { playerId: string; choiceIdx: number }[] = []
-  for (const pid of Object.keys(g.question)) {
-    const cs = ArkhamGame.choices(g, pid)
-    const idx = cs.findIndex((c) => c.tag === Message.MessageType.SKIP_TRIGGERS_BUTTON)
-    if (idx !== -1) result.push({ playerId: pid, choiceIdx: idx })
-  }
-  return result
-}
-
-const skipAllAvailable = computed(() => {
-  if (!solo.value || !game.value) return false
-  return skipTriggerEntries(game.value).length > 1
-})
-
-function setGameQuestion(question: Record<string, Question>) {
-  if (!game.value) return
-  game.value = { ...game.value, question }
-}
-
-const websocketUrl = computed(() => {
-  const spectatePrefix = props.spectate ? '/spectate' : ''
-  return `${baseURL}/api/v1/arkham/games/${props.gameId}${spectatePrefix}?token=${userStore.token}`
-    .replace(/https/, 'wss')
-    .replace(/http/, 'ws')
-})
-
-watch(
-  () => props.gameId,
-  async (newV, oldV) => {
-    if (!newV) return
-    if (newV === oldV) return
-    await fetchGame(props.gameId, props.spectate).then(
-      async ({ game: newGame, playerId: newPlayerId, multiplayerMode }) => {
-        try {
-          await loadAllGameImages(newGame)
-        } catch (e) {
-          console.error(e)
-        }
-        ;(window as Window & { g?: Arkham.Game }).g = newGame
-        game.value = newGame
-        solo.value = multiplayerMode === 'Solo'
-        updateGameLog(newGame.log)
-        playerId.value = newPlayerId
-        ready.value = true
-      },
-    )
-  },
-  { immediate: true },
-)
-
-const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? `:${window.location.port}` : ''}`
-
-// Socket Handling
-const onError = () => {
-  processing.value = false
-  if (game.value && oldQuestion.value) {
-    setGameQuestion(oldQuestion.value)
-  }
-  socketError.value = true
-}
-const onConnected = () => {
-  socketError.value = false
-  processing.value = false
-}
-
-const onMessage = (_ws: WebSocket, event: MessageEvent) => {
-  const result = JSON.parse(event.data)
-  handleResult(result)
-  oldQuestion.value = null
-}
-
-let qHead = 0
-const qPush = (x: any) => {
-  resultQueue.value.push(x)
-}
-const qPop = () => {
-  if (qHead >= resultQueue.value.length) {
-    resultQueue.value = []
-    qHead = 0
-    return undefined
-  }
-  return resultQueue.value[qHead++]
-}
-let decoding = false
-let pendingUpdate: string | null = null
-
-function scheduleApplyUpdate(payload: string) {
-  if (decoding) {
-    pendingUpdate = payload
-    return
-  }
-  decoding = true
-  Arkham.gameDecoder
-    .decodePromise(payload)
-    .then((updatedGame) => {
-      game.value = updatedGame
-      updateGameLog(updatedGame.log)
-      preloadGameImages(updatedGame)
-      if (solo.value === true) {
-        if (Object.keys(game.value.question).length == 1) {
-          playerId.value = Object.keys(game.value.question)[0]
-        } else if (game.value.activePlayerId !== playerId.value) {
-          if (playerId.value && Object.keys(game.value.question).includes(playerId.value)) {
-            playerId.value = game.value.activePlayerId
-          } else {
-            playerId.value = Object.keys(game.value.question)[0]
-          }
-        } else if (playerId.value && !Object.keys(game.value.question).includes(playerId.value)) {
-          playerId.value = Object.keys(game.value.question)[0]
-        }
-      }
-      continueSkipAll()
-    })
-    .finally(() => {
-      decoding = false
-      if (pendingUpdate) {
-        const p = pendingUpdate
-        pendingUpdate = null
-        scheduleApplyUpdate(p)
-      }
-    })
-}
-
-function continueSkipAll() {
-  if (skipAllPending.value.size === 0) return
-  if (!game.value) return
-  const next = skipTriggerEntries(game.value).find((e) => skipAllPending.value.has(e.playerId))
-  if (!next) {
-    skipAllPending.value = new Set()
-    return
-  }
-  sendSkipFor(next.playerId, next.choiceIdx)
-}
-
-function sendSkipFor(targetPlayerId: string, choiceIdx: number) {
-  if (!game.value || props.spectate) return
-  oldQuestion.value = game.value.question
-  const questionVersion = game.value.scenarioSteps
-  setGameQuestion({})
-  processing.value = true
-  send(
-    JSON.stringify({
-      tag: 'Answer',
-      contents: { choice: choiceIdx, playerId: targetPlayerId, questionVersion },
-    }),
-  )
-}
-
-function skipAllTriggers() {
-  if (!game.value || props.spectate) return
-  const entries = skipTriggerEntries(game.value)
-  if (entries.length === 0) return
-  skipAllPending.value = new Set(entries.map((e) => e.playerId))
-  const first = entries[0]
-  sendSkipFor(first.playerId, first.choiceIdx)
-}
-
-const { send, close } = useWebSocket(websocketUrl, {
-  autoReconnect: true,
-  onError,
-  onConnected,
-  onMessage,
-})
-const handleResult = (result: ServerResult) => {
-  processing.value = false
-  switch (result.tag) {
-    case 'GameError':
-      if (props.spectate) return
-      error.value = result.contents
-      if (game.value && oldQuestion.value) {
-        setGameQuestion(oldQuestion.value)
-      }
-      return
-    case 'GameMessage':
-      // Store the raw token; GameMessage.vue localizes via handleEmbeddedI18n,
-      // which keeps params intact and re-renders reactively on language change.
-      gameLog.value = Object.freeze([...gameLog.value, result.contents])
-      return
-    case 'GameShowDiscard':
-      emitter.emit('showDiscards', result.contents)
-      return
-    case 'GameShowUnder':
-      emitter.emit('showUnder', result.contents)
-      return
-    case 'GameUI':
-      if (result.contents.startsWith('theSilence:')) {
-        if (props.spectate) return
-        const targetPlayer = result.contents.slice('theSilence:'.length)
-        if (!(solo.value === true || targetPlayer === playerId.value)) return
-        if (uiLock.value) {
-          qPush(result)
-          return
-        }
-        modals.showSilence()
-        return
-      }
-      switch (result.contents) {
-        case 'confetti': {
-          setTimeout(() => {
-            var count = 500
-            var defaults = {
-              origin: { y: 0.7 },
-            }
-
-            function fire(particleRatio: number, opts: Parameters<typeof confetti>[0]) {
-              confetti({
-                ...defaults,
-                ...opts,
-                particleCount: Math.floor(count * particleRatio),
-              })
-            }
-
-            fire(0.25, {
-              spread: 26,
-              startVelocity: 55,
-            })
-          }, 500)
-        }
-        default:
-          return
-      }
-    case 'GameTarot':
-      if (props.spectate) return
-      if (uiLock.value) {
-        qPush(result)
-        return
-      }
-      modals.showTarot(result.contents)
-      return
-
-    case 'GameCard':
-      if (props.spectate) return
-      if (uiLock.value) {
-        qPush(result)
-        return
-      }
-      modals.showGameCard(result)
-      return
-
-    case 'GameCardOnly':
-      if (props.spectate) return
-      if (uiLock.value) {
-        qPush(result)
-        return
-      }
-      modals.showGameCardOnly(result, (player) => solo.value === true || player === playerId.value)
-      return
-    case 'GameUpdate':
-      if (uiLock.value) {
-        qPush(result)
-        if (game.value) setGameQuestion({})
-      } else {
-        scheduleApplyUpdate(result.contents)
-      }
-      return
-  }
-}
-
-watch(uiLock, async () => {
-  if (uiLock.value) return
-  // drain result queue
-  for (;;) {
-    const r = qPop()
-    if (!r) break
-    handleResult(r)
-    if (uiLock.value) break
-  }
 })
 
 const undoScenarioDialog = useTemplateRef<HTMLDialogElement>('undoScenarioDialog')
@@ -806,7 +514,7 @@ async function undo() {
   processing.value = true
   const oldQuestion = game.value?.question
   if (game.value) setGameQuestion({})
-  resultQueue.value = []
+  clearResultQueue()
   modals.resetForUndo()
   if (undoLock.value) return
   undoLock.value = true
@@ -824,7 +532,7 @@ async function undoScenario() {
   undoScenarioDialog.value?.close()
   processing.value = true
   if (game.value) setGameQuestion({})
-  resultQueue.value = []
+  clearResultQueue()
   modals.resetForUndo()
   undoScenarioChoice(props.gameId)
 }
@@ -834,7 +542,7 @@ async function undoBoundary(call: (gameId: string) => Promise<void>) {
   processing.value = true
   const oldQuestion = game.value?.question
   if (game.value) setGameQuestion({})
-  resultQueue.value = []
+  clearResultQueue()
   modals.resetForUndo()
   undoLock.value = true
   try {
@@ -884,77 +592,6 @@ async function fileBug() {
     })
 }
 
-// Callbacks
-async function choose(idx: number) {
-  if (idx !== -1 && game.value && !props.spectate) {
-    oldQuestion.value = game.value.question
-    const questionVersion = game.value.scenarioSteps
-    setGameQuestion({})
-    processing.value = true
-    send(
-      JSON.stringify({
-        tag: 'Answer',
-        contents: { choice: idx, playerId: playerId.value, questionVersion },
-      }),
-    )
-  }
-}
-
-async function chooseDeck(deckId: string): Promise<void> {
-  if (game.value && !props.spectate) {
-    oldQuestion.value = game.value.question
-    setGameQuestion({})
-    processing.value = true
-    send(JSON.stringify({ tag: 'DeckAnswer', deckId, playerId: playerId.value }))
-  }
-}
-
-async function chooseDeckList(deckList: object): Promise<void> {
-  if (game.value && !props.spectate) {
-    oldQuestion.value = game.value.question
-    setGameQuestion({})
-    processing.value = true
-    send(JSON.stringify({ tag: 'DeckListAnswer', deckList, playerId: playerId.value }))
-  }
-}
-
-async function choosePaymentAmounts(amounts: Record<string, number>): Promise<void> {
-  if (game.value && !props.spectate) {
-    oldQuestion.value = game.value.question
-    const questionVersion = game.value.scenarioSteps
-    setGameQuestion({})
-    processing.value = true
-    send(
-      JSON.stringify({
-        tag: 'PaymentAmountsAnswer',
-        contents: { amounts, questionVersion, playerId: playerId.value },
-      }),
-    )
-  }
-}
-
-async function chooseAmounts(amounts: Record<string, number>): Promise<void> {
-  if (game.value && !props.spectate) {
-    oldQuestion.value = game.value.question
-    const questionVersion = game.value.scenarioSteps
-    setGameQuestion({})
-    processing.value = true
-    send(
-      JSON.stringify({
-        tag: 'AmountsAnswer',
-        contents: { amounts, questionVersion, playerId: playerId.value },
-      }),
-    )
-  }
-}
-
-async function update(state: Arkham.Game) {
-  game.value = state
-}
-
-function switchInvestigator(newPlayerId: string) {
-  playerId.value = newPlayerId
-}
 type ExportType = 'basic' | 'full' | 'scenario'
 function debugExport(exportType: ExportType) {
   api
@@ -1438,7 +1075,7 @@ onUnmounted(() => {
           :playerId="playerId"
           :campaign="game.campaign"
           @choose="choose"
-          @update="update"
+          @update="socket.setGame"
         />
         <ScenarioSettings
           v-else-if="
@@ -1453,7 +1090,7 @@ onUnmounted(() => {
           :game="game"
           :playerId="playerId"
           @choose="choose"
-          @update="update"
+          @update="socket.setGame"
         />
         <div
           class="sidebar"
