@@ -61,6 +61,27 @@ describe('installTapIntercept', () => {
     expect(intercepted[0].actionable).toBe(true)
   })
 
+  it('其他 --can-* 变体（密谋推进、抽牌、弃牌堆）也拦截为可执行', () => {
+    for (const cls of ['card agenda--can-progress', 'deck--can-draw', 'discard--can-use']) {
+      const { el, onClick } = makeCard(cls)
+      el.click()
+      expect(onClick, cls).not.toHaveBeenCalled()
+    }
+    expect(intercepted).toHaveLength(3)
+    expect(intercepted.every((t) => t.actionable)).toBe(true)
+  })
+
+  it('poolItem 上的 --can-take/--can-spend 控件仍一步直达', () => {
+    const pool = document.createElement('div')
+    pool.className = 'poolItem resource--can-take'
+    const onClick = vi.fn()
+    pool.addEventListener('click', onClick)
+    document.body.appendChild(pool)
+    pool.click()
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(intercepted).toHaveLength(0)
+  })
+
   it('文字按钮不拦截（一步直达）', () => {
     const wrapper = document.createElement('div')
     wrapper.className = 'card-wrapper asset--can-interact'

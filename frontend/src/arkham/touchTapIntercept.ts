@@ -3,8 +3,10 @@
 // 捕获阶段 stopPropagation 即可阻断），交由 CardActionSheet 预览；
 // approve() 程序化重放 click 放行一次。
 
-// 可交互标记：仓库统一用 `*--can-interact`（card/location/enemy/asset…）或 plain `can-interact`（牌堆等）。
-const ACTIONABLE_SELECTOR = '.can-interact, [class*="--can-interact"]'
+// 可交互标记：仓库用 `*--can-<action>` 系列 class（can-interact / can-progress（密谋、场景卡推进）/
+// can-draw / can-use / can-move…）或 plain `can-interact`（牌堆等）。用 `--can-` 通配全部捕获；
+// 控件类（poolItem 上的 can-take/can-spend 等）由前面的 poolItem 豁免挡掉，保持一步直达。
+const ACTIONABLE_SELECTOR = '.can-interact, [class*="--can-"]'
 // 纯预览候选：无动作的卡牌图像，tap 也应能看大图（取代不可发现的长按）。
 const PREVIEW_SELECTOR = 'img.card'
 // 一步直达的真实控件，永不拦截。
