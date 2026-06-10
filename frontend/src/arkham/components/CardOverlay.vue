@@ -11,6 +11,7 @@ import {
   type VNodeRef,
 } from 'vue'
 import { imgsrc, isLocalized, toCamelCase } from '@/arkham/helpers'
+import { getCardImage } from '@/arkham/cardImageLookup'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
 import { BugAntIcon } from '@heroicons/vue/20/solid'
 import { useDebug } from '@/arkham/debug'
@@ -313,30 +314,7 @@ onUnmounted(() => {
  * Image lookup & orientation
  * ========================================================================== */
 
-const getImage = (el: HTMLElement, depth = 0): string | null => {
-  if (depth > 3) return null // avoid runaway recursion
-
-  if (el.dataset.imageId) return imgsrc(`cards/${el.dataset.imageId}.avif`)
-
-  if (el instanceof HTMLImageElement && el.classList.contains('card') && !el.closest('.revelation')) {
-    return el.src || null
-  }
-
-  if (el instanceof HTMLDivElement && el.classList.contains('card')) {
-    const bg = el.style.backgroundImage
-    if (!bg || bg === 'none') return null
-    return bg.slice(4, -1).replaceAll('"', '') // strip url("...")
-  }
-
-  if (el.dataset.target) {
-    const target = document.querySelector<HTMLElement>(`[data-id="${el.dataset.target}"]`)
-    return target ? getImage(target, depth + 1) : null
-  }
-
-  return el.dataset.image ?? null
-}
-
-const card = computed<string | null>(() => (hoveredElement.value ? getImage(hoveredElement.value) : null))
+const card = computed<string | null>(() => (hoveredElement.value ? getCardImage(hoveredElement.value) : null))
 
 const upsideDown = computed<boolean>(() => hoveredElement.value?.classList.contains('Reversed') ?? false)
 const reversed = computed<boolean>(() => hoveredElement.value?.classList.contains('reversed') ?? false)
