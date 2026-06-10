@@ -2,3 +2,25 @@
  * Highest-priority layer: single-purpose helper classes that must win over
  * the layers below (but not over unlayered scoped component styles).
  */
+
+/* 触控热区：触屏下交互控件最小 44px（Apple HIG）。
+   本文件经 index.css 以 layer(utilities) 引入——utilities 是最高 layer，可覆盖
+   其余所有 layer；Vue scoped 样式（unlayered）仍更高，但下列 min-* 属性
+   scoped 样式均未设置，且 min-width/min-height 在布局上天然约束 width/height。 */
+@media (pointer: coarse) {
+  .game-bar button {
+    min-height: 44px;
+  }
+
+  /* AbilityButton 及其他 .button 通用按钮 */
+  button.button {
+    min-height: 40px;
+    padding-block: 6px;
+  }
+
+  /* 手牌抽屉关闭按钮 */
+  .hand-close-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
