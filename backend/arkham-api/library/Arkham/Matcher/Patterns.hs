@@ -18,9 +18,9 @@ import Arkham.Trait
 
 pattern CanShuffleIn :: InvestigatorMatcher
 pattern CanShuffleIn <-
-  InvestigatorWithoutModifier CannotManipulateDeck
+  InvestigatorMatches [DeckWith AnyCards, InvestigatorWithoutModifier CannotManipulateDeck]
   where
-    CanShuffleIn = InvestigatorWithoutModifier CannotManipulateDeck
+    CanShuffleIn = InvestigatorMatches [DeckWith AnyCards, InvestigatorWithoutModifier CannotManipulateDeck]
 
 pattern AtYourLocation :: InvestigatorMatcher
 pattern AtYourLocation =
