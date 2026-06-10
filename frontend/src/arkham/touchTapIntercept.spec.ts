@@ -74,6 +74,27 @@ describe('installTapIntercept', () => {
     expect(intercepted).toHaveLength(0)
   })
 
+  it('地图格子空白处（location-cell--can-interact）不拦截，内层卡牌仍拦截', () => {
+    const cell = document.createElement('div')
+    cell.className = 'location-cell location-cell--can-interact'
+    const img = document.createElement('img')
+    img.className = 'card card--locations location--can-interact'
+    img.src = 'http://localhost/cards/01111.avif'
+    cell.appendChild(img)
+    const onCellClick = vi.fn()
+    cell.addEventListener('click', onCellClick)
+    document.body.appendChild(cell)
+
+    cell.click() // 点格子空白处：放行（桌面同样无事发生）
+    expect(onCellClick).toHaveBeenCalledTimes(1)
+    expect(intercepted).toHaveLength(0)
+
+    img.click() // 点内层地点卡：拦截为可执行
+    expect(intercepted).toHaveLength(1)
+    expect(intercepted[0].actionable).toBe(true)
+    expect(intercepted[0].el).toBe(img)
+  })
+
   it('poolItem 上的 --can-take/--can-spend 控件仍一步直达', () => {
     const pool = document.createElement('div')
     pool.className = 'poolItem resource--can-take'

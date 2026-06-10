@@ -51,7 +51,10 @@ export function installTapIntercept(opts: {
     // - token--can-draw / deck--can-draw：混乱袋抽取、玩家牌堆抽牌——无决策动作
     if (target.closest('.poolItem, .can-interact, .token--can-draw, .deck--can-draw')) return
 
-    const actionableEl = target.closest<HTMLElement>(ACTIONABLE_SELECTOR)
+    let actionableEl = target.closest<HTMLElement>(ACTIONABLE_SELECTOR)
+    // 地图格子（.location-cell）的 can-interact 只是容器级高亮标记，真正的点击
+    // 处理在内层 card-frame——点中格子空白处时不拦截（与桌面点击空白无事发生一致）。
+    if (actionableEl?.matches('.location-cell')) actionableEl = null
     if (actionableEl) {
       event.preventDefault()
       event.stopPropagation()
