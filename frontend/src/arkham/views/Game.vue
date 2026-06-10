@@ -70,6 +70,14 @@ import Campaign from '@/arkham/components/Campaign.vue'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
+import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
+import { getCardImage } from '@/arkham/cardImageLookup'
+import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
+import {
+  installTapIntercept,
+  type InterceptedTap,
+  type TapIntercept,
+} from '@/arkham/touchTapIntercept'
 import CardView from '@/arkham/components/Card.vue'
 import MultiplayerLobby from '@/arkham/components/MultiplayerLobby.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
@@ -140,8 +148,8 @@ const ready = ref(false)
 const resultQueue = ref<any>([])
 const showLog = ref(false)
 const showShortcuts = ref(false)
-const isMobileViewport = () =>
-  typeof window !== 'undefined' && window.matchMedia('(max-width: 800px)').matches
+const { isTouch, size } = useDeviceLayout()
+const isMobileViewport = () => size.value === 'phone'
 const showSidebar = ref(
   isMobileViewport() ? false : JSON.parse(getGameLocalStorageItem(props.gameId, 'showSidebar') ?? 'true'),
 )
@@ -160,6 +168,19 @@ const processing = ref(false)
 const oldQuestion = ref<Record<string, Question> | null>(null)
 const skipAllPending = ref<Set<string>>(new Set())
 const { t } = useI18n()
+const sheetTap = ref<InterceptedTap | null>(null)
+let tapIntercept: TapIntercept | null = null
+
+// 服务器推送新状态后，面板里的动作可能已失效，直接关闭
+watch(game, () => {
+  sheetTap.value = null
+})
+
+function confirmSheetAction() {
+  const tap = sheetTap.value
+  sheetTap.value = null
+  if (tap) tapIntercept?.approve(tap)
+}
 
 const format = (str: string) => {
   return handleEmbeddedI18n(str, t)
@@ -1122,6 +1143,14 @@ onMounted(() => {
   ;(window as any).debugChoose = choose
   document.addEventListener('mousemove', onMove, { passive: true })
   document.addEventListener('keydown', handleKeyPress)
+  tapIntercept = installTapIntercept({
+    isTouch: () => isTouch.value,
+    shouldPreview: (el) => getCardImage(el) !== null,
+    onIntercept: (tap) => {
+      document.dispatchEvent(new Event('arkham:clear-card-overlay'))
+      sheetTap.value = tap
+    },
+  })
 })
 
 onBeforeRouteLeave(() => close())
@@ -1132,6 +1161,8 @@ onUnmounted(() => {
   delete (window as any).undo
   delete (window as any).debugChoose
   emitter.off('playabilityResult', onPlayabilityResult)
+  tapIntercept?.uninstall()
+  tapIntercept = null
   close()
 })
 </script>
@@ -1167,6 +1198,13 @@ onUnmounted(() => {
       />
     </div>
     <CardOverlay />
+    <CardActionSheet
+      v-if="sheetTap"
+      :target="sheetTap.target"
+      :actionable="sheetTap.actionable"
+      @confirm="confirmSheetAction"
+      @close="sheetTap = null"
+    />
     <div
       v-if="realityAcidLightActive"
       class="reality-acid-flashlight"

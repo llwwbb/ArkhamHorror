@@ -1,4 +1,7 @@
 {
+  "cardSheet": {
+    "perform": "执行动作"
+  },
   "serviceUnavailable": "服务不可用",
   "pleaseTryAgainLater": "请稍后再试。",
   "nav": {
