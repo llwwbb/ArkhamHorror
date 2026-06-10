@@ -65,3 +65,23 @@ h2.title {
   position: relative;
   animation: glow 3s linear infinite;
 }
+
+/* 触控热区：触屏下交互控件最小 44px（Apple HIG）。
+   故意不放进 @layer——unlayered 规则优先级高于所有 layer，确保覆盖生效。 */
+@media (pointer: coarse) {
+  .game-bar button {
+    min-height: 44px;
+  }
+
+  /* AbilityButton 及其他 .button 通用按钮 */
+  button.button {
+    min-height: 40px;
+    padding-block: 6px;
+  }
+
+  /* 手牌抽屉关闭按钮 */
+  .hand-close-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
