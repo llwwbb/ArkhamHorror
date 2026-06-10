@@ -63,6 +63,7 @@ import { useDebug } from '@/arkham/debug'
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { IsMobile } from '@/arkham/isMobile';
+import { usePinchZoom } from '@/arkham/composables/usePinchZoom'
 const { t } = useI18n();
 
 // types
@@ -507,6 +508,7 @@ function requestCosmicEmissaryCompact(force = false) {
 }
 
 const { isMobile } = IsMobile();
+usePinchZoom(scrollerRef, locationsZoom)
 
 function updateCosmicEmissaryAnimationSetting(value: string | null) {
   enableCosmicEmissaryAnimation.value = value !== 'false'
@@ -2347,7 +2349,7 @@ async function addChaosToken(face: any){
   min-height: 0;
   min-width: 0;
   overflow: auto;
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
   scrollbar-gutter: stable both-edges;
   scroll-padding: 30%;
   display: flex;
