@@ -32,7 +32,6 @@ import {
   RectangleStackIcon,
 } from '@heroicons/vue/20/solid'
 import { LottieAnimation } from 'lottie-web-vue'
-import * as JsonDecoder from 'ts.data.json'
 import processingJSON from '@/assets/processing.json'
 import api from '@/api'
 import {
@@ -61,12 +60,12 @@ import {
   choicesTooltipByPlayerKey,
 } from '@/arkham/composables/useGameChoices'
 import { buildGameIndexes, gameIndexesKey } from '@/arkham/composables/useGameIndexes'
-import { Card, cardDecoder } from '@/arkham/types/Card'
 import { loadAllGameImages, preloadGameImages } from '@/arkham/gameImagePreload'
 import * as Message from '@/arkham/types/Message'
 import { type Question } from '@/arkham/types/Question'
 import type { Source } from '@/arkham/types/Source'
-import { TarotCard, tarotCardDecoder, tarotCardImage } from '@/arkham/types/TarotCard'
+import { TarotCard, tarotCardImage } from '@/arkham/types/TarotCard'
+import { useGameModals } from '@/arkham/composables/useGameModals'
 import Campaign from '@/arkham/components/Campaign.vue'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
@@ -88,17 +87,6 @@ import Settings from '@/arkham/components/Settings.vue'
 import StandaloneScenario from '@/arkham/components/StandaloneScenario.vue'
 import Draggable from '@/components/Draggable.vue'
 import Menu from '@/components/Menu.vue'
-
-interface GameCard {
-  title: string
-  card: Card
-}
-
-interface GameCardOnly {
-  player: string
-  title: string
-  card: Card
-}
 
 // TODO: contents should not be string
 type ServerResult =
@@ -139,8 +127,8 @@ interface PlayabilityInfo {
 }
 
 const game = shallowRef<Arkham.Game | null>(null)
-const gameCard = ref<GameCard | null>(null)
-const showTheSilenceModal = ref(false)
+const modals = useGameModals()
+const { uiLock, gameCard, tarotCards, showTheSilenceModal, continueUI } = modals
 const playabilityInfo = ref<PlayabilityInfo | null>(null)
 const gameLog = shallowRef<readonly string[]>(Object.freeze([]))
 const playerId = ref<string | null>(null)
@@ -160,8 +148,6 @@ const showOtherPlayersHands = ref(getGameLocalStorageItem(props.gameId, 'showOth
 watch(showOtherPlayersHands, (v) => {
   setGameLocalStorageItem(props.gameId, 'showOtherPlayersHands', v ? 'true' : 'false')
 })
-const tarotCards = ref<TarotCard[]>([])
-const uiLock = ref<boolean>(false)
 const showSettings = ref(false)
 const showHistory = ref(false)
 const processing = ref(false)
@@ -304,24 +290,6 @@ watch(
     )
   },
   { immediate: true },
-)
-
-// Local Decoders
-const gameCardDecoder = JsonDecoder.object<GameCard>(
-  {
-    title: JsonDecoder.string(),
-    card: cardDecoder,
-  },
-  'GameCard',
-)
-
-const gameCardOnlyDecoder = JsonDecoder.object<GameCardOnly>(
-  {
-    player: JsonDecoder.string(),
-    title: JsonDecoder.string(),
-    card: cardDecoder,
-  },
-  'GameCard',
 )
 
 const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? `:${window.location.port}` : ''}`
@@ -467,9 +435,7 @@ const handleResult = (result: ServerResult) => {
           qPush(result)
           return
         }
-        document.dispatchEvent(new CustomEvent('arkham:clear-card-overlay'))
-        showTheSilenceModal.value = true
-        uiLock.value = true
+        modals.showSilence()
         return
       }
       switch (result.contents) {
@@ -503,17 +469,7 @@ const handleResult = (result: ServerResult) => {
         qPush(result)
         return
       }
-
-      uiLock.value = true
-      JsonDecoder.array(tarotCardDecoder, 'tarotCards')
-        .decodePromise(result.contents)
-        .then((r) => {
-          tarotCards.value = r
-        })
-        .catch((e) => {
-          console.error(e)
-          uiLock.value = false
-        })
+      modals.showTarot(result.contents)
       return
 
     case 'GameCard':
@@ -522,17 +478,7 @@ const handleResult = (result: ServerResult) => {
         qPush(result)
         return
       }
-
-      uiLock.value = true
-      gameCardDecoder
-        .decodePromise(result as any)
-        .then((r) => {
-          gameCard.value = r
-        })
-        .catch((e) => {
-          console.error(e)
-          uiLock.value = false
-        })
+      modals.showGameCard(result)
       return
 
     case 'GameCardOnly':
@@ -541,22 +487,7 @@ const handleResult = (result: ServerResult) => {
         qPush(result)
         return
       }
-
-      uiLock.value = true
-      gameCardOnlyDecoder
-        .decodePromise(result as any)
-        .then((r) => {
-          // if it isn't for us, immediately unlock and continue draining
-          if (!(solo.value === true || r.player === playerId.value)) {
-            uiLock.value = false
-            return
-          }
-          gameCard.value = r
-        })
-        .catch((e) => {
-          console.error(e)
-          uiLock.value = false
-        })
+      modals.showGameCardOnly(result, (player) => solo.value === true || player === playerId.value)
       return
     case 'GameUpdate':
       if (uiLock.value) {
@@ -880,9 +811,7 @@ async function undo() {
   const oldQuestion = game.value?.question
   if (game.value) setGameQuestion({})
   resultQueue.value = []
-  gameCard.value = null
-  tarotCards.value = []
-  uiLock.value = false
+  modals.resetForUndo()
   if (undoLock.value) return
   undoLock.value = true
   try {
@@ -900,9 +829,7 @@ async function undoScenario() {
   processing.value = true
   if (game.value) setGameQuestion({})
   resultQueue.value = []
-  gameCard.value = null
-  tarotCards.value = []
-  uiLock.value = false
+  modals.resetForUndo()
   undoScenarioChoice(props.gameId)
 }
 
@@ -912,9 +839,7 @@ async function undoBoundary(call: (gameId: string) => Promise<void>) {
   const oldQuestion = game.value?.question
   if (game.value) setGameQuestion({})
   resultQueue.value = []
-  gameCard.value = null
-  tarotCards.value = []
-  uiLock.value = false
+  modals.resetForUndo()
   undoLock.value = true
   try {
     await call(props.gameId)
@@ -961,13 +886,6 @@ async function fileBug() {
       alert(t('gameBar.bugSubmittingFail'))
       submittingBug.value = false
     })
-}
-
-const continueUI = () => {
-  gameCard.value = null
-  showTheSilenceModal.value = false
-  tarotCards.value = []
-  uiLock.value = false
 }
 
 // Callbacks
