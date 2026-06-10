@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MenuItem } from '@headlessui/vue'
@@ -23,14 +23,6 @@ import {
 import { LottieAnimation } from 'lottie-web-vue'
 import processingJSON from '@/assets/processing.json'
 import api from '@/api'
-import {
-  undoChoice,
-  undoScenarioChoice,
-  undoAction,
-  undoTurn,
-  undoPhase,
-  undoRound,
-} from '@/arkham/api'
 import * as Api from '@/arkham/api'
 import { useCardStore } from '@/stores/cards'
 import { useUserStore } from '@/stores/user'
@@ -39,17 +31,11 @@ import useEmitter from '@/composable/useEmitter'
 import { useDebug } from '@/arkham/debug'
 import { imgsrc } from '@/arkham/helpers'
 import { getGameLocalStorageItem, setGameLocalStorageItem } from '@/arkham/localStorage'
-import * as ArkhamGame from '@/arkham/types/Game'
-import {
-  choicesByPlayerKey,
-  choicesSourceByPlayerKey,
-  choicesTooltipByPlayerKey,
-} from '@/arkham/composables/useGameChoices'
-import { buildGameIndexes, gameIndexesKey } from '@/arkham/composables/useGameIndexes'
 import * as Message from '@/arkham/types/Message'
-import type { Source } from '@/arkham/types/Source'
 import { useGameModals } from '@/arkham/composables/useGameModals'
 import { useGameSocket } from '@/arkham/composables/useGameSocket'
+import { provideGameContext } from '@/arkham/composables/provideGameContext'
+import { useGameUndo } from '@/arkham/composables/useGameUndo'
 import Campaign from '@/arkham/components/Campaign.vue'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
@@ -177,33 +163,23 @@ addEntry({
   action: () => (showHistory.value = !showHistory.value),
 })
 
+const { choicesByPlayer } = provideGameContext(socket, showOtherPlayersHands)
+
+const {
+  undo, undoScenario, undoActionStart, undoTurnStart, undoPhaseStart, undoRoundStart,
+  canUndoScenario, canUndoAction, canUndoTurn, canUndoPhase, canUndoRound,
+} = useGameUndo({
+  gameId: () => props.gameId,
+  game,
+  processing,
+  setGameQuestion,
+  clearResultQueue,
+  modals,
+  debugActive: () => debug.active,
+})
+
 // Computed
 const cards = computed(() => store.cards)
-const choicesByPlayer = computed(() => {
-  const currentGame = game.value
-  if (!currentGame) return new Map<string, readonly Message.Message[]>()
-
-  return new Map(
-    Object.keys(currentGame.question).map((pid) => [pid, ArkhamGame.choices(currentGame, pid)]),
-  )
-})
-const choicesSourceByPlayer = computed(() => {
-  const currentGame = game.value
-  if (!currentGame) return new Map<string, Source | null>()
-
-  return new Map(
-    Object.keys(currentGame.question).map((pid) => [pid, ArkhamGame.choicesSource(currentGame, pid)]),
-  )
-})
-const choicesTooltipByPlayer = computed(() => {
-  const currentGame = game.value
-  if (!currentGame) return new Map<string, string | null>()
-
-  return new Map(
-    Object.keys(currentGame.question).map((pid) => [pid, ArkhamGame.choicesTooltip(currentGame, pid)]),
-  )
-})
-const gameIndexes = computed(() => buildGameIndexes(game.value))
 const choices = computed(() => {
   if (!playerId.value) return []
   return choicesByPlayer.value.get(playerId.value) ?? []
@@ -224,22 +200,6 @@ const actionMap = computed<Map<string, () => void>>(() => {
   }
   return map
 })
-
-const canUndoScenario = computed(() => {
-  if (!game.value) return false
-  return game.value.scenarioSteps > 1
-})
-
-const canUndoBoundary = (boundary: number | null): boolean => {
-  if (!game.value) return false
-  if (boundary === null) return false
-  return game.value.scenarioSteps > boundary
-}
-
-const canUndoAction = computed(() => canUndoBoundary(game.value?.undoActionStep ?? null))
-const canUndoTurn = computed(() => canUndoBoundary(game.value?.undoTurnStep ?? null))
-const canUndoPhase = computed(() => canUndoBoundary(game.value?.undoPhaseStep ?? null))
-const canUndoRound = computed(() => canUndoBoundary(game.value?.undoRoundStep ?? null))
 
 // Chord state for U + <key> shortcuts (T/R/P/S/A)
 const undoChordArmed = ref(false)
@@ -508,57 +468,10 @@ const toggleSidebar = function () {
   }
 }
 
-// Undo
-const undoLock = ref(false)
-async function undo() {
-  processing.value = true
-  const oldQuestion = game.value?.question
-  if (game.value) setGameQuestion({})
-  clearResultQueue()
-  modals.resetForUndo()
-  if (undoLock.value) return
-  undoLock.value = true
-  try {
-    await undoChoice(props.gameId, debug.active)
-  } catch (e) {
-    processing.value = false
-    if (game.value && oldQuestion) setGameQuestion(oldQuestion)
-    console.log(e)
-  }
-  undoLock.value = false
-}
-
-async function undoScenario() {
+function confirmUndoScenario() {
   undoScenarioDialog.value?.close()
-  processing.value = true
-  if (game.value) setGameQuestion({})
-  clearResultQueue()
-  modals.resetForUndo()
-  undoScenarioChoice(props.gameId)
+  undoScenario()
 }
-
-async function undoBoundary(call: (gameId: string) => Promise<void>) {
-  if (undoLock.value) return
-  processing.value = true
-  const oldQuestion = game.value?.question
-  if (game.value) setGameQuestion({})
-  clearResultQueue()
-  modals.resetForUndo()
-  undoLock.value = true
-  try {
-    await call(props.gameId)
-  } catch (e) {
-    processing.value = false
-    if (game.value && oldQuestion) setGameQuestion(oldQuestion)
-    console.log(e)
-  }
-  undoLock.value = false
-}
-
-const undoActionStart = () => undoBoundary(undoAction)
-const undoTurnStart = () => undoBoundary(undoTurn)
-const undoPhaseStart = () => undoBoundary(undoPhase)
-const undoRoundStart = () => undoBoundary(undoRound)
 
 const filingBug = ref(false)
 const submittingBug = ref(false)
@@ -615,22 +528,6 @@ function debugExport(exportType: ExportType) {
       alert(t('game.unableToDownloadExport'))
     })
 }
-
-// provides
-provide(choicesByPlayerKey, choicesByPlayer)
-provide(choicesSourceByPlayerKey, choicesSourceByPlayer)
-provide(choicesTooltipByPlayerKey, choicesTooltipByPlayer)
-provide(gameIndexesKey, gameIndexes)
-provide('chooseDeck', chooseDeck)
-provide('chooseDeckList', chooseDeckList)
-provide('send', send)
-provide('choosePaymentAmounts', choosePaymentAmounts)
-provide('chooseAmounts', chooseAmounts)
-provide('switchInvestigator', switchInvestigator)
-provide('solo', solo)
-provide('skipAllTriggers', skipAllTriggers)
-provide('skipAllAvailable', skipAllAvailable)
-provide('showOtherPlayersHands', showOtherPlayersHands)
 
 const onMove = (event: MouseEvent) => {
   mouseX = event.clientX
@@ -1126,7 +1023,7 @@ onUnmounted(() => {
     <dialog id="undoScenarioDialog" ref="undoScenarioDialog">
       <p>{{ $t('game.areYouSureUndoScenario') }}</p>
       <div class="buttons">
-        <button @click="undoScenario()">{{ $t('Yes') }}</button>
+        <button @click="confirmUndoScenario">{{ $t('Yes') }}</button>
         <button @click="undoScenarioDialog?.close()">{{ $t('No') }}</button>
       </div>
     </dialog>
