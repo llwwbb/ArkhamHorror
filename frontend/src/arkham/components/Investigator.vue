@@ -367,15 +367,6 @@ const spadeInjury = computed(() => {
 
 <template>
   <div v-if="portrait" class="portrait-container">
-    <span v-if="isMobile"><i class="action" v-for="n in investigator.remainingActions" :key="n"></i></span>
-    <span v-if="isMobile && investigator.additionalActions.length > 0">
-      <template v-for="action in investigator.additionalActions" :key="action">
-        <button @click="useEffectAction(action)" v-if="action.tag === 'EffectAction'" v-tooltip="action.contents[0]" :class="[{ activeButton: isActiveEffectAction(action)}, `${investigatorClass.toLowerCase()}ActionButton`]">
-          <i class="action"></i>
-        </button>
-        <i v-else class="action" :class="`${investigatorClass.toLowerCase()}Action`"></i>
-      </template>
-    </span>
     <img
       :src="investigatorPortraitImage"
       class="portrait"
@@ -415,7 +406,7 @@ const spadeInjury = computed(() => {
       <div>
         <div class="player-buttons">
           <div class="button-group">
-            <span v-if="!isMobile" class="action-container">
+            <span class="action-container">
               <i class="spade" v-if="spadeInjury"></i>
               <i class="heart" v-if="heartInjury"></i>
               <i class="diamond" v-if="diamondInjury"></i>
