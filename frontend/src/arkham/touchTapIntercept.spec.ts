@@ -87,4 +87,53 @@ describe('installTapIntercept', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
     expect(intercepted).toHaveLength(0)
   })
+
+  it('handler 绑在 actionable 元素的祖先上时，approve 重放仍能触发（嵌套场景）', () => {
+    const outer = document.createElement('div')
+    const onClick = vi.fn()
+    outer.addEventListener('click', onClick)
+    const inner = document.createElement('img')
+    inner.className = 'card location--can-interact'
+    outer.appendChild(inner)
+    document.body.appendChild(outer)
+    inner.click()
+    expect(onClick).not.toHaveBeenCalled()
+    expect(intercepted).toHaveLength(1)
+    intercept!.approve(intercepted[0])
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('池子 token（poolItem）不拦截，一步直达', () => {
+    const pool = document.createElement('div')
+    pool.className = 'poolItem health--can-interact'
+    const onClick = vi.fn()
+    pool.addEventListener('click', onClick)
+    document.body.appendChild(pool)
+    pool.click()
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(intercepted).toHaveLength(0)
+  })
+
+  it('approve 消费后再点同一元素会再次拦截', () => {
+    const { el, onClick } = makeCard('card card--can-interact')
+    el.click()
+    intercept!.approve(intercepted[0])
+    expect(onClick).toHaveBeenCalledTimes(1)
+    el.click()
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(intercepted).toHaveLength(2)
+  })
+
+  it('shouldPreview 返回 false 时纯预览候选完全放行', () => {
+    intercept!.uninstall()
+    intercept = installTapIntercept({
+      isTouch: () => isTouch,
+      onIntercept: (tap) => intercepted.push(tap),
+      shouldPreview: () => false,
+    })
+    const { el, onClick } = makeCard('card')
+    el.click()
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(intercepted).toHaveLength(0)
+  })
 })

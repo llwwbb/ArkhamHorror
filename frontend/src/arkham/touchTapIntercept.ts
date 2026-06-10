@@ -27,6 +27,8 @@ export interface TapIntercept {
 export function installTapIntercept(opts: {
   isTouch: () => boolean
   onIntercept: (tap: InterceptedTap) => void
+  /** 纯预览候选的裁决回调（如「能解析出卡图吗」）。返回 false 则完全放行。缺省一律预览。 */
+  shouldPreview?: (el: HTMLElement) => boolean
 }): TapIntercept {
   let approvedTarget: HTMLElement | null = null
 
@@ -41,6 +43,9 @@ export function installTapIntercept(opts: {
     if (target.closest(PASSTHROUGH_SELECTOR)) return
     if (target.closest('.no-overlay, .card-action-sheet')) return
 
+    // 池子 token（血量/理智等小控件）是控件不是卡图，保持一步直达。
+    if (target.closest('.poolItem')) return
+
     const actionableEl = target.closest<HTMLElement>(ACTIONABLE_SELECTOR)
     if (actionableEl) {
       event.preventDefault()
@@ -50,7 +55,7 @@ export function installTapIntercept(opts: {
     }
 
     const previewEl = target.closest<HTMLElement>(PREVIEW_SELECTOR)
-    if (previewEl) {
+    if (previewEl && (opts.shouldPreview?.(previewEl) ?? true)) {
       event.preventDefault()
       event.stopPropagation()
       opts.onIntercept({ el: previewEl, target: previewEl, actionable: false })
