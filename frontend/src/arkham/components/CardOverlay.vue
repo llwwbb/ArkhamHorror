@@ -11,6 +11,7 @@ import {
   type VNodeRef,
 } from 'vue'
 import { imgsrc, isLocalized, toCamelCase } from '@/arkham/helpers'
+import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
 import { BugAntIcon } from '@heroicons/vue/20/solid'
 import { useDebug } from '@/arkham/debug'
 import { fetchPlayability, type PlayabilityResponse } from '@/arkham/api'
@@ -52,7 +53,7 @@ const { t } = useI18n()
 
 const cardOverlay = ref<HTMLElement | null>(null)
 const hoveredElement = ref<HTMLElement | null>(null)
-const isMobile = ref(false)
+const { isTouch: isMobile } = useDeviceLayout()
 
 const playabilityData = ref<PlayabilityResponse | null>(null)
 let playabilityTimer: number | null = null
@@ -159,11 +160,6 @@ watch(hoveredElement, (el) => {
   }, 300)
 })
 
-const mq = window.matchMedia('(hover: none) and (pointer: coarse)')
-const updateIsMobile = () => (isMobile.value = mq.matches)
-updateIsMobile()
-onMounted(() => mq.addEventListener?.('change', updateIsMobile))
-onUnmounted(() => mq.removeEventListener?.('change', updateIsMobile))
 
 /* =============================================================================
  * Pointer/hover handling
