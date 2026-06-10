@@ -12,6 +12,7 @@ const emit = defineEmits<{
 }>()
 
 const bugTitle = ref('')
+// 故意不响应 prop 变化：本组件始终经 v-if 重新挂载，initialDescription 只在挂载时读一次
 const bugDescription = ref(props.initialDescription)
 </script>
 
