@@ -37,4 +37,34 @@ describe('getCardImage', () => {
     const el = document.createElement('div')
     expect(getCardImage(el)).toBeNull()
   })
+
+  it('div.card 有 backgroundImage 返回剥离后的 URL', () => {
+    const el = document.createElement('div')
+    el.className = 'card'
+    el.style.backgroundImage = 'url("/img/cards/01001.avif")'
+    expect(getCardImage(el)).toBe('/img/cards/01001.avif')
+  })
+
+  it('div.card backgroundImage 为空返回 null', () => {
+    const el = document.createElement('div')
+    el.className = 'card'
+    expect(getCardImage(el)).toBeNull()
+  })
+
+  it('revelation 容器内的 img.card 返回 null', () => {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'revelation'
+    const img = document.createElement('img')
+    img.className = 'card'
+    img.src = 'http://localhost/cards/01001.avif'
+    wrapper.appendChild(img)
+    document.body.appendChild(wrapper)
+    expect(getCardImage(img)).toBeNull()
+  })
+
+  it('data-image 兜底', () => {
+    const el = document.createElement('div')
+    el.dataset.image = '/img/foo.avif'
+    expect(getCardImage(el)).toBe('/img/foo.avif')
+  })
 })
