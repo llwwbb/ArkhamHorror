@@ -23,8 +23,8 @@ function mockMatchMedia(initial: Record<string, boolean>) {
 
 describe('useDeviceLayout', () => {
   beforeEach(() => {
-    _resetForTests()
     vi.unstubAllGlobals()
+    _resetForTests()
   })
 
   it('窄屏 → phone，shell 为 phone', () => {

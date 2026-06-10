@@ -10,10 +10,14 @@ const isTouchState = ref(false)
 const isPhoneWidth = ref(false)
 let installed = false
 
+const mqHandles: Array<[MediaQueryList, (e: MediaQueryListEvent) => void]> = []
+
 function track(query: string, target: Ref<boolean>) {
   const mq = window.matchMedia(query)
   target.value = mq.matches
-  mq.addEventListener('change', (e) => (target.value = e.matches))
+  const handler = (e: MediaQueryListEvent) => (target.value = e.matches)
+  mq.addEventListener('change', handler)
+  mqHandles.push([mq, handler])
 }
 
 function ensureInstalled() {
@@ -39,4 +43,13 @@ export function _resetForTests() {
   installed = false
   isTouchState.value = false
   isPhoneWidth.value = false
+  mqHandles.length = 0
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    for (const [mq, handler] of mqHandles) mq.removeEventListener('change', handler)
+    mqHandles.length = 0
+    installed = false
+  })
 }
