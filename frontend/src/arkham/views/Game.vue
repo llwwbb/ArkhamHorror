@@ -72,6 +72,7 @@ const socket = useGameSocket({
   modals,
   emitter,
 })
+// send/choose* 等其余字段经 provideGameContext 注入给子组件，这里只解构 Game.vue 自用的
 const {
   game,
   gameLog,
@@ -81,18 +82,10 @@ const {
   error,
   socketError,
   processing,
-  send,
   close,
   choose,
-  chooseDeck,
-  chooseDeckList,
-  choosePaymentAmounts,
-  chooseAmounts,
   setGameQuestion,
   clearResultQueue,
-  skipAllTriggers,
-  skipAllAvailable,
-  switchInvestigator,
 } = socket
 const playabilityInfo = ref<PlayabilityInfo | null>(null)
 const showLog = ref(false)
