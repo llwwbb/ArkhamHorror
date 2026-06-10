@@ -20,6 +20,16 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
   let initialDistance = 0
   let initialZoom = 1
 
+  // Issue 3: rAF 节流，避免每帧都写 zoom 触发 localStorage 同步写 + 布局测量
+  let rafId: number | null = null
+  let pendingZoom: number | null = null
+
+  const flushZoom = () => {
+    rafId = null
+    if (pendingZoom !== null && pendingZoom !== zoom.value) zoom.value = pendingZoom
+    pendingZoom = null
+  }
+
   const currentDistance = () => {
     const [a, b] = [...pointers.values()]
     return Math.hypot(a.x - b.x, a.y - b.y)
@@ -41,7 +51,8 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
     if (!pointers.has(e.pointerId)) return
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pointers.size === 2 && initialDistance > 0) {
-      zoom.value = pinchedZoom(initialZoom, initialDistance, currentDistance())
+      pendingZoom = pinchedZoom(initialZoom, initialDistance, currentDistance())
+      rafId ??= requestAnimationFrame(flushZoom)
     }
   }
 
@@ -52,6 +63,15 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerEnd)
       window.removeEventListener('pointercancel', onPointerEnd)
+    } else if (pointers.size === 2) {
+      // Issue 2: 3→2 指降级时重置基线到当前指对，避免缩放跳变。
+      // 先冲刷 pending zoom，确保 initialZoom 读到最新值。
+      if (pendingZoom !== null) {
+        zoom.value = pendingZoom
+        pendingZoom = null
+      }
+      initialDistance = currentDistance()
+      initialZoom = zoom.value || 1
     }
   }
 
@@ -59,8 +79,11 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
     target,
     (el, _old, onCleanup) => {
       if (!el) return
-      el.addEventListener('pointerdown', onPointerDown)
-      onCleanup(() => el.removeEventListener('pointerdown', onPointerDown))
+      // Issue 1: 捕获阶段注册，绕过地点解锁拖拽在捕获阶段的 stopPropagation，
+      // 保证解锁模式下双指捏合仍可触发。pinch 只读坐标，不调用 preventDefault/
+      // stopPropagation，是安全的被动观察者，不影响拖拽逻辑。
+      el.addEventListener('pointerdown', onPointerDown, { capture: true })
+      onCleanup(() => el.removeEventListener('pointerdown', onPointerDown, { capture: true }))
     },
     { immediate: true },
   )
@@ -69,5 +92,6 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
     window.removeEventListener('pointermove', onPointerMove)
     window.removeEventListener('pointerup', onPointerEnd)
     window.removeEventListener('pointercancel', onPointerEnd)
+    if (rafId !== null) cancelAnimationFrame(rafId)
   })
 }
