@@ -43,6 +43,7 @@ import Arkham.Event.Types
 import Arkham.Game.Base
 import Arkham.Game.Diff
 import Arkham.Game.Json ()
+import Arkham.Game.Settings (settingsAsIfRuling)
 import Arkham.Game.State
 import Arkham.Game.Utils
 import {-# SOURCE #-} Arkham.GameEnv
@@ -169,6 +170,11 @@ runGameMessage msg g = case msg of
   SetAsIfAtIgnored iid True -> pure $ g & asIfAtIgnoredL %~ insertSet iid
   SetAsIfAtIgnored iid False -> pure $ g & asIfAtIgnoredL %~ deleteSet iid
   SetLocationOffset lid x y -> pure $ g & locationOffsetsL %~ insertMap lid (x, y)
+  SetAsIfRuling ruling -> do
+    currentWindows <- concat <$> getWindowStack
+    when (any (\w -> Window.windowType w == Window.FastPlayerWindow) currentWindows) do
+      push $ Do (CheckWindows currentWindows)
+    pure $ g {gameSettings = g.gameSettings {settingsAsIfRuling = ruling}}
   ResetLocationOffsets -> pure $ g & locationOffsetsL .~ mempty
   SetGameRunWindows b -> pure $ g & runWindowsL .~ b
   SetGameState s -> pure $ g & gameStateL .~ s
@@ -858,6 +864,7 @@ runGameMessage msg g = case msg of
                       { locationId = locationId la
                       , locationCardId = locationCardId la
                       , locationTokens = locationTokens la
+                      , locationWithoutClues = Token.countTokens Token.Clue (locationTokens la) == 0
                       , locationLabel = locationLabel la
                       , locationPosition = locationPosition la
                       , locationPlacement = locationPlacement la
@@ -873,11 +880,12 @@ runGameMessage msg g = case msg of
 
     -- Surface the flip as a FlipLocation window so card-level forced/reactive
     -- abilities ("when this enemy-location is revealed") can hook in via the
-    -- existing FlipLocation matcher.
+    -- existing FlipLocation matcher. Deliberately no PlacedLocation: a flip is
+    -- not an enters-play event and must not re-place reveal clues or fire
+    -- enters-play windows ("keep all ... tokens on that location").
     lead <- getLead
     pushAll
-      [ PlacedLocation (toName el) (toCardCode el) lid
-      , Msg.CheckWindows [mkWhen (Window.FlipLocation lead lid)]
+      [ Msg.CheckWindows [mkWhen (Window.FlipLocation lead lid)]
       , Msg.CheckWindows [mkAfter (Window.FlipLocation lead lid)]
       ]
     pure
@@ -899,6 +907,7 @@ runGameMessage msg g = case msg of
                   { locationId = locationId la
                   , locationCardId = locationCardId la
                   , locationTokens = locationTokens la
+                  , locationWithoutClues = Token.countTokens Token.Clue (locationTokens la) == 0
                   , locationLabel = locationLabel la
                   , locationPosition = locationPosition la
                   , locationPlacement = locationPlacement la
@@ -912,11 +921,12 @@ runGameMessage msg g = case msg of
     replaceCard card.id (forceFlipCard card)
 
     -- Surface the flip as a FlipLocation window so card-level forced/reactive
-    -- abilities can hook in via the existing FlipLocation matcher.
+    -- abilities can hook in via the existing FlipLocation matcher. Deliberately
+    -- no PlacedLocation: a flip is not an enters-play event and must not
+    -- re-place reveal clues or fire enters-play windows.
     lead <- getLead
     pushAll
-      [ PlacedLocation (toName location) (toCardCode location) lid
-      , Msg.CheckWindows [mkWhen (Window.FlipLocation lead lid)]
+      [ Msg.CheckWindows [mkWhen (Window.FlipLocation lead lid)]
       , Msg.CheckWindows [mkAfter (Window.FlipLocation lead lid)]
       ]
     pure
@@ -924,7 +934,16 @@ runGameMessage msg g = case msg of
       & (entitiesL . enemyLocationsL %~ deleteMap lid)
       & (entitiesL . locationsL . at lid ?~ location)
   -- Remove an enemy-location from play (e.g. after defeat).
+  -- Investigators, story assets, and enemies that were here are relocated by
+  -- the scenario per the enemy-location defeat rules; everything else at the
+  -- location leaves play as it would when a location is removed.
   RemoveEnemyLocation lid -> do
+    treacheries <- select $ TreacheryAt $ LocationWithId lid
+    pushAll $ concatMap (resolve . toDiscard GameSource) treacheries
+    events <- select $ eventAt lid
+    pushAll $ concatMap (resolve . toDiscard GameSource) events
+    assets <- select $ assetAt lid <> NotAsset StoryAsset
+    pushAll $ concatMap (resolve . toDiscard GameSource) assets
     pure $ g & entitiesL . enemyLocationsL %~ deleteMap lid
   ReplaceLocation lid card replaceStrategy -> do
     -- if replaceStrategy is swap we also want to copy over revealed, all tokens
@@ -994,6 +1013,8 @@ runGameMessage msg g = case msg of
                 , enemySpawnedBy = enemySpawnedBy oldAttrs
                 , enemyDiscardedBy = enemyDiscardedBy oldAttrs
                 , enemyCardsUnderneath = enemyCardsUnderneath oldAttrs
+                , enemyAttacking = enemyAttacking oldAttrs
+                , enemyWantsToAttack = enemyWantsToAttack oldAttrs
                 }
 
     pushWhen (replaceStrategy == DefaultReplace) $ EnemyCheckEngagement eid
@@ -1654,6 +1675,16 @@ runGameMessage msg g = case msg of
           let treachery = createTreachery card iid tid
           pushAll [CardEnteredPlay iid card, PlaceTreachery tid (InThreatArea iid), ResolvedCard iid card]
           pure $ g & (entitiesL . treacheriesL %~ insertMap tid treachery)
+        AssetType -> do
+          -- asset might have been put into play via revelation
+          mAid <- selectOne $ AssetWithCardId cardId
+          aid <- maybe getRandom pure mAid
+          let asset = overAttrs (\attrs -> attrs {assetController = Just iid}) $ createAsset card aid
+          pushAll
+            [ InvestigatorPlayAsset iid aid
+            , ResolvedCard iid card
+            ]
+          pure $ g & entitiesL . assetsL %~ insertMap aid asset
         EncounterAssetType -> do
           -- asset might have been put into play via revelation
           mAid <- selectOne $ AssetWithCardId cardId
@@ -2226,9 +2257,14 @@ runGameMessage msg g = case msg of
     pushAll $ windows [Window.AddedToVictory miid card]
     pure $ g & (entitiesL . actsL %~ deleteMap aid) -- we might not want to remove here?
   AddToVictory miid (StoryTarget sid) -> do
-    card <- field StoryCard sid
-    pushAll $ windows [Window.AddedToVictory miid card]
-    pure $ g & (entitiesL . storiesL %~ deleteMap sid)
+    maybeStory sid >>= \case
+      Nothing -> pure g
+      Just s -> do
+        let attrs = toAttrs s
+        let card = lookupCard (toCardCode attrs) (storyCardId attrs)
+        let card' = if storyFlipped attrs then flipCard card else card
+        pushAll $ windows [Window.AddedToVictory miid card']
+        pure $ g & (entitiesL . storiesL %~ deleteMap sid)
   AddToVictory miid (TreacheryTarget tid) -> do
     card <- field TreacheryCard tid
     pushAll $ RemoveTreachery tid : windows [Window.AddedToVictory miid card]
@@ -2519,7 +2555,8 @@ runGameMessage msg g = case msg of
   ForInvestigator iid AllDrawEncounterCard -> do
     iid' <- fromMaybe iid <$> selectOne (InvestigatorWithModifier DrawsEachEncounterCard)
     whenM (not <$> isEliminated iid) do
-      push $ drawEncounterCard iid' GameSource
+      player <- getPlayer iid'
+      push $ chooseOne player [TargetLabel EncounterDeckTarget [drawEncounterCard iid' GameSource]]
     pure $ g & activeInvestigatorIdL .~ iid'
   EndMythos -> do
     pushAll
@@ -3072,6 +3109,7 @@ runGameMessage msg g = case msg of
                 sendEnemyOnly pid (toTitle investigator <> " drew Enemy") (toJSON $ toCard card)
               else sendEnemy (toTitle investigator <> " drew Enemy") (toJSON $ toCard card)
           TreacheryType -> uiRevelation
+          AssetType -> uiRevelation
           EncounterAssetType -> uiRevelation
           EncounterEventType -> uiRevelation
           LocationType -> uiRevelation
@@ -3135,6 +3173,13 @@ runGameMessage msg g = case msg of
           -- handles draw windows
           pushAll [DrewTreachery iid (mdeck <|> Just Deck.EncounterDeck) (toCard card)]
           pure g'
+        AssetType -> do
+          assetId <- getRandom
+          let asset = createAsset card assetId
+          -- Story assets can be drawn from encounter decks while still having AssetType.
+          pushAll $ afterDraw
+            : (guard (not ignoreRevelation) *> resolve (Revelation iid $ AssetSource assetId))
+          pure $ g' & (entitiesL . assetsL . at assetId ?~ asset)
         EncounterAssetType -> do
           assetId <- getRandom
           let asset = createAsset card assetId
@@ -3194,6 +3239,12 @@ runGameMessage msg g = case msg of
         -- Asset is assumed to have a revelation ability if drawn from encounter deck
         pushAll $ guard (not ignoreRevelation) *> resolve (Revelation iid $ TreacherySource treacheryId)
         pure $ g' & (entitiesL . treacheriesL . at treacheryId ?~ treachery)
+      AssetType -> do
+        assetId <- getRandom
+        let asset = createAsset card assetId
+        -- Story assets can be resolved from encounter decks while still having AssetType.
+        pushAll $ guard (not ignoreRevelation) *> resolve (Revelation iid $ AssetSource assetId)
+        pure $ g' & (entitiesL . assetsL . at assetId ?~ asset)
       EncounterAssetType -> do
         assetId <- getRandom
         let asset = createAsset card assetId

@@ -409,7 +409,12 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
   UpdateCardSetting iid cCode s | iid == a.id -> do
     pure $ a & settingsL %~ updateCardSetting cCode s
   EndOfGame _ -> do
-    pure $ a & placementL .~ Unplaced
+    -- Transfiguration (and Hank Samson's resolute flip) last "until the end
+    -- of the game", so the form must revert before interludes check traits
+    let resetForm = \case
+          TransfiguredForm _ -> RegularForm
+          form -> form
+    pure $ a & placementL .~ Unplaced & formL %~ resetForm
   RecordForInvestigator iid key | iid == toId a -> do
     withI18n $ send $ ikey' "log.record" <> " \"" <> format investigatorName <> " " <> format key <> "\""
     pure $ a & (logL . recordedL %~ insertSet key) . (logL . orderedKeysL %~ (<> [key]))
@@ -776,7 +781,13 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
         | card <- viable
         ]
     pure a
-  AddToDiscard iid pc | iid == investigatorId -> handleAddToDiscard a iid pc
+  AddToDiscard iid pc | iid == investigatorId -> do
+    modifiers' <- getModifiers a
+    case [target | PlaceUnderneathInsteadOfDiscard target <- modifiers'] of
+      (target : _) -> do
+        pushAll [ObtainCard (toCard pc).id, PlaceUnderneath target [toCard pc]]
+        pure a
+      [] -> handleAddToDiscard a iid pc
   DiscardFromHand handDiscard | handDiscard.investigator == investigatorId -> handleDiscardFromHand a handDiscard msg
   Do (DiscardFromHand handDiscard) | handDiscard.investigator == investigatorId -> handleDoDiscardFromHand a handDiscard
   Discard _ source (CardIdTarget cardId) | isJust (find ((== cardId) . toCardId) investigatorHand) -> handleDiscard a source cardId
@@ -1087,7 +1098,7 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
   CancelHorror iid n | iid == investigatorId -> handleCancelHorror a iid n
   InvestigatorDirectDamage iid source damage horror | iid == toId a -> handleInvestigatorDirectDamage a iid source damage horror
   InvestigatorAssignDamage iid source strategy damage horror | iid == toId a -> handleInvestigatorAssignDamage a iid source strategy damage horror
-  InvestigatorDoAssignDamage iid source DamageAnyDeferred _ 0 0 damageTargets horrorTargets | iid == toId a -> handleInvestigatorDoAssignDamageDeferred a iid source DamageAnyDeferred damageTargets horrorTargets
+  InvestigatorDoAssignDamage iid source damageStrategy _ 0 0 damageTargets horrorTargets | iid == toId a, isDeferredStrategy damageStrategy -> handleInvestigatorDoAssignDamageDeferred a iid source damageStrategy damageTargets horrorTargets
   InvestigatorDoAssignDamage iid source damageStrategy _ 0 0 damageTargets horrorTargets | iid == toId a -> handleInvestigatorDoAssignDamage a iid source damageStrategy damageTargets horrorTargets
   InvestigatorDoAssignDamage iid source DamageEvenly matcher health 0 damageTargets horrorTargets | iid == toId a -> handleInvestigatorDoAssignDamageV2 a iid source matcher health damageTargets horrorTargets
   InvestigatorDoAssignDamage iid source DamageEvenly matcher 0 sanity damageTargets horrorTargets | iid == toId a -> handleInvestigatorDoAssignDamageV3 a iid source matcher sanity damageTargets horrorTargets

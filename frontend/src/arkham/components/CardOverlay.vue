@@ -170,10 +170,12 @@ onUnmounted(() => mq.removeEventListener?.('change', updateIsMobile))
  * ========================================================================== */
 
 const CARD_SELECTOR = '.card,[data-image-id],[data-target],[data-image]'
+const OVERLAY_BLOCKER_SELECTOR = '.draggable,.intro-text,.choice-modal-wrapper'
 let hoverTimer: number | null = null
 let pressTimer: number | null = null
 let canDisablePress = false
 let currentPointerType = 'mouse'
+let dragActive = false
 
 const clearTimer = (t: number | null) => (t !== null ? (clearTimeout(t), null) : null)
 
@@ -181,6 +183,11 @@ const targetFromEvent = (e: Event): HTMLElement | null => {
   const raw = e.target as HTMLElement | null
   const closest = raw ? (raw.closest(CARD_SELECTOR) as HTMLElement | null) : null
   if (closest) return closest
+
+  // Do not fall through to the geometry fallback when a modal/story entry is
+  // over the board. Otherwise hovering resolution text can still find cards
+  // underneath the modal by bounding-rect and show their card overlay.
+  if (raw?.closest(OVERLAY_BLOCKER_SELECTOR)) return null
 
   // Transformed cards can visually extend outside their untransformed layout
   // box (notably rotated enemy-as-location cards). In that case normal event
@@ -213,7 +220,7 @@ const queueHover = (el: HTMLElement) => {
 }
 
 const onMouseOver = (e: MouseEvent) => {
-  if (currentPointerType === 'touch') return
+  if (currentPointerType === 'touch' || dragActive) return
   const el = targetFromEvent(e)
   hoverTimer = clearTimer(hoverTimer)
   if (!el || el.classList.contains('dragging') || el.classList.contains('no-overlay')) {
@@ -268,12 +275,25 @@ const clearOverlay = () => {
   hoveredElement.value = null
 }
 
+const onDragStart = () => {
+  dragActive = true
+  clearOverlay()
+}
+
+const onDragEnd = () => {
+  dragActive = false
+  clearOverlay()
+}
+
 onMounted(() => {
   document.addEventListener('pointerdown', onPointerDown, { passive: true })
   document.addEventListener('pointermove', onPointerMove, { passive: true })
   document.addEventListener('pointerup', onPointerUp, { passive: true })
   document.addEventListener('mouseover', onMouseOver)
   document.addEventListener('mouseleave', onMouseLeave)
+  document.addEventListener('dragstart', onDragStart)
+  document.addEventListener('dragend', onDragEnd)
+  document.addEventListener('drop', onDragEnd)
   document.addEventListener('arkham:clear-card-overlay', clearOverlay)
   // only block context menu inside the overlay, not globally
   cardOverlay.value?.addEventListener('contextmenu', (e) => {
@@ -287,6 +307,9 @@ onUnmounted(() => {
   document.removeEventListener('pointerup', onPointerUp)
   document.removeEventListener('mouseover', onMouseOver)
   document.removeEventListener('mouseleave', onMouseLeave)
+  document.removeEventListener('dragstart', onDragStart)
+  document.removeEventListener('dragend', onDragEnd)
+  document.removeEventListener('drop', onDragEnd)
   document.removeEventListener('arkham:clear-card-overlay', clearOverlay)
   clearOverlay()
 })
