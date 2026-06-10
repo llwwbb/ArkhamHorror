@@ -61,7 +61,8 @@ import {
   choicesTooltipByPlayerKey,
 } from '@/arkham/composables/useGameChoices'
 import { buildGameIndexes, gameIndexesKey } from '@/arkham/composables/useGameIndexes'
-import { Card, cardDecoder, toCardContents } from '@/arkham/types/Card'
+import { Card, cardDecoder } from '@/arkham/types/Card'
+import { loadAllGameImages, preloadGameImages } from '@/arkham/gameImagePreload'
 import * as Message from '@/arkham/types/Message'
 import { type Question } from '@/arkham/types/Question'
 import type { Source } from '@/arkham/types/Source'
@@ -124,7 +125,6 @@ const router = useRouter()
 const store = useCardStore()
 const userStore = useUserStore()
 const { addEntry, menuItems } = useMenu()
-const preloaded = new Set<string>()
 let mouseX = 0
 let mouseY = 0
 const flashlightX = ref(0)
@@ -290,7 +290,7 @@ watch(
     await fetchGame(props.gameId, props.spectate).then(
       async ({ game: newGame, playerId: newPlayerId, multiplayerMode }) => {
         try {
-          await loadAllImages(newGame)
+          await loadAllGameImages(newGame)
         } catch (e) {
           console.error(e)
         }
@@ -371,7 +371,7 @@ function scheduleApplyUpdate(payload: string) {
     .then((updatedGame) => {
       game.value = updatedGame
       updateGameLog(updatedGame.log)
-      preloadImages(updatedGame)
+      preloadGameImages(updatedGame)
       if (solo.value === true) {
         if (Object.keys(game.value.question).length == 1) {
           playerId.value = Object.keys(game.value.question)[0]
@@ -968,40 +968,6 @@ const continueUI = () => {
   showTheSilenceModal.value = false
   tarotCards.value = []
   uiLock.value = false
-}
-
-function preloadImages(game: Arkham.Game): void {
-  void loadAllImages(game).catch((e: unknown) => {
-    console.error(e)
-  })
-}
-
-async function loadAllImages(game: Arkham.Game): Promise<void> {
-  const pending: string[] = []
-  for (const card of Object.values(game.cards)) {
-    const { cardCode, isFlipped } = toCardContents(card)
-    const url = imgsrc(`cards/${cardCode.replace(/^c/, '')}${isFlipped ? 'b' : ''}.avif`)
-    if (!preloaded.has(url)) pending.push(url)
-  }
-  if (pending.length === 0) return
-
-  await Promise.all(
-    pending.map(
-      (url) =>
-        new Promise<void>((resolve, reject) => {
-          const img = new Image()
-          img.onload = () => {
-            preloaded.add(url)
-            resolve()
-          }
-          img.onerror = () => {
-            preloaded.add(url)
-            reject(`Could not load ${url}`)
-          }
-          img.src = url
-        }),
-    ),
-  )
 }
 
 // Callbacks
