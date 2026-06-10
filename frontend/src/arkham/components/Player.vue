@@ -965,6 +965,7 @@ function closeHand() {
   background: var(--background-dark);
   transition: bottom 0.3s ease;
   overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   :deep(.card){
     width: calc(var(--card-width) * 4);
     min-width: calc(var(--card-width) * 4);

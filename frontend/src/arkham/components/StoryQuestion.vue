@@ -335,7 +335,7 @@ const isEmbarkQuestion = (q: Question): q is Question & { tag: QuestionType.PICK
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 100vh;
+  height: 100dvh;
   background: #26283B;
 }
 

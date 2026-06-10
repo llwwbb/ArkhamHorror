@@ -1873,6 +1873,7 @@ onUnmounted(() => {
     z-index: 200;
     box-shadow: -2px 0 16px rgba(0, 0, 0, 0.45);
     animation: sidebar-slide-in 0.18s ease-out;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   @media (prefers-color-scheme: dark) {
