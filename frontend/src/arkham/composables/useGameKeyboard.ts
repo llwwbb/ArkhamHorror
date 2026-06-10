@@ -3,7 +3,9 @@ import { useDebug } from '@/arkham/debug'
 import type * as Arkham from '@/arkham/types/Game'
 import * as Message from '@/arkham/types/Message'
 
+// 桌面 shell 专用——手机 shell 不挂键盘快捷键，无需调用本 composable。
 export interface UseGameKeyboardOptions {
+  // 返回 false 时临时禁用全部快捷键（如 bug 表单等文本输入打开期间）
   enabled: () => boolean
   game: ShallowRef<Arkham.Game | null>
   playerId: Ref<string | null>
@@ -29,6 +31,8 @@ export function useGameKeyboard(opts: UseGameKeyboardOptions) {
   const debug = useDebug()
   const { game, playerId, choices, choose } = opts
 
+  // 'e' 调试快捷键需要鼠标位置做 elementFromPoint；与 Game.vue 里 flashlight 的
+  // mousemove 监听并存（两个独立 listener，有意为之，勿合并删除）
   let mouseX = 0
   let mouseY = 0
   const onMove = (event: MouseEvent) => {
