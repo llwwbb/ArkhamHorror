@@ -54,21 +54,24 @@ describe('installTapIntercept', () => {
     expect(intercepted).toHaveLength(0)
   })
 
-  it('plain can-interact class（如牌堆）也拦截', () => {
-    const { el, onClick } = makeCard('can-interact')
-    el.click()
-    expect(onClick).not.toHaveBeenCalled()
-    expect(intercepted[0].actionable).toBe(true)
-  })
-
-  it('其他 --can-* 变体（密谋推进、抽牌、弃牌堆）也拦截为可执行', () => {
-    for (const cls of ['card agenda--can-progress', 'deck--can-draw', 'discard--can-use']) {
+  it('密谋/场景卡推进（--can-progress）拦截为可执行', () => {
+    for (const cls of ['card agenda--can-progress', 'card act--can-progress']) {
       const { el, onClick } = makeCard(cls)
       el.click()
       expect(onClick, cls).not.toHaveBeenCalled()
     }
-    expect(intercepted).toHaveLength(3)
+    expect(intercepted).toHaveLength(2)
     expect(intercepted.every((t) => t.actionable)).toBe(true)
+  })
+
+  it('桌面陈设一步直达：plain can-interact 牌堆/塔罗、混乱袋、玩家牌堆抽牌', () => {
+    // 即使元素带 .card class（如翻开的牌堆顶），也完全放行、不弹预览
+    for (const cls of ['deck can-interact card', 'token token--can-draw', 'deck--can-draw card']) {
+      const { el, onClick } = makeCard(cls)
+      el.click()
+      expect(onClick, cls).toHaveBeenCalledTimes(1)
+    }
+    expect(intercepted).toHaveLength(0)
   })
 
   it('poolItem 上的 --can-take/--can-spend 控件仍一步直达', () => {
