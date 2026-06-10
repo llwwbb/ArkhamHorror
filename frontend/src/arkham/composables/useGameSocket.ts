@@ -312,9 +312,11 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     onMessage,
   })
 
+  // 排空结果队列：uiLock 锁住时 handleResult 各分支把结果 qPush 入队，
+  // 解锁后这里按序重放。若重放中某条结果再次上锁（modals.show* 是同步上锁）
+  // 就立即 break，剩余队列原地保留，等下次解锁时从 qHead 继续排空。
   watch(modals.uiLock, async () => {
     if (modals.uiLock.value) return
-    // drain result queue
     for (;;) {
       const r = qPop()
       if (!r) break
