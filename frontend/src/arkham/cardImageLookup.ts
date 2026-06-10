@@ -7,7 +7,11 @@ export const getCardImage = (el: HTMLElement, depth = 0): string | null => {
 
   if (el.dataset.imageId) return imgsrc(`cards/${el.dataset.imageId}.avif`)
 
-  if (el instanceof HTMLImageElement && el.classList.contains('card') && !el.closest('.revelation')) {
+  if (
+    el instanceof HTMLImageElement &&
+    el.classList.contains('card') &&
+    !el.closest('.revelation')
+  ) {
     return el.src || null
   }
 
