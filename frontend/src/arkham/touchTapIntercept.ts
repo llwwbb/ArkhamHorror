@@ -67,6 +67,8 @@ export function installTapIntercept(opts: {
     approve(tap) {
       approvedTarget = tap.target
       tap.target.click()
+      // click() 正常时同步消费标记；元素已脱离 DOM 等异常时这里兜底清掉，防止陈旧放行。
+      approvedTarget = null
     },
     uninstall() {
       document.removeEventListener('click', onClick, { capture: true })
