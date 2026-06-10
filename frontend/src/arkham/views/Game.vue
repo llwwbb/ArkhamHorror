@@ -29,7 +29,6 @@ import { useUserStore } from '@/stores/user'
 import { useMenu } from '@/composable/menu'
 import useEmitter from '@/composable/useEmitter'
 import { useDebug } from '@/arkham/debug'
-import { imgsrc } from '@/arkham/helpers'
 import { getGameLocalStorageItem, setGameLocalStorageItem } from '@/arkham/localStorage'
 import * as Message from '@/arkham/types/Message'
 import { useGameModals } from '@/arkham/composables/useGameModals'
@@ -59,6 +58,9 @@ import Settings from '@/arkham/components/Settings.vue'
 import StandaloneScenario from '@/arkham/components/StandaloneScenario.vue'
 import Draggable from '@/components/Draggable.vue'
 import Menu from '@/components/Menu.vue'
+import BugReportForm from '@/arkham/components/BugReportForm.vue'
+import ShortcutsModal from '@/arkham/components/ShortcutsModal.vue'
+import PlayabilityModal, { type PlayabilityInfo } from '@/arkham/components/PlayabilityModal.vue'
 
 export interface Props {
   gameId: string
@@ -79,12 +81,6 @@ const flashlightX = ref(0)
 const flashlightY = ref(0)
 
 store.fetchCards()
-
-interface PlayabilityInfo {
-  cardId: string
-  cardCode: string
-  checks: [string, string | null][]
-}
 
 const modals = useGameModals()
 const { gameCard, tarotCards, showTheSilenceModal, continueUI } = modals
@@ -475,23 +471,27 @@ function confirmUndoScenario() {
 
 const filingBug = ref(false)
 const submittingBug = ref(false)
-const bugTitle = ref('')
-const bugDescription = ref('')
+const bugInitialDescription = ref('')
 
 function fileBugFromError() {
-  bugDescription.value = error.value ?? ''
+  bugInitialDescription.value = error.value ?? ''
   error.value = null
   filingBug.value = true
 }
 
-async function fileBug() {
+function openBugReport() {
+  bugInitialDescription.value = ''
+  filingBug.value = true
+}
+
+async function fileBug(bugTitle: string, bugDescription: string) {
   submittingBug.value = true
   filingBug.value = false
   Api.fileBug(props.gameId)
     .then((response) => {
-      const title = encodeURIComponent(bugTitle.value)
+      const title = encodeURIComponent(bugTitle)
       const body = encodeURIComponent(
-        `${bugDescription.value}\n\ngame: ${window.location.href}\nfile: ${response.data}`,
+        `${bugDescription}\n\ngame: ${window.location.href}\nfile: ${response.data}`,
       )
       window.open(
         `https://github.com/halogenandtoast/ArkhamHorror/issues/new?labels=bug&title=${title}&body=${body}&assignee=halogenandtoast&projects=halogenandtoast/2`,
@@ -625,128 +625,13 @@ onUnmounted(() => {
       :style="{ '--flashlight-x': `${flashlightX}px`, '--flashlight-y': `${flashlightY}px` }"
       aria-hidden="true"
     ></div>
-    <Draggable v-if="showShortcuts">
-      <div class="shortcuts-modal">
-        <div class="shortcuts-header">
-          <h2 class="shortcuts-title">{{ $t('gameBar.shortcutsTitle') }}</h2>
-        </div>
-
-        <div class="shortcuts-body">
-          <section class="shortcuts-section">
-            <h3 class="section-title">{{ $t('game.shortcutSection.game') }}</h3>
-            <div class="shortcut-list">
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutSkipTriggers') }}</div>
-                <div class="shortcut-keys"><kbd> </kbd></div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutEndTurn') }}</div>
-                <div class="shortcut-keys"><kbd>e</kbd></div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutDraw') }}</div>
-                <div class="shortcut-keys"><kbd>d</kbd></div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutTakeResources') }}</div>
-                <div class="shortcut-keys"><kbd>r</kbd></div>
-              </div>
-            </div>
-          </section>
-
-          <section class="shortcuts-section">
-            <h3 class="section-title">{{ $t('game.shortcutSection.undo') }}</h3>
-            <div class="shortcut-list">
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutUndo') }}</div>
-                <div class="shortcut-keys"><kbd>u</kbd></div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('game.shortcutUndoActionStart') }}</div>
-                <div class="shortcut-keys">
-                  <kbd>U</kbd><span class="chord-arrow">+</span><kbd>A</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('game.shortcutUndoTurnStart') }}</div>
-                <div class="shortcut-keys">
-                  <kbd>U</kbd><span class="chord-arrow">+</span><kbd>T</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('game.shortcutUndoPhaseStart') }}</div>
-                <div class="shortcut-keys">
-                  <kbd>U</kbd><span class="chord-arrow">+</span><kbd>P</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('game.shortcutUndoRoundStart') }}</div>
-                <div class="shortcut-keys">
-                  <kbd>U</kbd><span class="chord-arrow">+</span><kbd>R</kbd>
-                </div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutRestartScenario') }}</div>
-                <div class="shortcut-keys">
-                  <kbd>U</kbd><span class="chord-arrow">+</span><kbd>S</kbd>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="shortcuts-section">
-            <h3 class="section-title">{{ $t('game.shortcutSection.view') }}</h3>
-            <div class="shortcut-list">
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutShowOrHideShortcuts') }}</div>
-                <div class="shortcut-keys"><kbd>?</kbd></div>
-              </div>
-              <div class="shortcut-row">
-                <div class="shortcut-name">{{ $t('gameBar.shortcutToggleDebug') }}</div>
-                <div class="shortcut-keys"><kbd>D</kbd></div>
-              </div>
-              <template v-for="item in menuItems" :key="item.id">
-                <div v-if="item.shortcut" class="shortcut-row">
-                  <div class="shortcut-name">{{ item.content }}</div>
-                  <div class="shortcut-keys">
-                    <kbd>{{ item.shortcut }}</kbd>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </section>
-        </div>
-
-        <button class="shortcuts-footer" @click="showShortcuts = false">{{ $t('close') }}</button>
-      </div>
-    </Draggable>
-    <Draggable v-if="filingBug">
-      <template #handle>
-        <header>
-          <h2>{{ $t('gameBar.fileABug') }}</h2>
-        </header>
-      </template>
-      <form @submit.prevent="fileBug" class="column bug-form box">
-        <p>{{ $t('gameBar.fileBugPart1') }}</p>
-        <p class="info">{{ $t('gameBar.fileBugPart2') }}</p>
-        <p class="warning">{{ $t('gameBar.fileBugPart3') }}</p>
-        <input
-          required
-          type="text"
-          v-model="bugTitle"
-          v-bind:placeholder="$t('gameBar.bugTitleholder')"
-        />
-        <textarea
-          required
-          v-model="bugDescription"
-          v-bind:placeholder="$t('gameBar.bugDescriptionholder')"
-        ></textarea>
-        <div class="buttons">
-          <button type="submit">{{ $t('submit') }}</button>
-          <button @click="filingBug = false">{{ $t('cancel') }}</button>
-        </div>
-      </form>
-    </Draggable>
+    <ShortcutsModal v-if="showShortcuts" @close="showShortcuts = false" />
+    <BugReportForm
+      v-if="filingBug"
+      :initial-description="bugInitialDescription"
+      @submit="fileBug"
+      @cancel="filingBug = false"
+    />
     <div v-if="socketError" class="socketWarning">
       <!-- frontend/src/locales/en/gameBoard/base.json -->
       <p>{{ $t('outOfSyncHint') }}</p>
@@ -876,7 +761,7 @@ onUnmounted(() => {
         </Menu>
       </div>
       <div>
-        <button @click="filingBug = true">
+        <button @click="openBugReport">
           <ExclamationTriangleIcon aria-hidden="true" /> {{ $t('fileBug') }}
         </button>
       </div>
@@ -931,33 +816,11 @@ onUnmounted(() => {
           :playerId="playerId"
           @close="showHistory = false"
         />
-        <div
+        <PlayabilityModal
           v-if="playabilityInfo && debug.active"
-          class="debug-modal-overlay"
-          @click.self="playabilityInfo = null"
-        >
-          <div class="debug-playability-modal">
-            <h3>{{ $t('game.playabilityChecks') }}</h3>
-            <div class="debug-playability-content">
-              <img
-                class="debug-card-image"
-                :src="imgsrc(`cards/${playabilityInfo.cardCode.replace('c', '')}.avif`)"
-              />
-              <ul class="playability-checks">
-                <li
-                  v-for="[name, detail] in playabilityInfo.checks"
-                  :key="name"
-                  :class="detail === null ? 'check-passed' : 'check-failed'"
-                >
-                  <span class="check-icon">{{ detail === null ? '✓' : '✗' }}</span>
-                  <span class="check-name">{{ name }}</span>
-                  <span v-if="detail !== null" class="check-detail">{{ detail }}</span>
-                </li>
-              </ul>
-            </div>
-            <button @click="playabilityInfo = null">{{ $t('close') }}</button>
-          </div>
-        </div>
+          :info="playabilityInfo"
+          @close="playabilityInfo = null"
+        />
         <TarotModal v-if="tarotCards.length > 0" :tarotCards="tarotCards" @continue="continueUI" />
         <CampaignSettings
           v-if="game.campaign && !gameOver && question && question.tag === 'PickCampaignSettings'"
@@ -1317,11 +1180,6 @@ onUnmounted(() => {
   }
 }
 
-header {
-  display: flex;
-  flex-direction: column;
-}
-
 .invite-link {
   flex: 1;
   input {
@@ -1395,12 +1253,6 @@ header {
     display: block;
     width: 100%;
   }
-}
-
-header {
-  font-family: Teutonic;
-  font-size: 2em;
-  text-align: center;
 }
 
 .game-over {
@@ -1528,142 +1380,6 @@ header {
   color: var(--title);
 }
 
-.shortcuts-modal {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-height: 75vh;
-  background: var(--background);
-  color: var(--text);
-}
-
-.shortcuts-header {
-  flex-shrink: 0;
-  padding: 8px 16px;
-  background: var(--background-dark);
-  border-bottom: 1px solid var(--box-border);
-}
-
-.shortcuts-title {
-  margin: 0;
-  font-family: Teutonic, serif;
-  font-size: 20px;
-  color: var(--text);
-  text-transform: none;
-}
-
-.shortcuts-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 18px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.shortcuts-section {
-  display: flex;
-  flex-direction: column;
-
-  .section-title {
-    margin: 0 0 10px;
-    padding-bottom: 6px;
-    font-family: Teutonic, serif;
-    font-size: 13px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--title);
-    border-bottom: 1px solid var(--box-border);
-  }
-}
-
-.shortcut-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 6px;
-}
-
-.shortcut-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 16px;
-  align-items: center;
-  padding: 10px 14px;
-  background: var(--box-background);
-  border: 1px solid var(--box-border);
-  border-radius: 5px;
-}
-
-.shortcut-row:hover {
-  background: var(--background-mid);
-}
-
-.shortcut-name {
-  font-size: 14px;
-  color: var(--text);
-  min-width: 0;
-}
-
-.shortcut-keys {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-
-  kbd {
-    font-family: inherit;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 26px;
-    padding: 4px 8px;
-    font-size: 12px;
-    font-weight: 700;
-    border-radius: 4px;
-    background: var(--background-dark);
-    border: 1px solid var(--box-border);
-    color: var(--text);
-    line-height: 1;
-  }
-
-  .chord-arrow {
-    opacity: 0.5;
-    font-size: 12px;
-  }
-}
-
-.shortcuts-footer {
-  flex-shrink: 0;
-  width: 100%;
-  padding: 8px 16px;
-  border: none;
-  border-top: 1px solid var(--box-border);
-  background: var(--button-2);
-  color: var(--text);
-  font-family: Teutonic, serif;
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  text-align: center;
-}
-
-.shortcuts-footer:hover {
-  background: var(--button-2-highlight);
-}
-
-@media (max-width: 700px) {
-  .shortcuts-header,
-  .shortcuts-footer {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-  .shortcuts-body {
-    padding: 14px 16px;
-  }
-}
-
 .shortcut {
   margin-left: auto;
   border: 1px solid var(--title);
@@ -1674,17 +1390,6 @@ header {
 
 button:hover .shortcut {
   background-color: var(--box-border);
-}
-
-.bug-form {
-  padding: 10px;
-  font-size: 1.2em;
-  input,
-  textarea,
-  button {
-    font-size: 1.2em;
-    padding: 5px 10px;
-  }
 }
 
 .error-dialog {
@@ -1791,16 +1496,6 @@ button:hover .shortcut {
   }
 }
 
-.warning {
-  background-color: var(--survivor-extra-dark);
-  padding: 10px;
-}
-
-.info {
-  background-color: var(--seeker-extra-dark);
-  padding: 10px;
-}
-
 dialog {
   width: 400px;
   max-width: 90vw;
@@ -1833,80 +1528,4 @@ dialog {
   }
 }
 
-.debug-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.debug-playability-modal {
-  background: #1a1a2e;
-  border: 1px solid #444;
-  border-radius: 8px;
-  padding: 1.5rem;
-  min-width: 300px;
-  max-width: 700px;
-  color: #eee;
-
-  h3 {
-    margin: 0 0 1rem;
-    font-size: 1.1rem;
-    color: #adf;
-  }
-
-  button {
-    margin-top: 1rem;
-  }
-}
-
-.debug-playability-content {
-  display: flex;
-  gap: 1.5rem;
-  align-items: flex-start;
-}
-
-.debug-card-image {
-  width: 150px;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.playability-checks {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  flex: 1;
-
-  li {
-    padding: 0.3rem 0;
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-}
-
-.check-name {
-  font-weight: 500;
-}
-.check-detail {
-  font-size: 0.85rem;
-  opacity: 0.8;
-  font-style: italic;
-}
-.check-passed {
-  color: #4f4;
-}
-.check-failed {
-  color: #f44;
-}
-.check-icon {
-  font-weight: bold;
-  width: 1rem;
-  flex-shrink: 0;
-}
 </style>
