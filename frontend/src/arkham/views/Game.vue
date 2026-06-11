@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AdjustmentsHorizontalIcon,
@@ -20,9 +20,7 @@ import { provideGameContext } from '@/arkham/composables/provideGameContext'
 import { useGameUndo } from '@/arkham/composables/useGameUndo'
 import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
 import { useBugReport } from '@/arkham/composables/useBugReport'
-import Campaign from '@/arkham/components/Campaign.vue'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
-import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
@@ -31,14 +29,13 @@ import ActiveGameModals from '@/arkham/components/ActiveGameModals.vue'
 import MultiplayerLobby from '@/arkham/components/MultiplayerLobby.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import HistoryPanel from '@/arkham/components/HistoryPanel.vue'
-import ScenarioSettings from '@/arkham/components/ScenarioSettings.vue'
 import Settings from '@/arkham/components/Settings.vue'
-import StandaloneScenario from '@/arkham/components/StandaloneScenario.vue'
 import Draggable from '@/components/Draggable.vue'
 import GameBar from '@/arkham/components/GameBar.vue'
 import BugReportForm from '@/arkham/components/BugReportForm.vue'
 import ShortcutsModal from '@/arkham/components/ShortcutsModal.vue'
 import PlayabilityModal, { type PlayabilityInfo } from '@/arkham/components/PlayabilityModal.vue'
+import GameMain from '@/arkham/components/GameMain.vue'
 
 export interface Props {
   gameId: string
@@ -49,7 +46,6 @@ const props = withDefaults(defineProps<Props>(), { spectate: false })
 
 const debug = useDebug()
 const emitter = useEmitter()
-const router = useRouter()
 const store = useCardStore()
 const { addEntry, menuItems } = useMenu()
 const flashlightX = ref(0)
@@ -138,8 +134,6 @@ const choices = computed(() => {
   if (!playerId.value) return []
   return choicesByPlayer.value.get(playerId.value) ?? []
 })
-const gameOver = computed(() => game.value?.gameState.tag === 'IsOver')
-const question = computed(() => (playerId.value ? game.value?.question[playerId.value] : null))
 const realityAcidLightActive = computed(() => {
   const scenario = game.value?.scenario
   return scenario?.id === 'c85001' && scenario.meta?.lightActive === true
@@ -284,6 +278,17 @@ onUnmounted(() => {
       aria-hidden="true"
     ></div>
     <ShortcutsModal v-if="showShortcuts" @close="showShortcuts = false" />
+    <HistoryPanel
+      v-if="showHistory && game && playerId"
+      :game="game"
+      :playerId="playerId"
+      @close="showHistory = false"
+    />
+    <PlayabilityModal
+      v-if="playabilityInfo && debug.active"
+      :info="playabilityInfo"
+      @close="playabilityInfo = null"
+    />
     <BugReportForm
       v-if="filingBug"
       :initial-description="bugInitialDescription"
@@ -337,44 +342,11 @@ onUnmounted(() => {
       />
       <div v-else class="game-main">
         <ActiveGameModals :game="game" :playerId="playerId" :modals="modals" />
-        <HistoryPanel
-          v-if="showHistory && game && playerId"
+        <GameMain
           :game="game"
-          :playerId="playerId"
-          @close="showHistory = false"
-        />
-        <PlayabilityModal
-          v-if="playabilityInfo && debug.active"
-          :info="playabilityInfo"
-          @close="playabilityInfo = null"
-        />
-        <CampaignSettings
-          v-if="game.campaign && !gameOver && question && question.tag === 'PickCampaignSettings'"
-          :game="game"
-          :campaign="game.campaign"
-          :playerId="playerId"
-        />
-        <Campaign
-          v-else-if="game.campaign"
-          :game="game"
-          :gameLog="gameLog"
-          :playerId="playerId"
-          :campaign="game.campaign"
-          @choose="choose"
-          @update="socket.setGame"
-        />
-        <ScenarioSettings
-          v-else-if="
-            game.scenario && !gameOver && question && question.tag === 'PickScenarioSettings'
-          "
-          :game="game"
-          :scenario="game.scenario"
-          :playerId="playerId"
-        />
-        <StandaloneScenario
-          v-else-if="game.scenario && !gameOver"
-          :game="game"
-          :playerId="playerId"
+          :game-id="gameId"
+          :player-id="playerId"
+          :game-log="gameLog"
           @choose="choose"
           @update="socket.setGame"
         />
@@ -387,16 +359,6 @@ onUnmounted(() => {
           "
         >
           <GameLog :game="game" :gameLog="gameLog" @undo="undo" />
-        </div>
-        <div class="game-over" v-if="gameOver">
-          <p>{{ $t('gameOver') }}</p>
-          <button
-            class="replay-button"
-            @click="router.push({ name: 'ReplayGame', params: { gameId } })"
-          >
-            {{ $t('watchReplay') }}
-          </button>
-          <CampaignLog v-if="game !== null" :game="game" :cards="cards" :playerId="playerId" />
         </div>
         <div class="sidebar" v-if="showSidebar && game.scenario === null">
           <GameLog :game="game" :gameLog="gameLog" @undo="undo" />
@@ -645,22 +607,6 @@ onUnmounted(() => {
   }
 }
 
-.game-over {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-
-  p {
-    text-transform: uppercase;
-    background: rgba(0, 0, 0, 0.5);
-    width: 100%;
-    padding: 10px 20px;
-    color: white;
-    text-align: center;
-  }
-}
-
 @keyframes anim {
   0%,
   100% {
@@ -819,17 +765,6 @@ onUnmounted(() => {
   width: 80px;
   filter: invert(48%) sepia(32%) saturate(393%) hue-rotate(37deg) brightness(92%) contrast(89%);
   aspect-ratio: 1;
-}
-
-.replay-button {
-  padding: 10px;
-  width: 100%;
-  font-size: 1.2em;
-  border: 0;
-  background-color: var(--spooky-green);
-  &:hover {
-    background-color: var(--spooky-green-dark);
-  }
 }
 
 dialog {
