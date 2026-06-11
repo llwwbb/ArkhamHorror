@@ -29,6 +29,7 @@ import GameMain from '@/arkham/components/GameMain.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import OverlayDrawer from '@/components/OverlayDrawer.vue'
 import PlayerHandCards from '@/arkham/components/PlayerHandCards.vue'
+import PoolItem from '@/arkham/components/PoolItem.vue'
 import Draw from '@/arkham/components/Draw.vue'
 
 const props = defineProps<{
@@ -88,6 +89,13 @@ function closeAllDrawers() {
 }
 
 const inPlay = computed(() => props.game.gameState.tag === 'IsActive' && props.game.scenario !== null)
+
+// 顶部条 totals：桌面版 #totals 在角色抽屉里、收起即不可见，手机 shell 常驻顶部条
+const chaosTokenCount = (face: string) =>
+  props.game.scenario?.chaosBag.chaosTokens.filter((t) => t.face === face).length ?? 0
+const blessTokens = computed(() => chaosTokenCount('BlessToken'))
+const curseTokens = computed(() => chaosTokenCount('CurseToken'))
+const frostTokens = computed(() => chaosTokenCount('FrostToken'))
 // 待办指示：轮到本玩家选择时高亮（Task 11 起配合 Question 停靠使用）
 const hasQuestion = computed(() => !!props.game.question[props.playerId])
 
@@ -235,6 +243,13 @@ function runMenuItem(action: () => void) {
     <header class="mobile-top-bar">
       <MobilePhaseBar v-if="inPlay" :game="game" class="top-bar-phases" />
       <span v-else class="top-bar-spacer"></span>
+      <div v-if="inPlay" class="top-bar-totals">
+        <PoolItem type="doom" :amount="game.totalDoom" />
+        <PoolItem type="clue" :amount="game.totalClues" />
+        <PoolItem v-if="blessTokens > 0" type="ct_bless" :amount="blessTokens" />
+        <PoolItem v-if="curseTokens > 0" type="ct_curse" :amount="curseTokens" />
+        <PoolItem v-if="frostTokens > 0" type="ct_frost" :amount="frostTokens" />
+      </div>
       <button
         type="button"
         class="top-bar-btn"
@@ -435,6 +450,16 @@ function runMenuItem(action: () => void) {
 .top-bar-spacer {
   flex: 1;
   min-width: 0;
+}
+
+.top-bar-totals {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* PoolItem 的字号是 1.7em，按顶部条高度缩小 token */
+  --pool-token-width: 22px;
+  font-size: 0.6rem;
 }
 
 .top-bar-btn {
