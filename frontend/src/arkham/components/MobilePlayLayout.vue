@@ -101,6 +101,7 @@ watch(
   (st, prev) => {
     if (st && !prev) {
       for (const d of Object.values(drawers)) d.value = false
+      autoOpened.value = null
       handOpen.value = true
     } else if (!st && prev) {
       handOpen.value = false

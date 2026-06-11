@@ -18,7 +18,7 @@ const image = computed(() => getCardImage(props.target))
 
 <template>
   <!-- .card-action-sheet 类被 touchTapIntercept 的放行判断引用，保留 -->
-  <OverlayDrawer :open="true" side="bottom" panel-max-width="480px" @close="emit('close')">
+  <OverlayDrawer :open="true" side="bottom" panel-max-width="480px" :z-index="10002" @close="emit('close')">
     <div class="card-action-sheet no-overlay">
       <img v-if="image" :src="image" class="sheet-card" />
       <div class="sheet-actions">

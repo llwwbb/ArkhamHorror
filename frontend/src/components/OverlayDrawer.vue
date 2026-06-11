@@ -3,6 +3,7 @@
 // - keepMounted：v-show 切换，保留内部组件状态（如 PlayerTabs 选中页）
 // - inline：透传模式，原地渲染 slot 不做浮层（桌面与手机复用同一段模板时用）
 // - panelMaxWidth：约束面板宽度（如平板上的 bottom sheet 保持浮窗感），背景遮罩不受影响
+// - zIndex：覆盖默认 10000；同 z 层 teleport 按 DOM 顺序覆盖，二步确认 sheet 须高于抽屉
 withDefaults(
   defineProps<{
     open: boolean
@@ -10,6 +11,7 @@ withDefaults(
     keepMounted?: boolean
     inline?: boolean
     panelMaxWidth?: string
+    zIndex?: number
   }>(),
   { side: 'bottom', keepMounted: false, inline: false },
 )
@@ -25,6 +27,7 @@ const emit = defineEmits<{ close: [] }>()
         v-show="open"
         class="overlay-drawer-backdrop"
         :class="`overlay-drawer-backdrop--${side}`"
+        :style="zIndex ? { zIndex } : undefined"
         @click.self="emit('close')"
       >
         <div
