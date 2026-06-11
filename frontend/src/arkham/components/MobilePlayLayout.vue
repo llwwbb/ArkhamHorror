@@ -10,6 +10,7 @@ import {
   DocumentTextIcon,
   HandRaisedIcon,
   MapIcon,
+  UserGroupIcon,
 } from '@heroicons/vue/20/solid'
 import type { Game } from '@/arkham/types/Game'
 import type { GameModals } from '@/arkham/composables/useGameModals'
@@ -163,6 +164,9 @@ function runMenuItem(action: () => void) {
         @click="toggleDrawer('hand')"
       >
         <HandRaisedIcon aria-hidden="true" />{{ $t('mobileShell.hand') }}
+      </button>
+      <button type="button" :class="{ active: playersOpen }" @click="toggleDrawer('players')">
+        <UserGroupIcon aria-hidden="true" />{{ $t('mobileShell.players') }}
       </button>
       <button type="button" :class="{ active: logOpen }" @click="toggleDrawer('log')">
         <DocumentTextIcon aria-hidden="true" />{{ $t('mobileShell.log') }}
