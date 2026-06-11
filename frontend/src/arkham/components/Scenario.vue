@@ -64,6 +64,7 @@ import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { IsMobile } from '@/arkham/isMobile';
 import { usePinchZoom } from '@/arkham/composables/usePinchZoom'
+import { usePhoneShell } from '@/arkham/composables/phoneShell'
 const { t } = useI18n();
 
 // types
@@ -82,6 +83,7 @@ export interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits(['choose'])
 const debug = useDebug()
+const phoneShell = usePhoneShell()
 const { addEntry, removeEntry } = useMenu()
 
 const upgradeDeck = computed(() => Object.values(props.game.question).some((q) => q.tag === 'ChooseUpgradeDeck'))
@@ -2159,7 +2161,7 @@ async function addChaosToken(face: any){
         </div>
       </div>
     </div>
-    <div class="phases">
+    <div v-if="!phoneShell" class="phases">
       <div class="phase" :class="{ 'active-phase': phase == 'MythosPhase' }">
         <div class="subphases">
           <div v-tooltip.left="$t('phase.mythosPhaseBeginsStep')" :class="{'current': phaseStep?.contents === 'MythosPhaseBeginsStep' }">1.1</div>

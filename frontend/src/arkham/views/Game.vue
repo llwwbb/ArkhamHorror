@@ -36,6 +36,7 @@ import BugReportForm from '@/arkham/components/BugReportForm.vue'
 import ShortcutsModal from '@/arkham/components/ShortcutsModal.vue'
 import PlayabilityModal, { type PlayabilityInfo } from '@/arkham/components/PlayabilityModal.vue'
 import GameMain from '@/arkham/components/GameMain.vue'
+import MobilePlayLayout from '@/arkham/components/MobilePlayLayout.vue'
 
 export interface Props {
   gameId: string
@@ -78,7 +79,8 @@ const {
 const playabilityInfo = ref<PlayabilityInfo | null>(null)
 const showLog = ref(false)
 const showShortcuts = ref(false)
-const { isTouch, size } = useDeviceLayout()
+const { isTouch, size, shell } = useDeviceLayout()
+const phoneShell = computed(() => shell.value === 'phone')
 const isMobileViewport = () => size.value === 'phone'
 const showSidebar = ref(
   isMobileViewport() ? false : JSON.parse(getGameLocalStorageItem(props.gameId, 'showSidebar') ?? 'true'),
@@ -115,10 +117,7 @@ addEntry({
 
 const { choicesByPlayer } = provideGameContext(socket, showOtherPlayersHands)
 
-const {
-  undo, undoScenario, undoActionStart, undoTurnStart, undoPhaseStart, undoRoundStart,
-  canUndoScenario, canUndoAction, canUndoTurn, canUndoPhase, canUndoRound,
-} = useGameUndo({
+const undoApi = useGameUndo({
   gameId: () => props.gameId,
   game,
   processing,
@@ -127,6 +126,10 @@ const {
   modals,
   debugActive: () => debug.active,
 })
+const {
+  undo, undoScenario, undoActionStart, undoTurnStart, undoPhaseStart, undoRoundStart,
+  canUndoScenario, canUndoAction, canUndoTurn, canUndoPhase, canUndoRound,
+} = undoApi
 
 // Computed
 const cards = computed(() => store.cards)
@@ -300,6 +303,7 @@ onUnmounted(() => {
       <p>{{ $t('outOfSyncHint') }}</p>
     </div>
     <GameBar
+      v-if="!phoneShell"
       :game-id="gameId"
       :show-log="showLog"
       :undo-chord-armed="undoChordArmed"
@@ -339,6 +343,19 @@ onUnmounted(() => {
         :game="game"
         :cards="cards"
         :playerId="playerId"
+      />
+      <MobilePlayLayout
+        v-else-if="phoneShell"
+        :game="game"
+        :game-id="gameId"
+        :player-id="playerId"
+        :game-log="gameLog"
+        :modals="modals"
+        :undo-api="undoApi"
+        @choose="choose"
+        @update="socket.setGame"
+        @file-bug="openBugReport()"
+        @undo-scenario="undoScenarioDialog?.showModal()"
       />
       <div v-else class="game-main">
         <ActiveGameModals :game="game" :playerId="playerId" :modals="modals" />
