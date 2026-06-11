@@ -25,13 +25,8 @@ import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
-import { getCardImage } from '@/arkham/cardImageLookup'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
-import {
-  installTapIntercept,
-  type InterceptedTap,
-  type TapIntercept,
-} from '@/arkham/touchTapIntercept'
+import { useCardTapSheet } from '@/arkham/composables/useCardTapSheet'
 import TheSilenceModal from '@/arkham/components/TheSilenceModal.vue'
 import RevealedCardModal from '@/arkham/components/RevealedCardModal.vue'
 import TarotModal from '@/arkham/components/TarotModal.vue'
@@ -102,19 +97,10 @@ watch(showOtherPlayersHands, (v) => {
 const showSettings = ref(false)
 const showHistory = ref(false)
 const { t } = useI18n()
-const sheetTap = ref<InterceptedTap | null>(null)
-let tapIntercept: TapIntercept | null = null
-
-// 服务器推送新状态后，面板里的动作可能已失效，直接关闭
-watch(game, () => {
-  sheetTap.value = null
+const { sheetTap, confirmSheetAction, closeSheet } = useCardTapSheet({
+  isTouch: () => isTouch.value,
+  game,
 })
-
-function confirmSheetAction() {
-  const tap = sheetTap.value
-  sheetTap.value = null
-  if (tap) tapIntercept?.approve(tap)
-}
 
 addEntry({
   id: 'viewSettings',
@@ -268,14 +254,6 @@ onMounted(() => {
   ;(window as any).undo = undo
   ;(window as any).debugChoose = choose
   document.addEventListener('mousemove', onMove, { passive: true })
-  tapIntercept = installTapIntercept({
-    isTouch: () => isTouch.value,
-    shouldPreview: (el) => getCardImage(el) !== null,
-    onIntercept: (tap) => {
-      document.dispatchEvent(new Event('arkham:clear-card-overlay'))
-      sheetTap.value = tap
-    },
-  })
 })
 
 onBeforeRouteLeave(() => close())
@@ -285,8 +263,6 @@ onUnmounted(() => {
   delete (window as any).undo
   delete (window as any).debugChoose
   emitter.off('playabilityResult', onPlayabilityResult)
-  tapIntercept?.uninstall()
-  tapIntercept = null
   close()
 })
 </script>
@@ -327,7 +303,7 @@ onUnmounted(() => {
       :target="sheetTap.target"
       :actionable="sheetTap.actionable"
       @confirm="confirmSheetAction"
-      @close="sheetTap = null"
+      @close="closeSheet"
     />
     <div
       v-if="realityAcidLightActive"
