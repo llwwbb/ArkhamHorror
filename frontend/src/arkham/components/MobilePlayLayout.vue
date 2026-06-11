@@ -8,12 +8,14 @@ import {
   BackwardIcon,
   ExclamationTriangleIcon,
   DocumentTextIcon,
+  HandRaisedIcon,
   MapIcon,
 } from '@heroicons/vue/20/solid'
 import type { Game } from '@/arkham/types/Game'
 import type { GameModals } from '@/arkham/composables/useGameModals'
 import type { GameUndoApi } from '@/arkham/composables/useGameUndo'
 import { providePhoneShell } from '@/arkham/composables/phoneShell'
+import { useGameIndexes } from '@/arkham/composables/useGameIndexes'
 import { useMenu } from '@/composable/menu'
 import { useDebug } from '@/arkham/debug'
 import MobilePhaseBar from '@/arkham/components/MobilePhaseBar.vue'
@@ -21,6 +23,8 @@ import ActiveGameModals from '@/arkham/components/ActiveGameModals.vue'
 import GameMain from '@/arkham/components/GameMain.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import OverlayDrawer from '@/components/OverlayDrawer.vue'
+import PlayerHandCards from '@/arkham/components/PlayerHandCards.vue'
+import Draw from '@/arkham/components/Draw.vue'
 
 const props = defineProps<{
   game: Game
@@ -80,11 +84,23 @@ const inPlay = computed(() => props.game.gameState.tag === 'IsActive' && props.g
 // 待办指示：轮到本玩家选择时高亮（Task 11 起配合 Question 停靠使用）
 const hasQuestion = computed(() => !!props.game.question[props.playerId])
 
-// 技能检定开始时自动展开手牌（对齐原 Player.vue 移动浮层行为）——Task 10 启用手牌抽屉后生效
+// 自己的 investigator：手牌抽屉只对在场玩家渲染（旁观时为 null，不出手牌 tab）
+const gameIndexes = useGameIndexes(() => props.game)
+const ownInvestigator = computed(
+  () => gameIndexes.value.investigatorByPlayerId.get(props.playerId) ?? null,
+)
+
+// 技能检定开始自动展开手牌便于投入；结束自动收起。
+// 经 toggleDrawer 同款互斥逻辑，避免与其他抽屉叠层。
 watch(
   () => props.game.skillTest,
-  (st) => {
-    handOpen.value = !!st
+  (st, prev) => {
+    if (st && !prev) {
+      for (const d of Object.values(drawers)) d.value = false
+      handOpen.value = true
+    } else if (!st && prev) {
+      handOpen.value = false
+    }
   },
 )
 
@@ -139,10 +155,43 @@ function runMenuItem(action: () => void) {
       >
         <MapIcon aria-hidden="true" />{{ $t('mobileShell.map') }}
       </button>
+      <button
+        v-if="ownInvestigator"
+        type="button"
+        :class="{ active: handOpen }"
+        @click="toggleDrawer('hand')"
+      >
+        <HandRaisedIcon aria-hidden="true" />{{ $t('mobileShell.hand') }}
+      </button>
       <button type="button" :class="{ active: logOpen }" @click="toggleDrawer('log')">
         <DocumentTextIcon aria-hidden="true" />{{ $t('mobileShell.log') }}
       </button>
     </nav>
+
+    <OverlayDrawer
+      v-if="ownInvestigator"
+      :open="handOpen"
+      keep-mounted
+      side="bottom"
+      @close="handOpen = false"
+    >
+      <div class="mobile-hand">
+        <Draw
+          :game="game"
+          :playerId="playerId"
+          :investigator="ownInvestigator"
+          @choose="emit('choose', $event)"
+        />
+        <PlayerHandCards
+          class="mobile-hand-cards"
+          :game="game"
+          :playerId="playerId"
+          :investigator="ownInvestigator"
+          treachery-in-hand
+          @choose="emit('choose', $event)"
+        />
+      </div>
+    </OverlayDrawer>
 
     <OverlayDrawer :open="logOpen" side="right" @close="logOpen = false">
       <div class="mobile-log">
@@ -292,6 +341,23 @@ function runMenuItem(action: () => void) {
 
     &.active {
       color: var(--select);
+    }
+  }
+}
+
+.mobile-hand {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  align-items: flex-start;
+
+  .mobile-hand-cards {
+    flex: 1;
+    min-width: 0;
+    /* 手牌在抽屉里放大便于触控（对齐原浮层 4 倍卡宽的意图） */
+    :deep(.card) {
+      width: calc(var(--card-width) * 3);
+      min-width: calc(var(--card-width) * 3);
     }
   }
 }

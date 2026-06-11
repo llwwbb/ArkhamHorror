@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import * as CardT from '@/arkham/types/Card';
-import { computed, inject, ref, ComputedRef, reactive, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, ComputedRef, reactive } from 'vue';
 import { useDebug } from '@/arkham/debug';
 import { Game } from '@/arkham/types/Game';
 import { toCardContents } from '@/arkham/types/Card';
@@ -26,7 +26,6 @@ import Draw from '@/arkham/components/Draw.vue'
 import { IsMobile } from '@/arkham/isMobile';
 import { usePlayerHand } from '@/arkham/composables/usePlayerHand';
 import { createCardTransitionHooks } from '@/arkham/cardTransitions';
-import { XMarkIcon } from '@heroicons/vue/20/solid';
 const { t } = useI18n();
 
 interface RefWrapper<T> {
@@ -174,7 +173,7 @@ const slotImg = (slot: Arkham.Slot) => {
   }
 }
 
-// 入场区与（桌面/移动）手牌区共用同一个 rectMap，保持卡牌在手牌 ↔ 入场区之间的跨区飞行动画
+// 入场区与桌面手牌区共用同一个 rectMap，保持卡牌在手牌 ↔ 入场区之间的跨区飞行动画
 const cardRectMap = new Map<string, DOMRect>()
 const { onBeforeEnter, onEnter, onLeave } = createCardTransitionHooks(cardRectMap)
 
@@ -201,55 +200,6 @@ function onDrop(event: DragEvent) {
 }
 
 const playAreaCollapsed = ref(false)
-
-const handCardHeight = Math.min(7 * window.innerWidth / 50 + 114, 340);
-const handCardExposedHeight_MIN = `${-(handCardHeight - 50)}`;
-const handCardExposedHeight_MAX = `0`;
-const handAreaMarginBottom = ref(handCardExposedHeight_MIN);
-const handAreaPointerEvents = ref('none');
-
-onMounted(() => {
-  if (isMobile) {
-    document.addEventListener('click',toggleHandAreaMarginBottom)
-    const isMinimized_SkillTest = inject('isMinimized_SkillTest', ref(false))
-    watch([() => props.game.skillTest, isMinimized_SkillTest], ([newSkillTest,isMinimized]) => {
-      if (newSkillTest && !isMinimized) {
-        handAreaMarginBottom.value = handCardExposedHeight_MAX;
-        handAreaPointerEvents.value = 'auto';
-        document.removeEventListener('click', toggleHandAreaMarginBottom)
-      } else {
-        handAreaMarginBottom.value = handCardExposedHeight_MIN;
-        handAreaPointerEvents.value = 'none';
-        document.removeEventListener('click', toggleHandAreaMarginBottom)
-        document.addEventListener('click', toggleHandAreaMarginBottom)
-      }
-    });
-  }
-});
-
-onBeforeUnmount(() => {
-  if (isMobile) {
-    document.removeEventListener('click', toggleHandAreaMarginBottom)
-  }
-});
-
-function toggleHandAreaMarginBottom(event: Event) {
-  const target = event.target as HTMLElement
-  if (target.classList.contains('hand-area-IsMobile')) {
-    handAreaMarginBottom.value = handCardExposedHeight_MAX;
-    handAreaPointerEvents.value = 'auto'
-  }
-  else if(!target.closest('.in-hand')){
-    handAreaMarginBottom.value = handCardExposedHeight_MIN;
-    handAreaPointerEvents.value = 'none'
-  }
-}
-
-function closeHand() {
-  handAreaMarginBottom.value = handCardExposedHeight_MIN;
-  handAreaPointerEvents.value = 'none';
-}
-
 </script>
 
 <template>
@@ -424,26 +374,6 @@ function closeHand() {
         />
         <div v-if="investigator.handSize" class="hand-size" :class="handSizeClasses" :current-length="totalHandSize">{{ t('handSize') }}: {{totalHandSize}}/{{investigator.handSize}}</div>
       </div>
-    </div>
-    <div v-if="isMobile" class="hand hand-area-IsMobile" :style="{ bottom: `${handAreaMarginBottom}px` }" @click="toggleHandAreaMarginBottom">
-      <button
-        v-show="handAreaPointerEvents === 'auto'"
-        class="hand-close-button"
-        type="button"
-        aria-label="Close hand"
-        @click.stop="closeHand"
-      >
-        <XMarkIcon aria-hidden="true" />
-      </button>
-      <PlayerHandCards
-        :style="{ pointerEvents: `${handAreaPointerEvents}`, flex: 1 }"
-        :game="game"
-        :playerId="playerId"
-        :investigator="investigator"
-        :rectMap="cardRectMap"
-        treachery-in-hand
-        @choose="$emit('choose', $event)"
-      />
     </div>
     <CardRow
       v-if="showCards.ref.length > 0"
@@ -711,48 +641,6 @@ function closeHand() {
   align-items: flex-start;
   flex: 1;
   max-width: 100%;
-}
-
-.hand-area-IsMobile {
-  position: fixed;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  height: calc(var(--card-height) * 4);
-  background: var(--background-dark);
-  transition: bottom 0.3s ease;
-  overflow: hidden;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  :deep(.card){
-    width: calc(var(--card-width) * 4);
-    min-width: calc(var(--card-width) * 4);
-  }
-}
-
-.hand-close-button {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 101;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.65);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-}
-
-.hand-close-button svg {
-  width: 18px;
-  height: 18px;
 }
 
 .card {
