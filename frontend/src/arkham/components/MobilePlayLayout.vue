@@ -141,6 +141,9 @@ const ACTIONABLE = '[class*="--can-interact"], [class*="--can-progress"], .can-i
 
 // autoOpened: 当前由自动逻辑打开的抽屉名，null 表示未自动打开任何抽屉。
 const autoOpened = ref<'hand' | 'players' | null>(null)
+// scenario UI（玩家区）是否挂载：幕间故事等整页态由 StoryQuestion 内联呈现，
+// 桌面此时不挂 Player/ChoiceModal——停靠版同样要按这个信号门控，否则双重渲染。
+const scenarioUiActive = ref(false)
 // attention: 各 tab 的红点——区内有可操作元素但对应抽屉未开。
 const attention = reactive({ hand: false, players: false })
 
@@ -159,6 +162,7 @@ watch(
     // 技能检定期间：仍然扫描并刷新红点；但 hand 抽屉的自动开/收由 skillTest watch 专管，
     // 此处跳过对 hand 的自动开/收（players 的自动开/收照常）。
     const inSkillTest = !!props.game.skillTest
+    scenarioUiActive.value = !!document.querySelector('#player-zone')
     const zones = scanActionableZones()
 
     // 刷新红点（抽屉已开时不亮）
@@ -204,7 +208,8 @@ watch(
       }
     }
   },
-  { flush: 'post' },
+  // immediate：刷新页面落在待选状态时，首个状态也要触发联动（不等下一次推送）
+  { flush: 'post', immediate: true },
 )
 
 // 手动关闭路径兜底（Scenario 内抽屉 @close 直接置 false，不经 toggleDrawer）：
@@ -291,7 +296,7 @@ function runMenuItem(action: () => void) {
          ChoiceModal 同理），且战役间章（CampaignPhase）不渲染（桌面此时 Player 未挂载，
          问题由 StoryQuestion/Campaign UI 呈现，停靠版会重复）。 -->
     <ChoiceModal
-      v-if="ownInvestigator && game.phase !== 'CampaignPhase'"
+      v-if="ownInvestigator && game.phase !== 'CampaignPhase' && scenarioUiActive"
       docked
       :game="game"
       :playerId="playerId"
