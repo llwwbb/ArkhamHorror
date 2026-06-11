@@ -104,3 +104,5 @@ export function useGameUndo(opts: UseGameUndoOptions) {
     canUndoRound,
   }
 }
+
+export type GameUndoApi = ReturnType<typeof useGameUndo>

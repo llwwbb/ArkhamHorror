@@ -1,0 +1,584 @@
+[     293ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
+[     302ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/NotoSans.ttf @ http://localhost:8080/#/:0
+[     869ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/teutonic.ttf @ http://localhost:8080/#/:0
+[   53859ms] [WARNING] [intlify] Not found 'create.chapter1Heading' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[   53859ms] [WARNING] [intlify] Fall back to translate 'create.chapter1Heading' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  106347ms] [WARNING] [intlify] Not found 'create.chapter1Heading' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  106348ms] [WARNING] [intlify] Fall back to translate 'create.chapter1Heading' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  106355ms] [WARNING] [intlify] Not found 'create.advancedRulesConfiguration' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  106355ms] [WARNING] [intlify] Fall back to translate 'create.advancedRulesConfiguration' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  106355ms] [WARNING] [intlify] Not found 'create.preset.chapter1.name' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  106355ms] [WARNING] [intlify] Fall back to translate 'create.preset.chapter1.name' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  165176ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  165176ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  165225ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkham.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[  165225ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamslim.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[  704890ms] [WARNING] [Vue warn]: Failed to resolve component: CardImage
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <StoryQuestion game= {scenario: null, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} key="JTdCJTIydGFnJTIyJTNBJTIyUmVhZCUyMiUyQyUyMmZsYXZvclRleHQlMjIlM0ElN0IlMjJ0aXRsZSUyMiUzQW51bGwlMkMlMjJib2R5JTIyJTNBJTVCJTdCJTIydGFnJTIyJTNBJTIySTE4bkVudHJ5JTIyJTJDJTIya2V5JTIyJTNBJTIybmlnaHRPZlRoZVplYWxvdC5wcm9sb2d1ZSUyMiUyQyUyMnZhcmlhYmxlcyUyMiUzQSU3QiU3RCU3RCU1RCU3RCUyQyUyMnJlYWRDaG9pY2VzJTIyJTNBJTdCJTIydGFnJTIyJTNBJTIyQmFzaWNSZWFkQ2hvaWNlcyUyMiUyQyUyMmNvbnRlbnRzJTIyJTNBJTVCJTdCJTIydGFnJTIyJTNBJTIyTGFiZWwlMjIlMkMlMjJsYWJlbCUyMiUzQSUyMiUyNGNvbnRpbnVlJTIyJTdEJTVEJTdEJTJDJTIycmVhZENhcmRzJTIyJTNBbnVsbCU3RA==" playerId="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <Campaign key=6 game= {scenario: null, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} gameLog= []  ... > 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[  704894ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/ArnoPro-ItalicCaption.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[  704894ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamicons.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[  706193ms] [WARNING] [Vue warn]: Failed to resolve component: CardImage
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <StoryQuestion game= {scenario: null, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} key="dW5kZWZpbmVk" playerId="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <Campaign key=6 game= {scenario: null, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} gameLog= []  ... > 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[  707789ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  707790ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  707790ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  707790ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  707801ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  707801ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  707801ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  709377ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  709378ms] [WARNING] [intlify] Fall back to translate '$label.doneWithMulligan' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  709378ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  791274ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  791274ms] [WARNING] [intlify] Fall back to translate '$label.doneWithMulligan' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  791274ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  793181ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  793181ms] [WARNING] [intlify] Fall back to translate '$label.doneWithMulligan' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  793182ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  793750ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  793750ms] [WARNING] [intlify] Fall back to translate '$label.doneWithMulligan' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  793750ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  794492ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  794492ms] [WARNING] [intlify] Fall back to translate '$label.doneWithMulligan' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  794493ms] [WARNING] [intlify] Not found '$label.doneWithMulligan' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  794926ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  794926ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  794926ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809423ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
+[  809429ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/NotoSans.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[  809617ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809617ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809648ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809649ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809649ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809649ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809661ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809662ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809662ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  809670ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/teutonic.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[  809671ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamicons.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[  809671ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkham.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[  809674ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamslim.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[  871705ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
+[  871709ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/NotoSans.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[  871871ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  871871ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  871901ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  871901ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  871901ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  871901ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[  871938ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkham.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[  924873ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/teutonic.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[ 1009946ms] [WARNING] [intlify] Not found '$nightOfTheZealot.theGathering.label.whatsGoingOn.horror' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009946ms] [WARNING] [intlify] Fall back to translate '$nightOfTheZealot.theGathering.label.whatsGoingOn.horror' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009947ms] [WARNING] [intlify] Not found '$nightOfTheZealot.theGathering.label.whatsGoingOn.horror' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009947ms] [WARNING] [intlify] Not found 'nightOfTheZealot.theGathering.label.whatsGoingOn.horror' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009947ms] [WARNING] [intlify] Fall back to translate 'nightOfTheZealot.theGathering.label.whatsGoingOn.horror' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009948ms] [WARNING] [intlify] Not found '$nightOfTheZealot.theGathering.label.whatsGoingOn.discard' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009948ms] [WARNING] [intlify] Fall back to translate '$nightOfTheZealot.theGathering.label.whatsGoingOn.discard' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009948ms] [WARNING] [intlify] Not found '$nightOfTheZealot.theGathering.label.whatsGoingOn.discard' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009949ms] [WARNING] [intlify] Not found 'nightOfTheZealot.theGathering.label.whatsGoingOn.discard' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009949ms] [WARNING] [intlify] Fall back to translate 'nightOfTheZealot.theGathering.label.whatsGoingOn.discard' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1009952ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamicons.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[ 1128188ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1128189ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1128931ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1128931ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1274288ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1274288ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1274935ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1274935ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1297355ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1297355ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1297916ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1297917ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1341523ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1341523ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1342162ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1342162ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1343531ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1343531ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1344009ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1344009ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1344868ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1344868ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1345114ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1345114ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1345832ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1345832ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1346133ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1346134ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1347785ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1347785ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1348187ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1348187ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1348830ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1348830ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1349571ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1349572ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1438103ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1438104ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1438751ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1438751ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1440694ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1440694ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1441183ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1441183ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1450484ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1450484ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1450990ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1450991ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1452258ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1452258ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1452743ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1452744ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1453983ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1453983ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1454507ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1454507ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1529000ms] [WARNING] [intlify] Not found 'Reaction' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1529000ms] [WARNING] [intlify] Fall back to translate 'Reaction' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1644477ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1644477ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1645057ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1645057ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1646198ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1646198ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1714479ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1714480ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1715038ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1715039ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1844605ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1844605ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1844756ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1844757ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1844951ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1844951ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1846316ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1846316ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1846579ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1846579ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1846659ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1846659ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1909630ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1909630ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1909881ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1909882ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1909993ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1909993ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1910823ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1910823ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1911001ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1911001ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1911063ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1911064ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1911915ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1911915ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1912163ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1912163ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1912217ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1912218ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1917102ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1917102ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1917326ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1917326ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1917478ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 1917478ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2124232ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
+[ 2124239ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/NotoSans.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[ 2124463ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2124464ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2124503ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2124503ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2124503ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2124503ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2124545ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkham.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[ 2162950ms] [WARNING] [intlify] Not found 'nightOfTheZealot.theGathering.tooltips.parlor.resign' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2162950ms] [WARNING] [intlify] Fall back to translate 'nightOfTheZealot.theGathering.tooltips.parlor.resign' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2162950ms] [WARNING] [intlify] Not found 'nightOfTheZealot.theGathering.tooltips.parlor.resign' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2168162ms] [WARNING] [intlify] Not found 'nightOfTheZealot.theGathering.tooltips.parlor.resign' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2168162ms] [WARNING] [intlify] Fall back to translate 'nightOfTheZealot.theGathering.tooltips.parlor.resign' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2168162ms] [WARNING] [intlify] Not found 'nightOfTheZealot.theGathering.tooltips.parlor.resign' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2170113ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamicons.ttf @ http://localhost:8080/src/arkham/components/Player.vue:303
+[ 2170119ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2170119ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2170120ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2170125ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/teutonic.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[ 2170125ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/ArnoPro-ItalicCaption.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[ 2170127ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamslim.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[ 2179375ms] [WARNING] [intlify] Not found 'Do not add Lita Chantler: The Zealot to any deck' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2179376ms] [WARNING] [intlify] Fall back to translate 'Do not add Lita Chantler: The Zealot to any deck' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2179376ms] [WARNING] [intlify] Not found 'Do not add Lita Chantler: The Zealot to any deck' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2257859ms] [WARNING] [intlify] Not found 'gameBar.fileBugPart3' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2257859ms] [WARNING] [intlify] Fall back to translate 'gameBar.fileBugPart3' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2262924ms] [WARNING] Form submission canceled because the form is not connected @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[ 2264092ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2264093ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2271570ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2271570ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2271570ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2271570ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2271577ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2271578ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2271578ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2273087ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2273087ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2273087ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2276833ms] [WARNING] [intlify] Not found 'gameBar.restartScenario' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2276833ms] [WARNING] [intlify] Fall back to translate 'gameBar.restartScenario' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434494ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434494ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434503ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434503ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434511ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434511ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434570ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434570ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434582ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434582ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434590ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434591ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434646ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434646ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434647ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434647ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434651ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434651ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[ 2434652ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38621791ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38621791ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38621798ms] [WARNING] [Vue warn]: Unhandled error during execution of mounted hook 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[38621815ms] ReferenceError: installTapIntercept is not defined
+    at http://localhost:8080/src/arkham/views/Game.vue?t=1781144545595:250:7
+    at http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:4998:40
+    at callWithErrorHandling (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2296:19)
+    at callWithAsyncErrorHandling (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2303:17)
+    at hook.__weh.hook.__weh (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:4978:19)
+    at flushPostFlushCbs (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2481:28)
+    at flushJobs (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2523:5)
+[38646764ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38646764ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38646765ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38646765ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38646778ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38646779ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[38646779ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39348054ms] [WARNING] [Vue warn]: Invalid vnode type when creating vnode: undefined. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[39348062ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39348062ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39348063ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39348063ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39348075ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39348076ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39348076ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[39722380ms] [WARNING] [Vue warn]: Invalid vnode type when creating vnode: undefined. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475088ms] [WARNING] [Vue warn]: Failed to resolve component: CampaignSettings
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475088ms] [WARNING] [Vue warn]: Failed to resolve component: Campaign
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475089ms] [WARNING] [Vue warn]: Failed to resolve component: ScenarioSettings
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475089ms] [WARNING] [Vue warn]: Failed to resolve component: StandaloneScenario
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475090ms] [WARNING] [Vue warn]: Invalid vnode type when creating vnode: undefined. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475090ms] [WARNING] [Vue warn]: Property "gameOver" was accessed during render but is not defined on instance. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475091ms] [WARNING] [Vue warn]: Property "question" was accessed during render but is not defined on instance. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40475091ms] [WARNING] [Vue warn]: Property "gameOver" was accessed during render but is not defined on instance. 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[40906406ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
+[40906415ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/NotoSans.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[40906827ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40906828ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907009ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907009ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907010ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907010ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907038ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907039ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907039ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907063ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/teutonic.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[40907064ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/ArnoPro-ItalicCaption.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[40907064ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamicons.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[40907065ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkham.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[40907483ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
+[40907486ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/NotoSans.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[40907631ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907631ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907676ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907676ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907677ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907677ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907689ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907691ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907691ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[40907712ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/teutonic.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[40907713ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/ArnoPro-ItalicCaption.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[40907713ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamicons.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[40907713ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkham.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[41284163ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284163ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284229ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284230ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284230ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284230ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284235ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284236ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41284236ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339732ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339733ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339751ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339752ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339752ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339752ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339756ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339757ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41339757ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341056ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341057ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341071ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341071ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341071ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341071ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341075ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341075ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41341075ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41342425ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41342426ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41342426ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41342426ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41342430ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41342430ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41342430ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344488ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344488ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344504ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344504ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344504ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344504ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344507ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344507ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41344508ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41352121ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41352121ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41352121ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41352122ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41352126ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41352127ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41352127ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41353877ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41353877ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41353878ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41353878ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41353882ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41353882ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41353883ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41954948ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41954949ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41954958ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41954959ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41955018ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41955018ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41955018ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41955019ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41955028ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41955028ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41955029ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957054ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957054ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957061ms] [WARNING] [intlify] Not found 'gameBar.viewHistory' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957061ms] [WARNING] [intlify] Fall back to translate 'gameBar.viewHistory' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957077ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957077ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957077ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957077ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957081ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957082ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[41957082ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42165735ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
+[42165739ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/NotoSans.ttf @ http://localhost:8080/#/games/2b328dfe-3048-4e26-9e2c-7f9c7625ea1f:0
+[42165998ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42165999ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42165999ms] [WARNING] [intlify] Not found 'gameBar.rotateLayout' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42165999ms] [WARNING] [intlify] Fall back to translate 'gameBar.rotateLayout' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42166010ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42166010ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42166011ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42166025ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/teutonic.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[42166025ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/ArnoPro-ItalicCaption.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[42166025ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkhamicons.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[42166025ms] [INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://localhost:8080/fonts/arkham.ttf @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:11962
+[42644733ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42644733ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42644734ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42646832ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42646832ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42646832ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42649249ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42649249ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42649249ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42658793ms] [WARNING] [intlify] Not found '$continue' key in 'zh' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42658794ms] [WARNING] [intlify] Fall back to translate '$continue' key with 'en' locale. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42658794ms] [WARNING] [intlify] Not found '$continue' key in 'en' locale messages. @ http://localhost:8080/node_modules/.vite/deps/vue-i18n.js?v=f8c47add:22
+[42661049ms] [WARNING] [Vue warn]: Unhandled error during execution of render function 
+  at <Player game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} playerId="28ddc0d4-1fb5-419f-9347-358879325cd8" investigator= {foundCards: Object, location: 00000000-0000-0000-0000-000000000000, eliminated: false, placement: Object, name: Object}  ... > 
+  at <Tab key="c01002" index="28ddc0d4-1fb5-419f-9347-358879325cd8" selectedTab="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <PlayerTabs game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} playerId="28ddc0d4-1fb5-419f-9347-358879325cd8" players= {c01002: Object}  ... > 
+  at <Scenario key=2 game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} scenario= {name: Object, id: c01120, meta: null, reference: c01120, additionalReferences: Array(0)}  ... > 
+  at <Campaign key=1 game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} gameLog= [{investigator:"Daisy Walker: The Librarian":"01002…TokenVerb {token:"ElderSign"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01061":"a98f5a31-06e7-4a63-83fb-2cfa5e5cb048"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"19e54e16-cfe1-451b-8281-e17b3e430360"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.actAdvancedTo {card:"The Barrier":"01109":"90fa390a-1532-469f-af88-3c789c2f6f1a"}, {investigator:"Daisy Walker: The Librarian":"01002…rawsTokenVerb {token:"Skull"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.agendaAdvancedTo {card:"Rise of the Ghouls":"01106":"001ec8c8-8712-437d-895c-1ed1700ba88e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"1ec31ea4-7be1-46ca-a6ad-f5a8698387ae"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"1c82df5e-f79f-4a5d-8d8c-f4bb9c838566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01036":"7a4626d2-eea3-4e4f-8979-2c81a20d90de"}, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01030":"8cb60cad-b20d-4756-9cca-2774403a6f53"}, {investigator:"Daisy Walker: The Librarian":"01002…wsTokenVerb {token:"PlusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 2 $log.cluesNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01065":"bcd8a87e-3357-45e2-ab16-b248c0600cb9"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01164":"e9f4097b-4e0d-4266-b516-0d06e976f566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01088":"f4695a95-4099-402d-b5c0-c4f5743c6bb0"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"f5383b76-9f25-49b5-99c6-ee9bc5847b46"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01059":"022b318e-2617-4762-a7b2-5deb6c6f3426"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"2c47b7fb-b831-4392-ae1c-754583b8156e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01032":"c3831dce-9e99-4c5d-91cc-128013d72f11"}, $log.actAdvancedTo {card:"What Have You Done?":"01110":"1bbb78f8-db13-480b-b4c5-74e4ce974f10"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01160":"3c126fdd-7280-4612-96ed-f429ea05920c"}, $log.agendaAdvancedTo {card:"They're Getting Out!":"01107":"07cc916a-fdb4-435b-a96d-0f29b38e4ea4"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"cf94e551-6dd5-4d4a-b36f-6a89b78d6d66"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01066":"fad32de7-20df-4536-aedc-2f24e4de7faf"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"2b153315-04d6-48c4-af0f-53ff5420989c"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, $log.record "your house is still standing", $log.record "ghoul priest is still alive"]  ... > 
+  at <GameMain game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} game-id="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" player-id="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[42661051ms] [WARNING] [Vue warn]: Unhandled error during execution of scheduler flush 
+  at <Player game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} playerId="28ddc0d4-1fb5-419f-9347-358879325cd8" investigator= {foundCards: Object, location: 00000000-0000-0000-0000-000000000000, eliminated: false, placement: Object, name: Object}  ... > 
+  at <Tab key="c01002" index="28ddc0d4-1fb5-419f-9347-358879325cd8" selectedTab="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <PlayerTabs game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} playerId="28ddc0d4-1fb5-419f-9347-358879325cd8" players= {c01002: Object}  ... > 
+  at <Scenario key=2 game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} scenario= {name: Object, id: c01120, meta: null, reference: c01120, additionalReferences: Array(0)}  ... > 
+  at <Campaign key=1 game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} gameLog= [{investigator:"Daisy Walker: The Librarian":"01002…TokenVerb {token:"ElderSign"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01061":"a98f5a31-06e7-4a63-83fb-2cfa5e5cb048"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"19e54e16-cfe1-451b-8281-e17b3e430360"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.actAdvancedTo {card:"The Barrier":"01109":"90fa390a-1532-469f-af88-3c789c2f6f1a"}, {investigator:"Daisy Walker: The Librarian":"01002…rawsTokenVerb {token:"Skull"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.agendaAdvancedTo {card:"Rise of the Ghouls":"01106":"001ec8c8-8712-437d-895c-1ed1700ba88e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"1ec31ea4-7be1-46ca-a6ad-f5a8698387ae"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"1c82df5e-f79f-4a5d-8d8c-f4bb9c838566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01036":"7a4626d2-eea3-4e4f-8979-2c81a20d90de"}, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01030":"8cb60cad-b20d-4756-9cca-2774403a6f53"}, {investigator:"Daisy Walker: The Librarian":"01002…wsTokenVerb {token:"PlusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 2 $log.cluesNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01065":"bcd8a87e-3357-45e2-ab16-b248c0600cb9"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01164":"e9f4097b-4e0d-4266-b516-0d06e976f566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01088":"f4695a95-4099-402d-b5c0-c4f5743c6bb0"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"f5383b76-9f25-49b5-99c6-ee9bc5847b46"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01059":"022b318e-2617-4762-a7b2-5deb6c6f3426"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"2c47b7fb-b831-4392-ae1c-754583b8156e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01032":"c3831dce-9e99-4c5d-91cc-128013d72f11"}, $log.actAdvancedTo {card:"What Have You Done?":"01110":"1bbb78f8-db13-480b-b4c5-74e4ce974f10"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01160":"3c126fdd-7280-4612-96ed-f429ea05920c"}, $log.agendaAdvancedTo {card:"They're Getting Out!":"01107":"07cc916a-fdb4-435b-a96d-0f29b38e4ea4"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"cf94e551-6dd5-4d4a-b36f-6a89b78d6d66"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01066":"fad32de7-20df-4536-aedc-2f24e4de7faf"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"2b153315-04d6-48c4-af0f-53ff5420989c"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, $log.record "your house is still standing", $log.record "ghoul priest is still alive"]  ... > 
+  at <GameMain game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} game-id="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" player-id="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[42661057ms] ReferenceError: inHandEnemies is not defined
+    at ComputedRefImpl.fn (http://localhost:8080/src/arkham/components/Player.vue?t=1781148584989:128:29)
+    at refreshComputed (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:659:29)
+    at get value (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:1861:5)
+    at ComputedRefImpl.fn (http://localhost:8080/src/arkham/components/Player.vue?t=1781148584989:137:74)
+    at refreshComputed (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:659:29)
+    at get value (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:1861:5)
+    at unref (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:1734:30)
+    at Object.get (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:1740:64)
+    at Proxy._sfc_render (http://localhost:8080/src/arkham/components/Player.vue?t=1781148584989:755:55)
+    at renderComponentRoot (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8705:17)
+[42662654ms] [WARNING] [Vue warn]: Unhandled error during execution of scheduler flush 
+  at <Tab key="c01002" index="28ddc0d4-1fb5-419f-9347-358879325cd8" selectedTab="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <PlayerTabs game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} playerId="28ddc0d4-1fb5-419f-9347-358879325cd8" players= {c01002: Object}  ... > 
+  at <Scenario key=2 game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} scenario= {name: Object, id: c01120, meta: null, reference: c01120, additionalReferences: Array(0)}  ... > 
+  at <Campaign key=1 game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} gameLog= [{investigator:"Daisy Walker: The Librarian":"01002…TokenVerb {token:"ElderSign"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01061":"a98f5a31-06e7-4a63-83fb-2cfa5e5cb048"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"19e54e16-cfe1-451b-8281-e17b3e430360"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.actAdvancedTo {card:"The Barrier":"01109":"90fa390a-1532-469f-af88-3c789c2f6f1a"}, {investigator:"Daisy Walker: The Librarian":"01002…rawsTokenVerb {token:"Skull"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.agendaAdvancedTo {card:"Rise of the Ghouls":"01106":"001ec8c8-8712-437d-895c-1ed1700ba88e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"1ec31ea4-7be1-46ca-a6ad-f5a8698387ae"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"1c82df5e-f79f-4a5d-8d8c-f4bb9c838566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01036":"7a4626d2-eea3-4e4f-8979-2c81a20d90de"}, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01030":"8cb60cad-b20d-4756-9cca-2774403a6f53"}, {investigator:"Daisy Walker: The Librarian":"01002…wsTokenVerb {token:"PlusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 2 $log.cluesNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01065":"bcd8a87e-3357-45e2-ab16-b248c0600cb9"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01164":"e9f4097b-4e0d-4266-b516-0d06e976f566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01088":"f4695a95-4099-402d-b5c0-c4f5743c6bb0"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"f5383b76-9f25-49b5-99c6-ee9bc5847b46"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01059":"022b318e-2617-4762-a7b2-5deb6c6f3426"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"2c47b7fb-b831-4392-ae1c-754583b8156e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01032":"c3831dce-9e99-4c5d-91cc-128013d72f11"}, $log.actAdvancedTo {card:"What Have You Done?":"01110":"1bbb78f8-db13-480b-b4c5-74e4ce974f10"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01160":"3c126fdd-7280-4612-96ed-f429ea05920c"}, $log.agendaAdvancedTo {card:"They're Getting Out!":"01107":"07cc916a-fdb4-435b-a96d-0f29b38e4ea4"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"cf94e551-6dd5-4d4a-b36f-6a89b78d6d66"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01066":"fad32de7-20df-4536-aedc-2f24e4de7faf"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"2b153315-04d6-48c4-af0f-53ff5420989c"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, $log.record "your house is still standing", $log.record "ghoul priest is still alive"]  ... > 
+  at <GameMain game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} game-id="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" player-id="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[42662655ms] TypeError: Cannot destructure property 'type' of 'vnode' as it is null.
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8010:7)
+    at unmountComponent (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8147:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8042:7)
+    at patchKeyedChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:7891:11)
+    at patchChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:7702:11)
+    at processFragment (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:7345:9)
+    at patch (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:6859:9)
+    at patchKeyedChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:7788:9)
+    at patchChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:7702:11)
+    at patchElement (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:7172:7)
+[58391652ms] [WARNING] [Vue warn]: Unhandled error during execution of scheduler flush 
+  at <Campaign key=1 game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} gameLog= [{investigator:"Daisy Walker: The Librarian":"01002…TokenVerb {token:"ElderSign"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01061":"a98f5a31-06e7-4a63-83fb-2cfa5e5cb048"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"19e54e16-cfe1-451b-8281-e17b3e430360"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.actAdvancedTo {card:"The Barrier":"01109":"90fa390a-1532-469f-af88-3c789c2f6f1a"}, {investigator:"Daisy Walker: The Librarian":"01002…rawsTokenVerb {token:"Skull"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, $log.agendaAdvancedTo {card:"Rise of the Ghouls":"01106":"001ec8c8-8712-437d-895c-1ed1700ba88e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"1ec31ea4-7be1-46ca-a6ad-f5a8698387ae"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 1 $log.clueNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"1c82df5e-f79f-4a5d-8d8c-f4bb9c838566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01036":"7a4626d2-eea3-4e4f-8979-2c81a20d90de"}, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01030":"8cb60cad-b20d-4756-9cca-2774403a6f53"}, {investigator:"Daisy Walker: The Librarian":"01002…wsTokenVerb {token:"PlusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002"} $log.discoveredVerb 2 $log.cluesNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01065":"bcd8a87e-3357-45e2-ab16-b248c0600cb9"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01164":"e9f4097b-4e0d-4266-b516-0d06e976f566"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01088":"f4695a95-4099-402d-b5c0-c4f5743c6bb0"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"AutoFail"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"f5383b76-9f25-49b5-99c6-ee9bc5847b46"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01059":"022b318e-2617-4762-a7b2-5deb6c6f3426"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01166":"2c47b7fb-b831-4392-ae1c-754583b8156e"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01032":"c3831dce-9e99-4c5d-91cc-128013d72f11"}, $log.actAdvancedTo {card:"What Have You Done?":"01110":"1bbb78f8-db13-480b-b4c5-74e4ce974f10"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01160":"3c126fdd-7280-4612-96ed-f429ea05920c"}, $log.agendaAdvancedTo {card:"They're Getting Out!":"01107":"07cc916a-fdb4-435b-a96d-0f29b38e4ea4"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01159":"cf94e551-6dd5-4d4a-b36f-6a89b78d6d66"}, {investigator:"Daisy Walker: The Librarian":"01002…":"01066":"fad32de7-20df-4536-aedc-2f24e4de7faf"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusTwo"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…drawsTokenVerb {token:"Zero"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, {investigator:"Daisy Walker: The Librarian":"01002…":"01163":"2b153315-04d6-48c4-af0f-53ff5420989c"}, {investigator:"Daisy Walker: The Librarian":"01002…sTokenVerb {token:"MinusOne"} $log.chaosTokenNoun, $log.record "your house is still standing", $log.record "ghoul priest is still alive"]  ... > 
+  at <GameMain game= {scenario: Object, campaign: Object, killedInvestigators: Object, settings: Object, undoActionStep: null} game-id="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" player-id="28ddc0d4-1fb5-419f-9347-358879325cd8"  ... > 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[58391666ms] TypeError: Cannot read properties of null (reading 'type')
+    at unmountComponent (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8135:18)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8042:7)
+    at unmountChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8161:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8074:9)
+    at unmountChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8161:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8066:9)
+    at unmountComponent (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8147:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8042:7)
+    at unmountChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8161:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8074:9)
+[58394437ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:8080/src/arkham/components/Scenario.vue?t=1781164318323:0
+[58394438ms] [ERROR] [vite] Failed to reload /src/arkham/components/Scenario.vue. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:8080/@vite/client:808
+[58895012ms] [WARNING] [Vue warn]: Unhandled error during execution of component update 
+  at <Game gameId="2b328dfe-3048-4e26-9e2c-7f9c7625ea1f" class="router-container" onVnodeUnmounted=fn<onVnodeUnmounted>  ... > 
+  at <BaseTransition appear=false persisted=false mode=undefined  ... > 
+  at <Transition name="fade" > 
+  at <RouterView class="router-container" > 
+  at <App> @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:2148
+[58895041ms] TypeError: Cannot read properties of null (reading 'type')
+    at unmountComponent (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8135:18)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8042:7)
+    at unmountChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8161:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8066:9)
+    at unmountComponent (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8147:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8042:7)
+    at unmountChildren (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8161:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8066:9)
+    at unmountComponent (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8147:7)
+    at unmount (http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:8042:7)

@@ -1,0 +1,95 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - navigation [ref=e4]:
+      - link "首页" [ref=e5] [cursor=pointer]:
+        - /url: "#/"
+      - link "我的牌组" [ref=e14] [cursor=pointer]:
+        - /url: "#/decks"
+      - link "卡牌" [ref=e15] [cursor=pointer]:
+        - /url: "#/cards"
+      - link "关于" [ref=e16] [cursor=pointer]:
+        - /url: "#/about"
+      - link "Patreon赞助" [ref=e17] [cursor=pointer]:
+        - /url: "#/about?support"
+    - button "claude-debug" [ref=e18] [cursor=pointer]:
+      - generic [ref=e19]: claude-debug
+      - img [ref=e20]
+  - generic [ref=e38]:
+    - banner [ref=e39]:
+      - heading "新游戏" [level=2] [ref=e40]
+      - button "取消" [ref=e41]
+    - generic [ref=e42]:
+      - generic [ref=e79]:
+        - complementary [ref=e80]:
+          - generic [ref=e81]:
+            - img "The Night of the Zealot"
+            - generic:
+              - generic: 剧本模式
+              - generic: The Night of the Zealot
+        - generic [ref=e82]:
+          - generic [ref=e83]:
+            - generic [ref=e84]: 游戏名称
+            - textbox "The Night of the Zealot" [ref=e85]
+          - generic [ref=e86]:
+            - generic [ref=e87]: 玩家人数
+            - generic [ref=e88]:
+              - generic [ref=e89] [cursor=pointer]: "1"
+              - generic [ref=e90] [cursor=pointer]: "2"
+              - generic [ref=e91] [cursor=pointer]: "3"
+              - generic [ref=e92] [cursor=pointer]: "4"
+          - generic [ref=e93]:
+            - generic [ref=e94]: 重返系列
+            - generic [ref=e95]:
+              - generic [ref=e96] [cursor=pointer]: 正常
+              - generic [ref=e97] [cursor=pointer]: 重返系列
+          - generic [ref=e98]:
+            - generic [ref=e99]: 战役类型
+            - generic [ref=e100]:
+              - generic [ref=e101] [cursor=pointer]: 完整剧本
+              - generic [ref=e102] [cursor=pointer]: 单场冒险模式（使用剧本关卡）
+          - generic [ref=e103]:
+            - generic [ref=e104]: 难度选择
+            - generic [ref=e105]:
+              - generic [ref=e106] [cursor=pointer]: 简单
+              - generic [ref=e107] [cursor=pointer]: 普通
+              - generic [ref=e108] [cursor=pointer]: 困难
+              - generic [ref=e109] [cursor=pointer]: 专家
+            - generic [ref=e110]:
+              - img "PlusOne" [ref=e111]
+              - img "PlusOne" [ref=e112]
+              - img "Zero" [ref=e113]
+              - img "Zero" [ref=e114]
+              - img "Zero" [ref=e115]
+              - img "MinusOne" [ref=e116]
+              - img "MinusOne" [ref=e117]
+              - img "MinusOne" [ref=e118]
+              - img "MinusTwo" [ref=e119]
+              - img "MinusTwo" [ref=e120]
+              - img "Skull" [ref=e121]
+              - img "Skull" [ref=e122]
+              - img "Cultist" [ref=e123]
+              - img "Tablet" [ref=e124]
+              - img "AutoFail" [ref=e125]
+              - img "ElderSign" [ref=e126]
+          - generic [ref=e127]:
+            - generic [ref=e128]: 使用塔罗牌解牌
+            - generic [ref=e129]:
+              - generic [ref=e130] [cursor=pointer]: 否
+              - generic [ref=e131] [cursor=pointer]: 是
+          - button "Advanced Rules Configuration Chapter 1 ▸" [ref=e133] [cursor=pointer]:
+            - generic [ref=e134]: Advanced Rules Configuration
+            - generic [ref=e135]:
+              - generic [ref=e136]: Chapter 1
+              - generic [ref=e137]: ▸
+      - generic [ref=e138]:
+        - button "返回" [ref=e139] [cursor=pointer]
+        - button "创建" [ref=e140]
+  - contentinfo [ref=e10]:
+    - 'link "Arkham Horror: The Card Game™" [ref=e11] [cursor=pointer]':
+      - /url: https://www.fantasyflightgames.com/en/products/arkham-horror-the-card-game/
+    - text: and all related content ©
+    - link "Fantasy Flight Games (FFG)" [ref=e12] [cursor=pointer]:
+      - /url: https://www.fantasyflightgames.com
+    - text: . This site is not produced, endorsed by or affiliated with FFG.
+    - link "关于." [ref=e13] [cursor=pointer]:
+      - /url: "#/about"

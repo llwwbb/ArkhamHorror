@@ -39,6 +39,7 @@ import AbilityButton from '@/arkham/components/AbilityButton.vue'
 import Act from '@/arkham/components/Act.vue';
 import CardView from '@/arkham/components/Card.vue';
 import Draggable from '@/components/Draggable.vue';
+import OverlayDrawer from '@/components/OverlayDrawer.vue';
 import ChaosBag from '@/arkham/components/ChaosBag.vue';
 import Agenda from '@/arkham/components/Agenda.vue';
 import Investigator from '@/arkham/components/Investigator.vue';
@@ -64,6 +65,7 @@ import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { IsMobile } from '@/arkham/isMobile';
 import { usePinchZoom } from '@/arkham/composables/usePinchZoom'
+import { usePhoneShell } from '@/arkham/composables/phoneShell'
 const { t } = useI18n();
 
 // types
@@ -82,6 +84,7 @@ export interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits(['choose'])
 const debug = useDebug()
+const phoneShell = usePhoneShell()
 const { addEntry, removeEntry } = useMenu()
 
 const upgradeDeck = computed(() => Object.values(props.game.question).some((q) => q.tag === 'ChooseUpgradeDeck'))
@@ -2117,6 +2120,15 @@ async function addChaosToken(face: any){
         </div>
       </div>
 
+      <!-- 手机 shell：player-zone 收进底部抽屉（keep-mounted 保持 PlayerTabs 状态）；
+           桌面 inline=true 原地透传渲染，零变化。 -->
+      <OverlayDrawer
+        :inline="!phoneShell"
+        :open="!!phoneShell?.playersOpen.value"
+        keep-mounted
+        side="bottom"
+        @close="phoneShell && (phoneShell.playersOpen.value = false)"
+      >
       <div id="player-zone">
         <PlayerTabs
           :game="game"
@@ -2158,8 +2170,9 @@ async function addChaosToken(face: any){
           <PoolItem v-if="frostTokens > 0" type="ct_frost" :amount="frostTokens" />
         </div>
       </div>
+      </OverlayDrawer>
     </div>
-    <div class="phases">
+    <div v-if="!phoneShell" class="phases">
       <div class="phase" :class="{ 'active-phase': phase == 'MythosPhase' }">
         <div class="subphases">
           <div v-tooltip.left="$t('phase.mythosPhaseBeginsStep')" :class="{'current': phaseStep?.contents === 'MythosPhaseBeginsStep' }">1.1</div>
@@ -3063,6 +3076,12 @@ async function addChaosToken(face: any){
     z-index: 1;
     margin-top: calc((var(--card-width) / (3 / 2)) * -1);
   }
+}
+
+/* 手机抽屉内：player-zone 纵排、限高（桌面 inline 渲染不带 .overlay-drawer 祖先，不受影响） */
+:global(.overlay-drawer #player-zone) {
+  flex-direction: column;
+  max-height: 80dvh;
 }
 
 #player-zone {

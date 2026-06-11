@@ -13,6 +13,8 @@
     "shortcutTakeResources": "获得资源",
     "shortcutEndTurn": "结束回合",
     "shortcutRestartScenario": "重启冒险",
+    "restartScenario": "重启冒险",
+    "viewHistory": "查看历史",
     "viewSettings": "查看设置",
     "viewSettingTitle": "{investigator}的设置",
     "viewSettingSkipTriggers": "跳过技能检定期间不影响结果的触发器",

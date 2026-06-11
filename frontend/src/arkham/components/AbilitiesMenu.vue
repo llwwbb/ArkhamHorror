@@ -29,6 +29,10 @@ const showAbilities = defineModel()
 const abilitiesPosition = ref<Position>({ bottom: '0px', top: '0px', left: '0px' });
 const positionClass = computed(() => props.position || 'top');
 
+// 手机 shell：frame 在 OverlayDrawer（z-index 10000）内时，菜单须抬到抽屉之上，
+// 否则被抽屉遮住（桌面无抽屉，保持原 z-index 1000 不动）。
+const inOverlayDrawer = computed(() => !!props.frame?.closest('.overlay-drawer'));
+
 function calculatePosition() {
   if (props.frame) {
     const rect = props.frame.getBoundingClientRect();
@@ -98,7 +102,7 @@ watch(showAbilities, (newValue) => {
 <template>
   <Teleport to="body">
     <OnClickOutside @trigger="showAbilities = false" v-if="showAbilities" :options="{ ignore: [frame] }">
-      <div class="abilities" :class="position" :style="abilitiesPosition" ref="abilitiesRef" >
+      <div class="abilities" :class="[position, { 'abilities--above-drawer': inOverlayDrawer }]" :style="abilitiesPosition" ref="abilitiesRef" >
         <AbilityButton
           v-for="{index, contents} in abilities"
           :key="index"
@@ -123,6 +127,9 @@ watch(showAbilities, (newValue) => {
   flex-direction: column;
   gap: 5px;
   z-index: 1000;
+  &.abilities--above-drawer {
+    z-index: 10001;
+  }
   button {
     padding-block: min(3px, 1vw);
     padding-inline: min(6px, 2vw);

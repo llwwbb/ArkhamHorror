@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AdjustmentsHorizontalIcon,
@@ -9,7 +9,6 @@ import {
 } from '@heroicons/vue/20/solid'
 import { LottieAnimation } from 'lottie-web-vue'
 import processingJSON from '@/assets/processing.json'
-import * as Api from '@/arkham/api'
 import { useCardStore } from '@/stores/cards'
 import { useMenu } from '@/composable/menu'
 import useEmitter from '@/composable/useEmitter'
@@ -20,32 +19,24 @@ import { useGameSocket } from '@/arkham/composables/useGameSocket'
 import { provideGameContext } from '@/arkham/composables/provideGameContext'
 import { useGameUndo } from '@/arkham/composables/useGameUndo'
 import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
-import Campaign from '@/arkham/components/Campaign.vue'
+import { useBugReport } from '@/arkham/composables/useBugReport'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
-import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
-import { getCardImage } from '@/arkham/cardImageLookup'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
-import {
-  installTapIntercept,
-  type InterceptedTap,
-  type TapIntercept,
-} from '@/arkham/touchTapIntercept'
-import TheSilenceModal from '@/arkham/components/TheSilenceModal.vue'
-import RevealedCardModal from '@/arkham/components/RevealedCardModal.vue'
-import TarotModal from '@/arkham/components/TarotModal.vue'
+import { useCardTapSheet } from '@/arkham/composables/useCardTapSheet'
+import ActiveGameModals from '@/arkham/components/ActiveGameModals.vue'
 import MultiplayerLobby from '@/arkham/components/MultiplayerLobby.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import HistoryPanel from '@/arkham/components/HistoryPanel.vue'
-import ScenarioSettings from '@/arkham/components/ScenarioSettings.vue'
 import Settings from '@/arkham/components/Settings.vue'
-import StandaloneScenario from '@/arkham/components/StandaloneScenario.vue'
 import Draggable from '@/components/Draggable.vue'
 import GameBar from '@/arkham/components/GameBar.vue'
 import BugReportForm from '@/arkham/components/BugReportForm.vue'
 import ShortcutsModal from '@/arkham/components/ShortcutsModal.vue'
 import PlayabilityModal, { type PlayabilityInfo } from '@/arkham/components/PlayabilityModal.vue'
+import GameMain from '@/arkham/components/GameMain.vue'
+import MobilePlayLayout from '@/arkham/components/MobilePlayLayout.vue'
 
 export interface Props {
   gameId: string
@@ -56,7 +47,6 @@ const props = withDefaults(defineProps<Props>(), { spectate: false })
 
 const debug = useDebug()
 const emitter = useEmitter()
-const router = useRouter()
 const store = useCardStore()
 const { addEntry, menuItems } = useMenu()
 const flashlightX = ref(0)
@@ -65,7 +55,6 @@ const flashlightY = ref(0)
 store.fetchCards()
 
 const modals = useGameModals()
-const { gameCard, tarotCards, showTheSilenceModal, continueUI } = modals
 const socket = useGameSocket({
   gameId: () => props.gameId,
   spectate: props.spectate,
@@ -90,7 +79,8 @@ const {
 const playabilityInfo = ref<PlayabilityInfo | null>(null)
 const showLog = ref(false)
 const showShortcuts = ref(false)
-const { isTouch, size } = useDeviceLayout()
+const { isTouch, size, shell } = useDeviceLayout()
+const phoneShell = computed(() => shell.value === 'phone')
 const isMobileViewport = () => size.value === 'phone'
 const showSidebar = ref(
   isMobileViewport() ? false : JSON.parse(getGameLocalStorageItem(props.gameId, 'showSidebar') ?? 'true'),
@@ -102,19 +92,10 @@ watch(showOtherPlayersHands, (v) => {
 const showSettings = ref(false)
 const showHistory = ref(false)
 const { t } = useI18n()
-const sheetTap = ref<InterceptedTap | null>(null)
-let tapIntercept: TapIntercept | null = null
-
-// 服务器推送新状态后，面板里的动作可能已失效，直接关闭
-watch(game, () => {
-  sheetTap.value = null
+const { sheetTap, confirmSheetAction, closeSheet } = useCardTapSheet({
+  isTouch: () => isTouch.value,
+  game,
 })
-
-function confirmSheetAction() {
-  const tap = sheetTap.value
-  sheetTap.value = null
-  if (tap) tapIntercept?.approve(tap)
-}
 
 addEntry({
   id: 'viewSettings',
@@ -136,10 +117,7 @@ addEntry({
 
 const { choicesByPlayer } = provideGameContext(socket, showOtherPlayersHands)
 
-const {
-  undo, undoScenario, undoActionStart, undoTurnStart, undoPhaseStart, undoRoundStart,
-  canUndoScenario, canUndoAction, canUndoTurn, canUndoPhase, canUndoRound,
-} = useGameUndo({
+const undoApi = useGameUndo({
   gameId: () => props.gameId,
   game,
   processing,
@@ -148,6 +126,10 @@ const {
   modals,
   debugActive: () => debug.active,
 })
+const {
+  undo, undoScenario, undoActionStart, undoTurnStart, undoPhaseStart, undoRoundStart,
+  canUndoScenario, canUndoAction, canUndoTurn, canUndoPhase, canUndoRound,
+} = undoApi
 
 // Computed
 const cards = computed(() => store.cards)
@@ -155,8 +137,6 @@ const choices = computed(() => {
   if (!playerId.value) return []
   return choicesByPlayer.value.get(playerId.value) ?? []
 })
-const gameOver = computed(() => game.value?.gameState.tag === 'IsOver')
-const question = computed(() => (playerId.value ? game.value?.question[playerId.value] : null))
 const realityAcidLightActive = computed(() => {
   const scenario = game.value?.scenario
   return scenario?.id === 'c85001' && scenario.meta?.lightActive === true
@@ -172,9 +152,10 @@ const actionMap = computed<Map<string, () => void>>(() => {
   return map
 })
 
-const filingBug = ref(false)
-const submittingBug = ref(false)
-const bugInitialDescription = ref('')
+const { filingBug, submittingBug, bugInitialDescription, openBugReport, fileBug } = useBugReport({
+  gameId: () => props.gameId,
+  onFail: () => alert(t('gameBar.bugSubmittingFail')),
+})
 
 const { undoChordArmed } = useGameKeyboard({
   enabled: () => !filingBug.value,
@@ -212,35 +193,9 @@ function confirmUndoScenario() {
 }
 
 function fileBugFromError() {
-  bugInitialDescription.value = error.value ?? ''
+  const description = error.value ?? ''
   error.value = null
-  filingBug.value = true
-}
-
-function openBugReport() {
-  bugInitialDescription.value = ''
-  filingBug.value = true
-}
-
-async function fileBug(bugTitle: string, bugDescription: string) {
-  submittingBug.value = true
-  filingBug.value = false
-  Api.fileBug(props.gameId)
-    .then((response) => {
-      const title = encodeURIComponent(bugTitle)
-      const body = encodeURIComponent(
-        `${bugDescription}\n\ngame: ${window.location.href}\nfile: ${response.data}`,
-      )
-      window.open(
-        `https://github.com/halogenandtoast/ArkhamHorror/issues/new?labels=bug&title=${title}&body=${body}&assignee=halogenandtoast&projects=halogenandtoast/2`,
-        '_blank',
-      )
-      submittingBug.value = false
-    })
-    .catch(() => {
-      alert(t('gameBar.bugSubmittingFail'))
-      submittingBug.value = false
-    })
+  openBugReport(description)
 }
 
 const onMove = (event: MouseEvent) => {
@@ -268,14 +223,6 @@ onMounted(() => {
   ;(window as any).undo = undo
   ;(window as any).debugChoose = choose
   document.addEventListener('mousemove', onMove, { passive: true })
-  tapIntercept = installTapIntercept({
-    isTouch: () => isTouch.value,
-    shouldPreview: (el) => getCardImage(el) !== null,
-    onIntercept: (tap) => {
-      document.dispatchEvent(new Event('arkham:clear-card-overlay'))
-      sheetTap.value = tap
-    },
-  })
 })
 
 onBeforeRouteLeave(() => close())
@@ -285,8 +232,6 @@ onUnmounted(() => {
   delete (window as any).undo
   delete (window as any).debugChoose
   emitter.off('playabilityResult', onPlayabilityResult)
-  tapIntercept?.uninstall()
-  tapIntercept = null
   close()
 })
 </script>
@@ -327,7 +272,7 @@ onUnmounted(() => {
       :target="sheetTap.target"
       :actionable="sheetTap.actionable"
       @confirm="confirmSheetAction"
-      @close="sheetTap = null"
+      @close="closeSheet"
     />
     <div
       v-if="realityAcidLightActive"
@@ -336,6 +281,17 @@ onUnmounted(() => {
       aria-hidden="true"
     ></div>
     <ShortcutsModal v-if="showShortcuts" @close="showShortcuts = false" />
+    <HistoryPanel
+      v-if="showHistory && game && playerId"
+      :game="game"
+      :playerId="playerId"
+      @close="showHistory = false"
+    />
+    <PlayabilityModal
+      v-if="playabilityInfo && debug.active"
+      :info="playabilityInfo"
+      @close="playabilityInfo = null"
+    />
     <BugReportForm
       v-if="filingBug"
       :initial-description="bugInitialDescription"
@@ -347,6 +303,7 @@ onUnmounted(() => {
       <p>{{ $t('outOfSyncHint') }}</p>
     </div>
     <GameBar
+      v-if="!phoneShell"
       :game-id="gameId"
       :show-log="showLog"
       :undo-chord-armed="undoChordArmed"
@@ -362,7 +319,7 @@ onUnmounted(() => {
       @undo-phase="undoPhaseStart"
       @undo-round="undoRoundStart"
       @undo-scenario="undoScenarioDialog?.showModal()"
-      @file-bug="openBugReport"
+      @file-bug="openBugReport()"
       @toggle-sidebar="toggleSidebar"
     />
     <MultiplayerLobby
@@ -387,54 +344,26 @@ onUnmounted(() => {
         :cards="cards"
         :playerId="playerId"
       />
+      <MobilePlayLayout
+        v-else-if="phoneShell"
+        :game="game"
+        :game-id="gameId"
+        :player-id="playerId"
+        :game-log="gameLog"
+        :modals="modals"
+        :undo-api="undoApi"
+        @choose="choose"
+        @update="socket.setGame"
+        @file-bug="openBugReport()"
+        @undo-scenario="undoScenarioDialog?.showModal()"
+      />
       <div v-else class="game-main">
-        <TheSilenceModal v-if="showTheSilenceModal" @continue="continueUI" />
-        <RevealedCardModal
-          v-else-if="gameCard"
+        <ActiveGameModals :game="game" :playerId="playerId" :modals="modals" />
+        <GameMain
           :game="game"
-          :playerId="playerId"
-          :gameCard="gameCard"
-          @continue="continueUI"
-        />
-        <HistoryPanel
-          v-if="showHistory && game && playerId"
-          :game="game"
-          :playerId="playerId"
-          @close="showHistory = false"
-        />
-        <PlayabilityModal
-          v-if="playabilityInfo && debug.active"
-          :info="playabilityInfo"
-          @close="playabilityInfo = null"
-        />
-        <TarotModal v-if="tarotCards.length > 0" :tarotCards="tarotCards" @continue="continueUI" />
-        <CampaignSettings
-          v-if="game.campaign && !gameOver && question && question.tag === 'PickCampaignSettings'"
-          :game="game"
-          :campaign="game.campaign"
-          :playerId="playerId"
-        />
-        <Campaign
-          v-else-if="game.campaign"
-          :game="game"
-          :gameLog="gameLog"
-          :playerId="playerId"
-          :campaign="game.campaign"
-          @choose="choose"
-          @update="socket.setGame"
-        />
-        <ScenarioSettings
-          v-else-if="
-            game.scenario && !gameOver && question && question.tag === 'PickScenarioSettings'
-          "
-          :game="game"
-          :scenario="game.scenario"
-          :playerId="playerId"
-        />
-        <StandaloneScenario
-          v-else-if="game.scenario && !gameOver"
-          :game="game"
-          :playerId="playerId"
+          :game-id="gameId"
+          :player-id="playerId"
+          :game-log="gameLog"
           @choose="choose"
           @update="socket.setGame"
         />
@@ -447,16 +376,6 @@ onUnmounted(() => {
           "
         >
           <GameLog :game="game" :gameLog="gameLog" @undo="undo" />
-        </div>
-        <div class="game-over" v-if="gameOver">
-          <p>{{ $t('gameOver') }}</p>
-          <button
-            class="replay-button"
-            @click="router.push({ name: 'ReplayGame', params: { gameId } })"
-          >
-            {{ $t('watchReplay') }}
-          </button>
-          <CampaignLog v-if="game !== null" :game="game" :cards="cards" :playerId="playerId" />
         </div>
         <div class="sidebar" v-if="showSidebar && game.scenario === null">
           <GameLog :game="game" :gameLog="gameLog" @undo="undo" />
@@ -705,22 +624,6 @@ onUnmounted(() => {
   }
 }
 
-.game-over {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-
-  p {
-    text-transform: uppercase;
-    background: rgba(0, 0, 0, 0.5);
-    width: 100%;
-    padding: 10px 20px;
-    color: white;
-    text-align: center;
-  }
-}
-
 @keyframes anim {
   0%,
   100% {
@@ -879,17 +782,6 @@ onUnmounted(() => {
   width: 80px;
   filter: invert(48%) sepia(32%) saturate(393%) hue-rotate(37deg) brightness(92%) contrast(89%);
   aspect-ratio: 1;
-}
-
-.replay-button {
-  padding: 10px;
-  width: 100%;
-  font-size: 1.2em;
-  border: 0;
-  background-color: var(--spooky-green);
-  &:hover {
-    background-color: var(--spooky-green-dark);
-  }
 }
 
 dialog {
