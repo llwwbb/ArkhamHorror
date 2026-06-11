@@ -118,10 +118,50 @@ import Control.Lens (non, _Just, (||~))
 import Data.Function (on)
 import Data.List (nubBy)
 import Data.List qualified as List
+import Data.Text qualified as T
 import Data.List.Extra (firstJust)
 import Data.Map.Strict qualified as Map
 import Data.Monoid (Any (..), First (..))
 import Data.Set qualified as Set
+
+damageLogSourceToken :: (HasGame m, Tracing m) => Source -> m Text
+damageLogSourceToken source =
+  getSourceController source >>= \case
+    Just iid -> do
+      name <- field InvestigatorName iid
+      pure $ "{investigator:\"" <> T.replace "\"" "\\\"" (display name) <> "\":" <> tshow iid <> "}"
+    Nothing ->
+      sourceToMaybeCard source >>= \case
+        Just card -> pure $ format card
+        Nothing -> pure $ tshow source
+
+damageLogSourceTokens :: (HasGame m, Tracing m) => Source -> m (Text, Maybe Text)
+damageLogSourceTokens source = do
+  actor <- damageLogSourceToken source
+  tool <- fmap format <$> sourceToMaybeCard source
+  pure (actor, tool)
+
+damageLogPreventerToken :: (HasGame m, Tracing m) => Modifier -> m Text
+damageLogPreventerToken modifier = case modifier.card of
+  Just card -> pure $ format card
+  Nothing -> damageLogSourceToken modifier.source
+
+damageLogEnemyToken :: EnemyAttrs -> Text
+damageLogEnemyToken enemyAttrs =
+  "{enemy:\""
+    <> T.replace "\"" "\\\"" (display $ toName enemyAttrs)
+    <> "\":"
+    <> tshow enemyAttrs.id
+    <> ":"
+    <> tshow (toCardCode enemyAttrs)
+    <> "}"
+
+enemyDamageLogVars :: HasI18n => Text -> Text -> (HasI18n => a) -> a
+enemyDamageLogVars source enemyToken body = keyVar "source" source $ keyVar "enemy" enemyToken body
+
+enemyDamageWithToolLogVars :: HasI18n => Text -> Text -> Text -> (HasI18n => a) -> a
+enemyDamageWithToolLogVars source tool enemyToken body =
+  keyVar "source" source $ keyVar "tool" tool $ keyVar "enemy" enemyToken body
 
 {- | Where a disengaging enemy is physically placed. Under the Chapter 2 "as
 if" ruling (settingsStrictAsIfAt) the actual game state is never altered by
@@ -1508,14 +1548,31 @@ instance RunMessage EnemyAttrs where
         source = damageAssignmentSource damageAssignment
         damageEffect = damageAssignmentDamageEffect damageAssignment
         damageAmount = damageAssignmentAmount damageAssignment
-      canDamage <- sourceCanDamageEnemy eid source
-      when canDamage do
-        Lifted.checkWhen $ Window.WouldTakeDamage source (toTarget a) damageAmount DamageDirect
-        Lifted.checkWhen $ Window.DealtDamage source damageEffect (toTarget a) damageAmount
-        Lifted.checkAfter $ Window.DealtDamage source damageEffect (toTarget a) damageAmount
-        Lifted.checkWhen $ Window.TakeDamage source damageEffect (toTarget a) damageAmount
-        push $ Damaged (EnemyTarget eid) damageAssignment
-        Lifted.checkAfter $ Window.TakeDamage source damageEffect (toTarget a) damageAmount
+        enemyToken = damageLogEnemyToken a
+      (sourceToken, mToolToken) <- damageLogSourceTokens source
+      when (damageAmount > 0) do
+        withI18n $ countVar damageAmount $ case mToolToken of
+          Just toolToken ->
+            enemyDamageWithToolLogVars sourceToken toolToken enemyToken
+              $ sendI18n "log.attemptsToDealDamageToEnemyWith"
+          Nothing ->
+            enemyDamageLogVars sourceToken enemyToken
+              $ sendI18n "log.attemptsToDealDamageToEnemy"
+      sourceCannotDamageEnemyReason eid source >>= \case
+        Nothing -> do
+          Lifted.checkWhen $ Window.WouldTakeDamage source (toTarget a) damageAmount DamageDirect
+          Lifted.checkWhen $ Window.DealtDamage source damageEffect (toTarget a) damageAmount
+          Lifted.checkAfter $ Window.DealtDamage source damageEffect (toTarget a) damageAmount
+          Lifted.checkWhen $ Window.TakeDamage source damageEffect (toTarget a) damageAmount
+          push $ Damaged (EnemyTarget eid) damageAssignment
+          Lifted.checkAfter $ Window.TakeDamage source damageEffect (toTarget a) damageAmount
+        Just modifier -> do
+          preventerToken <- damageLogPreventerToken modifier
+          withI18n
+            $ enemyDamageLogVars sourceToken enemyToken
+            $ keyVar "preventer" preventerToken
+            $ sendI18n "log.preventsDamageToEnemy"
+          withI18n $ keyVar "enemy" enemyToken $ countVar 0 $ sendI18n "log.finalDamageDealtToEnemy"
       pure a
     Damaged (EnemyTarget eid) damageAssignment'' | eid == enemyId -> do
       let source = damageAssignment''.source
@@ -1533,6 +1590,7 @@ instance RunMessage EnemyAttrs where
               else getModifiedDamageAmount a damageAssignment
           let
             damageAssignment' = damageAssignment {damageAssignmentAmount = amount'}
+            enemyToken = damageLogEnemyToken a
             combine l r =
               if l.effect == r.effect
                 then l {damageAssignmentAmount = l.amount + r.amount}
@@ -1542,6 +1600,13 @@ instance RunMessage EnemyAttrs where
                     <> show l
                     <> "\nnew assignment: "
                     <> show r
+          when (amount' /= damageAssignment.amount) do
+            withI18n
+              $ keyVar "enemy" enemyToken
+              $ numberVar "original" damageAssignment.amount
+              $ countVar amount'
+              $ sendI18n "log.damageToEnemyModified"
+          withI18n $ keyVar "enemy" enemyToken $ countVar amount' $ sendI18n "log.finalDamageDealtToEnemy"
           push $ AssignedDamage (toTarget a) amount' 0
           unless damageAssignment'.delayed do
             push $ checkDefeated source eid

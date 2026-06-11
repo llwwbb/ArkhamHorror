@@ -27,5 +27,10 @@
   "drawnDuringPredationTest": "在捕食检定中抽出",
   "predationTestCanceled": "捕食检定被取消（Gideon Mizrah）",
   "isBanished": "被「放逐」",
-  "wasBanished": "被「放逐」"
+  "wasBanished": "被「放逐」",
+  "attemptsToDealDamageToEnemy": "{source}尝试对{enemy}造成{count}点伤害",
+  "attemptsToDealDamageToEnemyWith": "{source}使用{tool}对{enemy}造成{count}点伤害",
+  "preventsDamageToEnemy": "{preventer}阻止{source}对{enemy}造成伤害",
+  "damageToEnemyModified": "{enemy}受到的伤害由{original}点调整为{count}点",
+  "finalDamageDealtToEnemy": "{enemy}最终受到{count}点伤害"
 }

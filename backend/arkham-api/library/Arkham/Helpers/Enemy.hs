@@ -311,11 +311,18 @@ spawnAtOneOf miid eid targetLids = do
           | (windows', lid) <- windowPairs
           ]
 
-sourceCanDamageEnemy :: (HasGame m, Tracing m) => EnemyId -> Source -> m Bool
-sourceCanDamageEnemy eid source = do
-  modifiers' <- getModifiers (EnemyTarget eid)
-  not <$> anyM prevents modifiers'
+sourceCannotDamageEnemyReason :: (HasGame m, Tracing m) => EnemyId -> Source -> m (Maybe Modifier.Modifier)
+sourceCannotDamageEnemyReason eid source = do
+  modifiers' <- getFullModifiers (EnemyTarget eid)
+  findPreventingModifier modifiers'
  where
+  findPreventingModifier [] = pure Nothing
+  findPreventingModifier (modifier : rest) = do
+    preventsDamage <- prevents modifier.kind
+    if preventsDamage
+      then pure $ Just modifier
+      else findPreventingModifier rest
+
   prevents = \case
     CannotBeDamagedByPlayerSourcesExcept matcher ->
       not
@@ -328,6 +335,9 @@ sourceCanDamageEnemy eid source = do
         (Matcher.SourceMatchesAny [Matcher.EncounterCardSource, matcher])
     CannotBeDamaged -> pure True
     _ -> pure False
+
+sourceCanDamageEnemy :: (HasGame m, Tracing m) => EnemyId -> Source -> m Bool
+sourceCanDamageEnemy eid source = isNothing <$> sourceCannotDamageEnemyReason eid source
 
 getDamageableEnemies
   :: (HasGame m, Tracing m, ToId investigator InvestigatorId, Sourceable source)

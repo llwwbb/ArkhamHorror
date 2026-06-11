@@ -27,5 +27,10 @@
   "drawnDuringPredationTest": "drawn during predation Test",
   "predationTestCanceled": "Predation test canceled (Gideon Mizrah)",
   "isBanished": "is \"banished\"",
-  "wasBanished": "was \"Banished\""
+  "wasBanished": "was \"Banished\"",
+  "attemptsToDealDamageToEnemy": "{source} attempts to deal {count} damage to {enemy}",
+  "attemptsToDealDamageToEnemyWith": "{source} uses {tool} to deal {count} damage to {enemy}",
+  "preventsDamageToEnemy": "{preventer} prevents {source} from damaging {enemy}",
+  "damageToEnemyModified": "Damage to {enemy} is modified from {original} to {count}",
+  "finalDamageDealtToEnemy": "{enemy} is dealt {count} damage"
 }

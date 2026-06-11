@@ -88,7 +88,7 @@ export default defineComponent({
         if (found) {
           const [, name, , cardCode ] = found
           if (cardCode) {
-            return name ? h('span', { 'data-image-id': cardCode }, name.replace(/\\"/g, "\"")) : split
+            return name ? h('span', { 'data-image-id': cardCode }, localizedName(cardCode, name.replace(/\\"/g, "\""))) : split
           }
         }
       } else if (/{location:"((?:[^"]|\\.)+)":(.+):"([^"]+)"}/.test(split)) {
