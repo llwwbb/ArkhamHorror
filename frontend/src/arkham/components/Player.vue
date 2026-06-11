@@ -1,8 +1,6 @@
 <script lang="ts" setup>
-import type { CardContents } from '@/arkham/types/Card';
 import * as CardT from '@/arkham/types/Card';
-import gsap from 'gsap';
-import { computed, inject, Ref, ref, ComputedRef, reactive, watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, inject, ref, ComputedRef, reactive, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useDebug } from '@/arkham/debug';
 import { Game } from '@/arkham/types/Game';
 import { toCardContents } from '@/arkham/types/Card';
@@ -17,6 +15,7 @@ import Asset from '@/arkham/components/Asset.vue';
 import EventView from '@/arkham/components/Event.vue';
 import Skill from '@/arkham/components/Skill.vue';
 import HandCard from '@/arkham/components/HandCard.vue';
+import PlayerHandCards from '@/arkham/components/PlayerHandCards.vue';
 import CardRow from '@/arkham/components/CardRow.vue';
 import Investigator from '@/arkham/components/Investigator.vue';
 import ChoiceModal from '@/arkham/components/ChoiceModal.vue';
@@ -25,8 +24,8 @@ import * as Arkham from '@/arkham/types/Investigator';
 import { useI18n } from 'vue-i18n';
 import Draw from '@/arkham/components/Draw.vue'
 import { IsMobile } from '@/arkham/isMobile';
-import { Modifier } from '@/arkham/types/Modifier';
-import { Enemy } from '@/arkham/types/Enemy';
+import { usePlayerHand } from '@/arkham/composables/usePlayerHand';
+import { createCardTransitionHooks } from '@/arkham/cardTransitions';
 import { XMarkIcon } from '@heroicons/vue/20/solid';
 const { t } = useI18n();
 
@@ -42,19 +41,8 @@ export interface Props {
 }
 
 const props = defineProps<Props>()
-const solo = inject<Ref<boolean>>('solo')
-const showOtherPlayersHands = inject<Ref<boolean>>('showOtherPlayersHands')
 
 const investigatorId = computed(() => props.investigator.id)
-const ENCOUNTER_BACK = imgsrc("encounter_back.jpg")
-const PLAYER_BACK = imgsrc("player_back.jpg")
-
-function backForEnemy(enemy: Enemy) {
-  const card = props.game.cards[enemy.cardId]
-  if (!card) return ENCOUNTER_BACK
-  if (card.tag === 'PlayerCard') return PLAYER_BACK
-  return ENCOUNTER_BACK
-}
 
 const assets = computed(() => {
   const xs = props.investigator.assets.map(a => props.game.assets[a])
@@ -86,10 +74,6 @@ const engagedEnemies = computed(() =>
 
 const hasThreatArea = computed(() =>
   stories.value.length > 0 || engagedEnemies.value.length > 0 || props.investigator.treacheries.length > 0
-)
-
-const inHandEnemies = computed(() =>
-  Object.values(props.game.enemies).filter((e) => (e.placement.tag === "StillInHand" || e.placement.tag === "HiddenInHand") && e.placement.contents === investigatorId.value)
 )
 
 const hunchDeck = computed(() => {
@@ -128,7 +112,6 @@ const topOfHunchDeck = computed(() => {
 
 const viewingDiscard = ref(false)
 
-const id = computed(() => props.investigator.id)
 const choices = computed(() => ArkhamGame.choices(props.game, props.playerId))
 
 const tarotCardAbility = (card: TarotCard) => {
@@ -150,54 +133,10 @@ const noCards = computed<ArkhamCard.Card[]>(() => [])
 const showCards = reactive<RefWrapper<any>>({ ref: noCards })
 const cardRowTitle = ref("")
 
-const inHandTreacheries = computed(() => Object.values(props.game.treacheries).
-  filter((t) => t.placement.tag === "HiddenInHand" && t.placement.contents === id.value))
-
-const totalHandSize = computed(() => {
-  const onlyCountFirstCopy = props.investigator.modifiers?.some((m: Modifier) => m.type.tag === 'OtherModifier' && m.type.contents === "OnlyFirstCopyCardCountsTowardMaximumHandSize")
-
-  const sizeModifiers: Record<string, number> = props.game.modifiers.reduce((a, m) => {
-    if (m[1][0].type?.tag === "HandSizeCardCount") {
-      if (m[0].tag === "CardIdTarget") {
-        if(typeof m[0].contents === 'string') {
-          return {...a, [m[0].contents]: m[1][0].type.contents}
-        }
-      }
-    }
-    return a
-  }, {})
-
-  // if onlyCountFirstCopy is true, we need to filter the hand to only count the first copy of each card
-  const hand = onlyCountFirstCopy
-    ? playerHand.value.filter((c, i) => {
-        return playerHand.value.findIndex(cc => CardT.asCardCode(cc) === CardT.asCardCode(c)) === i
-      })
-    : playerHand.value
-
-  const playerHandSize = hand.reduce((a, c) => {
-    return a + (sizeModifiers[toCardContents(c).id] ?? 1)
-  }, 0)
-
-  const treacheryHandSize = inHandTreacheries.value.reduce((a, c) => {
-    return a + (sizeModifiers[c.cardId] ?? 1)
-  }, 0)
-
-  const enemyHandSize = inHandEnemies.value.reduce((a, c) => {
-    return a + (sizeModifiers[c.cardId] ?? 1)
-  }, 0)
-
-  return playerHandSize + treacheryHandSize + enemyHandSize
+const { totalHandSize, actualHandSize, handSizeClasses } = usePlayerHand({
+  game: () => props.game,
+  investigator: () => props.investigator,
 })
-
-const actualHandSize = computed(() => {
-  return playerHand.value.length + inHandTreacheries.value.length + inHandEnemies.value.length
-})
-
-const handSizeClasses = computed(() => ({
-  'hand-size-ok': (props.investigator.handSize ?? 8) > totalHandSize.value,
-  'hand-size-warn': (props.investigator.handSize ?? 8) == totalHandSize.value,
-  'hand-size-alert': (props.investigator.handSize ?? 8) < totalHandSize.value,
-}))
 
 const doShowCards = (event: Event, cards: ComputedRef<ArkhamCard.Card[]>, title: string, isDiscards: boolean) => {
   cardRowTitle.value = title
@@ -209,12 +148,6 @@ const hideCards = () => {
   showCards.ref = noCards
   viewingDiscard.value = false
 }
-
-const committedIdSet = computed(() => new Set((props.game.skillTest?.committedCards ?? []).map(c => toCardContents(c).id)))
-
-const playerHand = computed(() =>
-  props.investigator.hand.filter(card => !committedIdSet.value.has(toCardContents(card).id))
-)
 
 const debug = useDebug()
 const events = computed(() => props.investigator.events.map((e) => props.game.events[e]).filter(e => e))
@@ -241,66 +174,9 @@ const slotImg = (slot: Arkham.Slot) => {
   }
 }
 
-// global position information for animation
-const rectMap = new Map<string, DOMRect>()
-
-function isHtmlElement(el: Element): el is HTMLElement { return el instanceof HTMLElement }
-
-function onBeforeEnter(el: Element) {
-  if (!isHtmlElement(el)) return
-  if (el.classList.contains('committed-skills')) return
-  const idx = el.dataset.index
-  if (!idx || !rectMap.has(idx)) return
-  el.style.opacity = '0'
-  el.style.width = '0'
-}
-
-function onEnter(el: Element, done: () => void) {
-  if (!isHtmlElement(el)) return
-  if (el.classList.contains('committed-skills')) { el.removeAttribute('style'); done(); return }
-
-  const idx = el.dataset.index
-  const finalRect = el.getBoundingClientRect()
-
-  if (!idx) {
-    const width = window.getComputedStyle(el).width
-    gsap.to(el, { opacity: 1, width, onComplete: () => { el.removeAttribute('style'); done() } })
-    return
-  }
-
-  const rect = rectMap.get(idx)
-  rectMap.delete(idx)
-  if (!rect) { el.removeAttribute('style'); done(); return }
-
-  const startX = rect.left - finalRect.left
-  const startY = rect.top - finalRect.top
-
-  const c = el.cloneNode(true) as HTMLElement
-  c.style.position = 'fixed'
-  c.style.width = rect.width + 'px'
-  el.parentNode?.insertBefore(c, el)
-
-  const cRect = c.getBoundingClientRect()
-  const finalX = finalRect.left - cRect.left
-
-  gsap.timeline()
-    .add('start')
-    .to(el, { startAt: { opacity: 0, width: 0 }, width: rect.width, clearProps: 'width', duration: 0.3 }, 'start')
-    .to(c, {
-      startAt: { x: startX, y: startY, opacity: 1 },
-      x: finalX, y: 0, duration: 0.3,
-      onComplete: () => { c.remove(); el.style.opacity = '1'; done() }
-    }, 'start')
-}
-
-function onLeave(el: Element, done: () => void) {
-  if (!isHtmlElement(el)) return
-  if (el.classList.contains('committed-skills')) { done(); return }
-  const idx = el.dataset.index
-  if (!idx) { done(); return }
-  rectMap.set(idx, el.getBoundingClientRect())
-  gsap.to(el, { startAt: { opacity: 0 }, width: 0, margin: 0, duration: 0.3, onComplete: done })
-}
+// 入场区与（桌面/移动）手牌区共用同一个 rectMap，保持卡牌在手牌 ↔ 入场区之间的跨区飞行动画
+const cardRectMap = new Map<string, DOMRect>()
+const { onBeforeEnter, onEnter, onLeave } = createCardTransitionHooks(cardRectMap)
 
 const realityAcid = ref('89005')
 
@@ -308,31 +184,6 @@ const dragover = (e: DragEvent) => {
   e.preventDefault()
   if (e.dataTransfer) {
     e.dataTransfer.dropEffect = 'copy'
-  }
-}
-
-function onDropHand(event: DragEvent) {
-  event.preventDefault()
-  if (event.dataTransfer) {
-    const data = event.dataTransfer.getData('text/plain')
-    if (data) {
-      const json = JSON.parse(data)
-      if (json.tag === "CardTarget") {
-        debug.send(props.game.id, {tag: 'DebugAddToHand', contents: [id.value, json.contents]})
-      }
-    }
-  }
-}
-
-function startHandDrag(event: DragEvent, card: (CardContents | CardT.Card)) {
-  if (!debug.active) {
-    event.preventDefault()
-    return
-  }
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'copy'
-    const cardId = CardT.toCardContents(card).id
-    event.dataTransfer.setData('text/plain', JSON.stringify({ "tag": "CardTarget", "contents": cardId }))
   }
 }
 
@@ -564,52 +415,13 @@ function closeHand() {
         />
       </div>
       <div v-if="!isMobile" class="hand hand-area">
-        <transition-group tag="section" class="hand" @enter="onEnter" @leave="onLeave" @before-enter="onBeforeEnter"
-          @drop="onDropHand($event)"
-          @dragover.prevent="dragover($event)"
-          @dragenter.prevent
-          >
-          <HandCard
-            v-for="card in playerHand"
-            :card="card"
-            :game="game"
-            :playerId="playerId"
-            :ownerId="investigator.id"
-            :key="toCardContents(card).id"
-            @choose="$emit('choose', $event)"
-            :draggable="debug.active"
-            @dragstart="startHandDrag($event, card)"
-          />
-
-          <template v-for="enemy in inHandEnemies" :key="enemy.id">
-            <EnemyView
-              v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
-              :enemy="enemy"
-              :game="game"
-              :data-index="enemy.cardId"
-              :playerId="playerId"
-              @choose="$emit('choose', $event)"
-            />
-            <div class="card-container" v-else>
-              <img class="card" :src="backForEnemy(enemy)" />
-            </div>
-          </template>
-
-          <template v-for="treachery in inHandTreacheries" :key="treachery.id">
-            <Treachery
-              v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
-              :treachery="treachery"
-              :game="game"
-              :data-index="treachery.cardId"
-              :playerId="playerId"
-              @choose="$emit('choose', $event)"
-            />
-            <div class="card-container" v-else>
-              <img class="card" :src="ENCOUNTER_BACK" />
-            </div>
-          </template>
-
-        </transition-group>
+        <PlayerHandCards
+          :game="game"
+          :playerId="playerId"
+          :investigator="investigator"
+          :rectMap="cardRectMap"
+          @choose="$emit('choose', $event)"
+        />
         <div v-if="investigator.handSize" class="hand-size" :class="handSizeClasses" :current-length="totalHandSize">{{ t('handSize') }}: {{totalHandSize}}/{{investigator.handSize}}</div>
       </div>
     </div>
@@ -623,51 +435,15 @@ function closeHand() {
       >
         <XMarkIcon aria-hidden="true" />
       </button>
-      <transition-group tag="section" class="hand" @enter="onEnter" @leave="onLeave" @before-enter="onBeforeEnter"
-        @drop="onDropHand($event)"
-        @dragover.prevent="dragover($event)"
-        @dragenter.prevent
+      <PlayerHandCards
         :style="{ pointerEvents: `${handAreaPointerEvents}`, flex: 1 }"
-        >
-        <HandCard
-          v-for="card in playerHand"
-          :card="card"
-          :game="game"
-          :playerId="playerId"
-          :ownerId="investigator.id"
-          :key="toCardContents(card).id"
-          @choose="$emit('choose', $event)"
-          :draggable="debug.active"
-          @dragstart="startHandDrag($event, card)"
-        />
-        <template v-for="enemy in inHandEnemies" :key="enemy.id">
-          <EnemyView
-            v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
-            :enemy="enemy"
-            :game="game"
-            :data-index="enemy.cardId"
-            :playerId="playerId"
-            @choose="$emit('choose', $event)"
-          />
-          <div class="card-container" v-else>
-            <img class="card" :src="backForEnemy(enemy)" />
-          </div>
-        </template>
-        <template v-for="treachery in inHandTreacheries" :key="treachery.id">
-          <Treachery
-            v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
-            :treachery="treachery"
-            :game="game"
-            :data-index="treachery.cardId"
-            :playerId="playerId"
-            :isInHand="true"
-            @choose="$emit('choose', $event)"
-          />
-          <div class="card-container" v-else>
-            <img class="card" :src="ENCOUNTER_BACK" />
-          </div>
-        </template>
-      </transition-group>
+        :game="game"
+        :playerId="playerId"
+        :investigator="investigator"
+        :rectMap="cardRectMap"
+        treachery-in-hand
+        @choose="$emit('choose', $event)"
+      />
     </div>
     <CardRow
       v-if="showCards.ref.length > 0"
@@ -785,22 +561,6 @@ function closeHand() {
   display: flex;
   gap: 5px;
   overflow-x: auto;
-}
-
-.hand-move,
-.hand-enter-active,
-.hand-leave-active {
-  transition: all 0.3s ease;
-}
-
-.hand-enter-from,
-.hand-leave-to {
-  opacity: 0;
-  transform: translateY(-40px);
-}
-
-.hand-leave-active {
-  position: absolute;
 }
 
 .in-play-move,
