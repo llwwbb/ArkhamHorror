@@ -1,7 +1,8 @@
 <script lang="ts" setup>
 // 手机 shell（spec §4）：全屏地图为底，顶部 阶段条+撤销+汉堡，底部导航，统一浮层。
 // 逻辑（socket/undo/modals）全在 Game.vue，这里只做 chrome 与编排。
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, inject, nextTick, reactive, ref, watch } from 'vue'
+import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Bars3Icon,
@@ -17,6 +18,8 @@ import type { GameModals } from '@/arkham/composables/useGameModals'
 import type { GameUndoApi } from '@/arkham/composables/useGameUndo'
 import { providePhoneShell } from '@/arkham/composables/phoneShell'
 import { useGameIndexes } from '@/arkham/composables/useGameIndexes'
+import { choicesByPlayerKey } from '@/arkham/composables/useGameChoices'
+import { MessageType } from '@/arkham/types/Message'
 import { useMenu } from '@/composable/menu'
 import { useDebug } from '@/arkham/debug'
 import MobilePhaseBar from '@/arkham/components/MobilePhaseBar.vue'
@@ -93,6 +96,28 @@ const gameIndexes = useGameIndexes(() => props.game)
 const ownInvestigator = computed(
   () => gameIndexes.value.investigatorByPlayerId.get(props.playerId) ?? null,
 )
+
+// 快捷操作条：注入 choices，提取 skip / endTurn 索引，在 shell 层一步直达。
+// autoOpened 扫描器只识别 ACTIONABLE CSS 类（见下方），不扫描普通 <button>，
+// 所以快捷条里的按钮不会干扰红点逻辑，无需额外排除。
+const choicesByPlayer = inject(choicesByPlayerKey)
+const myChoices = computed(() => choicesByPlayer?.value.get(props.playerId) ?? [])
+const skipIdx = computed(() => {
+  const id = ownInvestigator.value?.id
+  if (!id) return -1
+  return myChoices.value.findIndex(
+    (c) => c.tag === MessageType.SKIP_TRIGGERS_BUTTON && c.investigatorId === id,
+  )
+})
+const endTurnIdx = computed(() => {
+  const id = ownInvestigator.value?.id
+  if (!id) return -1
+  return myChoices.value.findIndex(
+    (c) => c.tag === MessageType.END_TURN_BUTTON && c.investigatorId === id,
+  )
+})
+const skipAllTriggers = inject<() => void>('skipAllTriggers')
+const skipAllAvailable = inject<Ref<boolean>>('skipAllAvailable')
 
 // 技能检定开始自动展开手牌便于投入；结束自动收起。
 // 经 toggleDrawer 同款互斥逻辑，避免与其他抽屉叠层。
@@ -290,6 +315,19 @@ function runMenuItem(action: () => void) {
         <GameLog :game="game" :gameLog="gameLog" @undo="undoApi.undo" />
       </div>
     </OverlayDrawer>
+
+    <!-- 快捷操作条：把藏在角色抽屉里的高频文字选项（跳过/结束回合）提到 shell 层（文字按钮一步直达原则）。
+         choice-dock(z-index:5000) 与本条(5001)同时出现时快捷条在上仍可点击；两者同时出现的
+         概率极低（dock 出现时通常无 skip 选项），接受极小重叠风险。 -->
+    <div v-if="skipIdx !== -1 || endTurnIdx !== -1" class="quick-actions">
+      <button v-if="skipIdx !== -1" type="button" @click="emit('choose', skipIdx)">{{ $t('skip') }}</button>
+      <button
+        v-if="skipIdx !== -1 && skipAllAvailable"
+        type="button"
+        @click="skipAllTriggers && skipAllTriggers()"
+      >{{ $t('investigator.skipAllTriggers') }}</button>
+      <button v-if="endTurnIdx !== -1" type="button" @click="emit('choose', endTurnIdx)">{{ $t('investigator.endTurnShort') }}</button>
+    </div>
 
     <OverlayDrawer :open="menuOpen" side="bottom" @close="menuOpen = false">
       <div class="mobile-menu">
@@ -516,6 +554,31 @@ function runMenuItem(action: () => void) {
     letter-spacing: 1.5px;
     color: rgba(255, 255, 255, 0.5);
     padding: 8px 12px 2px;
+  }
+}
+
+.quick-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  z-index: 5001; /* choice-dock(5000) 之上、抽屉(10000) 之下 */
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  justify-content: center;
+  pointer-events: none;
+
+  button {
+    pointer-events: auto;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 20px;
+    background: var(--select);
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   }
 }
 </style>
