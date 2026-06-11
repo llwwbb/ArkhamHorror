@@ -9,7 +9,6 @@ import {
 } from '@heroicons/vue/20/solid'
 import { LottieAnimation } from 'lottie-web-vue'
 import processingJSON from '@/assets/processing.json'
-import * as Api from '@/arkham/api'
 import { useCardStore } from '@/stores/cards'
 import { useMenu } from '@/composable/menu'
 import useEmitter from '@/composable/useEmitter'
@@ -20,6 +19,7 @@ import { useGameSocket } from '@/arkham/composables/useGameSocket'
 import { provideGameContext } from '@/arkham/composables/provideGameContext'
 import { useGameUndo } from '@/arkham/composables/useGameUndo'
 import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
+import { useBugReport } from '@/arkham/composables/useBugReport'
 import Campaign from '@/arkham/components/Campaign.vue'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
@@ -155,9 +155,10 @@ const actionMap = computed<Map<string, () => void>>(() => {
   return map
 })
 
-const filingBug = ref(false)
-const submittingBug = ref(false)
-const bugInitialDescription = ref('')
+const { filingBug, submittingBug, bugInitialDescription, openBugReport, fileBug } = useBugReport({
+  gameId: () => props.gameId,
+  onFail: () => alert(t('gameBar.bugSubmittingFail')),
+})
 
 const { undoChordArmed } = useGameKeyboard({
   enabled: () => !filingBug.value,
@@ -195,35 +196,9 @@ function confirmUndoScenario() {
 }
 
 function fileBugFromError() {
-  bugInitialDescription.value = error.value ?? ''
+  const description = error.value ?? ''
   error.value = null
-  filingBug.value = true
-}
-
-function openBugReport() {
-  bugInitialDescription.value = ''
-  filingBug.value = true
-}
-
-async function fileBug(bugTitle: string, bugDescription: string) {
-  submittingBug.value = true
-  filingBug.value = false
-  Api.fileBug(props.gameId)
-    .then((response) => {
-      const title = encodeURIComponent(bugTitle)
-      const body = encodeURIComponent(
-        `${bugDescription}\n\ngame: ${window.location.href}\nfile: ${response.data}`,
-      )
-      window.open(
-        `https://github.com/halogenandtoast/ArkhamHorror/issues/new?labels=bug&title=${title}&body=${body}&assignee=halogenandtoast&projects=halogenandtoast/2`,
-        '_blank',
-      )
-      submittingBug.value = false
-    })
-    .catch(() => {
-      alert(t('gameBar.bugSubmittingFail'))
-      submittingBug.value = false
-    })
+  openBugReport(description)
 }
 
 const onMove = (event: MouseEvent) => {
@@ -335,7 +310,7 @@ onUnmounted(() => {
       @undo-phase="undoPhaseStart"
       @undo-round="undoRoundStart"
       @undo-scenario="undoScenarioDialog?.showModal()"
-      @file-bug="openBugReport"
+      @file-bug="openBugReport()"
       @toggle-sidebar="toggleSidebar"
     />
     <MultiplayerLobby
