@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { computed } from 'vue'
 import { getCardImage } from '@/arkham/cardImageLookup'
+import OverlayDrawer from '@/components/OverlayDrawer.vue'
 
 const props = defineProps<{
   target: HTMLElement
@@ -16,7 +17,8 @@ const image = computed(() => getCardImage(props.target))
 </script>
 
 <template>
-  <div class="card-action-sheet-backdrop" @click.self="emit('close')">
+  <!-- .card-action-sheet 类被 touchTapIntercept 的放行判断引用，保留 -->
+  <OverlayDrawer :open="true" side="bottom" panel-max-width="480px" @close="emit('close')">
     <div class="card-action-sheet no-overlay">
       <img v-if="image" :src="image" class="sheet-card" />
       <div class="sheet-actions">
@@ -26,27 +28,13 @@ const image = computed(() => getCardImage(props.target))
         <button class="sheet-cancel" @click="emit('close')">{{ $t('cancel') }}</button>
       </div>
     </div>
-  </div>
+  </OverlayDrawer>
 </template>
 
 <style scoped>
-.card-action-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
 .card-action-sheet {
   width: 100%;
-  max-width: 480px;
-  background: var(--background, #1c1c1c);
-  border-radius: 12px 12px 0 0;
   padding: 16px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   align-items: center;
