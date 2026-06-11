@@ -87,3 +87,7 @@ kubeconfig*
 .claude/
 CLAUDE.md
 .mcp.json
+.playwright-mcp/
+docs/superpowers/
+spectate-mobile.png
+phase4-*.png

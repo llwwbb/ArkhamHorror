@@ -1,2 +1,0 @@
-[     192ms] [INFO] <Suspense> is an experimental feature and its API will likely change. @ http://localhost:8080/node_modules/.vite/deps/chunk-LG6AQRJS.js?v=f8c47add:9214
-[     340ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:8080/sign-in#/sign-in?nextUrl=/:0
