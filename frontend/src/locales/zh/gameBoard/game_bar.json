@@ -48,5 +48,8 @@
 
     "toggleSidebar": "展开/收起侧边栏",
 
-    "rotateLayout": "旋转地点布局"
+    "rotateLayout": "旋转地点布局",
+
+    "yourTurnTitle": "轮到你了",
+    "yourTurnBody": "你有待处理的选择，回到游戏继续吧。"
 }

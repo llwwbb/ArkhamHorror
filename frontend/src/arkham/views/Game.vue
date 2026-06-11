@@ -20,6 +20,7 @@ import { provideGameContext } from '@/arkham/composables/provideGameContext'
 import { useGameUndo } from '@/arkham/composables/useGameUndo'
 import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
 import { useBugReport } from '@/arkham/composables/useBugReport'
+import { useTurnNotification } from '@/arkham/composables/useTurnNotification'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
@@ -137,6 +138,8 @@ const choices = computed(() => {
   if (!playerId.value) return []
   return choicesByPlayer.value.get(playerId.value) ?? []
 })
+useTurnNotification({ pendingChoices: computed(() => choices.value.length) })
+
 const realityAcidLightActive = computed(() => {
   const scenario = game.value?.scenario
   return scenario?.id === 'c85001' && scenario.meta?.lightActive === true
