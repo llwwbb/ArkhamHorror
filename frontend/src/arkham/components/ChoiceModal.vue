@@ -14,9 +14,10 @@ export interface Props {
   game: Game
   playerId: string
   noStory?: boolean
+  docked?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), { noStory: false })
+const props = withDefaults(defineProps<Props>(), { noStory: false, docked: false })
 const emit = defineEmits(['choose'])
 const { t, te } = useI18n()
 
@@ -141,13 +142,22 @@ const title = computed(() => {
 </script>
 
 <template>
-  <Draggable v-if="requiresModal">
-    <template #handle><h1 v-html="label(title)"></h1></template>
-    <div class='choice-modal-wrapper'>
-      <p class="body" v-if="body" v-html="label(body)"></p>
-      <Question v-if="question" :game="game" :playerId="playerId" @choose="choose" />
+  <template v-if="requiresModal">
+    <div v-if="docked" class="choice-dock">
+      <h1 class="choice-dock-title" v-html="label(title)"></h1>
+      <div class='choice-modal-wrapper'>
+        <p class="body" v-if="body" v-html="label(body)"></p>
+        <Question v-if="question" :game="game" :playerId="playerId" @choose="choose" />
+      </div>
     </div>
-  </Draggable>
+    <Draggable v-else>
+      <template #handle><h1 v-html="label(title)"></h1></template>
+      <div class='choice-modal-wrapper'>
+        <p class="body" v-if="body" v-html="label(body)"></p>
+        <Question v-if="question" :game="game" :playerId="playerId" @choose="choose" />
+      </div>
+    </Draggable>
+  </template>
 </template>
 
 <style scoped>
@@ -170,5 +180,27 @@ const title = computed(() => {
 .choice-modal-wrapper .body {
   text-align: center;
   margin: 0;
+}
+
+/* 手机 shell：停靠在底部导航上方，不遮地图（spec §4）。
+   --mobile-nav-height 由 MobilePlayLayout 提供（停靠版渲染在其子树内）。 */
+.choice-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--mobile-nav-height, 56px) + env(safe-area-inset-bottom, 0px));
+  z-index: 5000;
+  max-height: 45dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 10px;
+  padding-top: 6px;
+}
+
+.choice-dock-title {
+  font-size: 1.1em;
+  margin: 0 0 6px;
+  color: var(--title);
 }
 </style>

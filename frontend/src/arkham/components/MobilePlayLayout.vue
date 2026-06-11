@@ -20,6 +20,7 @@ import { useMenu } from '@/composable/menu'
 import { useDebug } from '@/arkham/debug'
 import MobilePhaseBar from '@/arkham/components/MobilePhaseBar.vue'
 import ActiveGameModals from '@/arkham/components/ActiveGameModals.vue'
+import ChoiceModal from '@/arkham/components/ChoiceModal.vue'
 import GameMain from '@/arkham/components/GameMain.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import OverlayDrawer from '@/components/OverlayDrawer.vue'
@@ -111,7 +112,7 @@ function runMenuItem(action: () => void) {
 </script>
 
 <template>
-  <!-- mobile-play--question：Task 11 Question 停靠的样式钩子，当前无消费者 -->
+  <!-- mobile-play--question：有待选 Question 时的样式钩子，当前无消费者（停靠版 ChoiceModal 自带 fixed 定位） -->
   <div class="mobile-play" :class="{ 'mobile-play--question': hasQuestion }">
     <header class="mobile-top-bar">
       <MobilePhaseBar v-if="inPlay" :game="game" class="top-bar-phases" />
@@ -167,6 +168,17 @@ function runMenuItem(action: () => void) {
         <DocumentTextIcon aria-hidden="true" />{{ $t('mobileShell.log') }}
       </button>
     </nav>
+
+    <!-- 停靠版 Question：镜像桌面的挂载语义——只为本玩家渲染（旁观者无，桌面 Player 内
+         ChoiceModal 同理），且战役间章（CampaignPhase）不渲染（桌面此时 Player 未挂载，
+         问题由 StoryQuestion/Campaign UI 呈现，停靠版会重复）。 -->
+    <ChoiceModal
+      v-if="ownInvestigator && game.phase !== 'CampaignPhase'"
+      docked
+      :game="game"
+      :playerId="playerId"
+      @choose="emit('choose', $event)"
+    />
 
     <OverlayDrawer
       v-if="ownInvestigator"

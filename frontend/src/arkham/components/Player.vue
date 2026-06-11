@@ -24,6 +24,7 @@ import * as Arkham from '@/arkham/types/Investigator';
 import { useI18n } from 'vue-i18n';
 import Draw from '@/arkham/components/Draw.vue'
 import { IsMobile } from '@/arkham/isMobile';
+import { usePhoneShell } from '@/arkham/composables/phoneShell';
 import { usePlayerHand } from '@/arkham/composables/usePlayerHand';
 import { createCardTransitionHooks } from '@/arkham/cardTransitions';
 const { t } = useI18n();
@@ -153,6 +154,8 @@ const events = computed(() => props.investigator.events.map((e) => props.game.ev
 const skills = computed(() => props.investigator.skills.map((e) => props.game.skills[e]).filter(e => e))
 const emptySlots = computed(() => props.investigator.slots.filter((s) => s.empty))
 const { isMobile } = IsMobile();
+// 手机 shell 下 Question 由 MobilePlayLayout 渲染停靠版，这里抑制自身的浮窗（Task 11）
+const phoneShell = usePhoneShell()
 
 const slotImg = (slot: Arkham.Slot) => {
   switch (slot.tag) {
@@ -318,7 +321,7 @@ const playAreaCollapsed = ref(false)
     </transition>
 
     <ChoiceModal
-      v-if="playerId === investigator.playerId"
+      v-if="playerId === investigator.playerId && !phoneShell"
       :game="game"
       :playerId="playerId"
       @choose="$emit('choose', $event)"
