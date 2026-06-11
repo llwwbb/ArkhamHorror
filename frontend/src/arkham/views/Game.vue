@@ -27,9 +27,7 @@ import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
 import { useCardTapSheet } from '@/arkham/composables/useCardTapSheet'
-import TheSilenceModal from '@/arkham/components/TheSilenceModal.vue'
-import RevealedCardModal from '@/arkham/components/RevealedCardModal.vue'
-import TarotModal from '@/arkham/components/TarotModal.vue'
+import ActiveGameModals from '@/arkham/components/ActiveGameModals.vue'
 import MultiplayerLobby from '@/arkham/components/MultiplayerLobby.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import HistoryPanel from '@/arkham/components/HistoryPanel.vue'
@@ -60,7 +58,6 @@ const flashlightY = ref(0)
 store.fetchCards()
 
 const modals = useGameModals()
-const { gameCard, tarotCards, showTheSilenceModal, continueUI } = modals
 const socket = useGameSocket({
   gameId: () => props.gameId,
   spectate: props.spectate,
@@ -364,14 +361,7 @@ onUnmounted(() => {
         :playerId="playerId"
       />
       <div v-else class="game-main">
-        <TheSilenceModal v-if="showTheSilenceModal" @continue="continueUI" />
-        <RevealedCardModal
-          v-else-if="gameCard"
-          :game="game"
-          :playerId="playerId"
-          :gameCard="gameCard"
-          @continue="continueUI"
-        />
+        <ActiveGameModals :game="game" :playerId="playerId" :modals="modals" />
         <HistoryPanel
           v-if="showHistory && game && playerId"
           :game="game"
@@ -383,7 +373,6 @@ onUnmounted(() => {
           :info="playabilityInfo"
           @close="playabilityInfo = null"
         />
-        <TarotModal v-if="tarotCards.length > 0" :tarotCards="tarotCards" @continue="continueUI" />
         <CampaignSettings
           v-if="game.campaign && !gameOver && question && question.tag === 'PickCampaignSettings'"
           :game="game"
