@@ -40,7 +40,7 @@ const bugDescription = ref(props.initialDescription)
       ></textarea>
       <div class="buttons">
         <button type="submit">{{ $t('submit') }}</button>
-        <button @click="emit('cancel')">{{ $t('cancel') }}</button>
+        <button type="button" @click="emit('cancel')">{{ $t('cancel') }}</button>
       </div>
     </form>
   </Draggable>

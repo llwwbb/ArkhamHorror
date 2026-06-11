@@ -151,7 +151,7 @@ defineEmits<{ continue: [] }>()
   :deep(.card) {
     animation: revelation 0.6s ease-in-out;
     width: 300px !important;
-    aspect-ratio: var(--card-ratio);
+    aspect-ratio: var(--card-aspect);
     overflow: hidden;
     border-radius: 15px;
   }

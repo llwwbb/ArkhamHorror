@@ -307,6 +307,11 @@ export function useGameKeyboard(opts: UseGameKeyboardOptions) {
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyPress)
     document.removeEventListener('mousemove', onMove)
+    clearUndoChord()
+    if (konamiTimer) {
+      clearTimeout(konamiTimer)
+      konamiTimer = null
+    }
   })
 
   return { undoChordArmed }

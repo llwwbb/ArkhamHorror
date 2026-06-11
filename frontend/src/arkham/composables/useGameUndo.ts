@@ -41,31 +41,9 @@ export function useGameUndo(opts: UseGameUndoOptions) {
 
   const undoLock = ref(false)
 
-  async function undo() {
-    processing.value = true
-    const oldQuestion = game.value?.question
-    if (game.value) setGameQuestion({})
-    clearResultQueue()
-    modals.resetForUndo()
-    if (undoLock.value) return
-    undoLock.value = true
-    try {
-      await undoChoice(opts.gameId(), opts.debugActive())
-    } catch (e) {
-      processing.value = false
-      if (game.value && oldQuestion) setGameQuestion(oldQuestion)
-      console.log(e)
-    }
-    undoLock.value = false
-  }
+  const undo = () => undoBoundary((gameId) => undoChoice(gameId, opts.debugActive()))
 
-  async function undoScenario() {
-    processing.value = true
-    if (game.value) setGameQuestion({})
-    clearResultQueue()
-    modals.resetForUndo()
-    undoScenarioChoice(opts.gameId())
-  }
+  const undoScenario = () => undoBoundary(undoScenarioChoice)
 
   async function undoBoundary(call: (gameId: string) => Promise<void>) {
     if (undoLock.value) return

@@ -67,20 +67,38 @@ describe('useGameUndo', () => {
     consoleSpy.mockRestore()
   })
 
-  it('undo 锁早退：pending 期间重入不重复调 API（既有怪癖：重置副作用仍会执行）', async () => {
+  it('undo 锁早退：pending 期间重入不重复调 API，也不触发重置副作用', async () => {
     let release!: () => void
     vi.mocked(api.undoChoice).mockReturnValue(new Promise<void>((r) => (release = r)))
     const { undoApi, calls } = setup()
     const first = undoApi.undo()
-    // 在 first 还在 pending 时，第二次调用进来：因为锁在副作用之后检查，
-    // 副作用已执行（setGameQuestion/clearResultQueue/resetForUndo 各再触发一次），
-    // 然后检查到锁已设，提前返回，不再调用 API
+    // 锁在所有副作用之前检查：重入直接返回，不再清 question/队列
     await undoApi.undo()
     expect(api.undoChoice).toHaveBeenCalledTimes(1)
-    // 副作用确实被执行了两次（既有怪癖）
-    expect(calls.filter((c) => c === 'setGameQuestion')).toHaveLength(2)
+    expect(calls.filter((c) => c === 'setGameQuestion')).toHaveLength(1)
     release()
     await first
+  })
+
+  it('undoScenario：持锁 + 失败时恢复旧 question、processing 回 false', async () => {
+    let release!: () => void
+    vi.mocked(api.undoScenarioChoice).mockReturnValue(new Promise<void>((r) => (release = r)))
+    const { undoApi, opts } = setup()
+    const first = undoApi.undoScenario()
+    // pending 期间重入被锁挡住
+    await undoApi.undoScenario()
+    expect(api.undoScenarioChoice).toHaveBeenCalledTimes(1)
+    release()
+    await first
+
+    vi.mocked(api.undoScenarioChoice).mockRejectedValue(new Error('boom'))
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await undoApi.undoScenario()
+    expect(opts.processing.value).toBe(false)
+    expect(vi.mocked(opts.setGameQuestion).mock.calls.at(-1)?.[0]).toEqual({
+      p1: { tag: 'ChooseOne' },
+    })
+    consoleSpy.mockRestore()
   })
 
   it('undoBoundary 锁早退：锁检查在所有副作用之前', async () => {

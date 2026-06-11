@@ -12,7 +12,6 @@ import {
   ref,
   ComputedRef,
   reactive,
-  provide
 } from 'vue';
 import { type Game } from '@/arkham/types/Game';
 import { type Scenario } from '@/arkham/types/Scenario';
@@ -20,7 +19,7 @@ import { type Enemy } from '@/arkham/types/Enemy';
 import { type ConcealedCard } from '@/arkham/types/ConcealedCard';
 import ConcealedCardView from '@/arkham/components/ConcealedCard.vue';
 import { type Position } from '@/arkham/types/Placement';
-import { type Card, cardId, cardImage } from '@/arkham/types/Card';
+import { type Card, cardId } from '@/arkham/types/Card';
 import { TarotCard, tarotCardImage } from '@/arkham/types/TarotCard';
 import { TokenType } from '@/arkham/types/Token';
 import { ModifierType, Hollow } from '@/arkham/types/Modifier';
@@ -1123,7 +1122,6 @@ const doShowCards = (cards: ComputedRef<Card[]>, title: string, isDiscards: bool
   viewingDiscard.value = isDiscards
 }
 const showRemovedFromPlay = () => doShowCards(removedFromPlay, t('scenario.removedFromPlay'), true)
-const showDiscards = () => doShowCards(discards, t('scenario.discards'), true)
 const showHollowed = () => doShowCards(hollowed, t('scenario.hollowed'), true)
 const handleHollowedChoose = (idx: number) => {
   if (hollowed.value.length > 1) {
@@ -1570,14 +1568,6 @@ const tarotCardAbility = (card: TarotCard) => {
 }
 
 const victoryDisplay = computed(() => props.scenario.victoryDisplay)
-
-const isMinimized_SkillTest = ref(false)
-provide('isMinimized_SkillTest', isMinimized_SkillTest)
-function minimize_SkillTest(isMinimized:boolean){
-  if (isMobile) {
-    isMinimized_SkillTest.value = isMinimized
-  }
-}
 
 const blessTokens = computed(() => props.scenario.chaosBag.chaosTokens.filter((t) => t.face === 'BlessToken'
 ).length)

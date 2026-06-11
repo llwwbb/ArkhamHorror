@@ -28,7 +28,7 @@ const gameCardOnlyDecoder = JsonDecoder.object<GameCardOnly>(
     title: JsonDecoder.string(),
     card: cardDecoder,
   },
-  'GameCard',
+  'GameCardOnly',
 )
 
 // uiLock 协议：show* 立即上锁（异步解码期间挡住后续 UI 结果），解码失败回滚；
