@@ -1,5 +1,85 @@
 import { describe, expect, it } from 'vitest'
-import { pinchedZoom, wheelPinchedZoom } from './usePinchZoom'
+import { createApp, defineComponent, ref, type Ref } from 'vue'
+import { pinchedZoom, usePinchZoom, wheelPinchedZoom } from './usePinchZoom'
+
+// jsdom 没有 PointerEvent/TouchEvent 构造器，用 Event + 属性赋值模拟
+function pointerEvent(
+  type: string,
+  props: { pointerId: number; clientX?: number; clientY?: number },
+): Event {
+  return Object.assign(new Event(type, { bubbles: true }), { pointerType: 'touch', ...props })
+}
+
+function touchMoveEvent(touchCount: number): Event {
+  return Object.assign(new Event('touchmove', { bubbles: true, cancelable: true }), {
+    touches: Array.from({ length: touchCount }),
+  })
+}
+
+function mountPinchZoom() {
+  const el = document.createElement('div')
+  document.body.appendChild(el)
+  const target = ref<HTMLElement | null>(el)
+  const zoom = ref(1)
+  const app = createApp(
+    defineComponent({
+      setup() {
+        usePinchZoom(target as Ref<HTMLElement | null>, zoom)
+        return () => null
+      },
+    }),
+  )
+  app.mount(document.createElement('div'))
+  const pinch = (d1: number, d2: number) => {
+    el.dispatchEvent(pointerEvent('pointerdown', { pointerId: 10, clientX: 0, clientY: 0 }))
+    el.dispatchEvent(pointerEvent('pointerdown', { pointerId: 11, clientX: d1, clientY: 0 }))
+    window.dispatchEvent(pointerEvent('pointermove', { pointerId: 11, clientX: d2, clientY: 0 }))
+  }
+  return { el, zoom, pinch, unmount: () => app.unmount() }
+}
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+describe('usePinchZoom 事件处理', () => {
+  it('双指捏合驱动 zoom', async () => {
+    const { zoom, pinch, unmount } = mountPinchZoom()
+    pinch(100, 200)
+    await nextFrame()
+    expect(zoom.value).toBe(2)
+    unmount()
+  })
+
+  it('单指被 pointercancel 后不残留（再捏合基线正确）', async () => {
+    const { el, zoom, pinch, unmount } = mountPinchZoom()
+    // Safari 单指滚动开始时会 cancel 这个 pointer
+    el.dispatchEvent(pointerEvent('pointerdown', { pointerId: 1, clientX: 500, clientY: 500 }))
+    window.dispatchEvent(pointerEvent('pointercancel', { pointerId: 1 }))
+    // 若 pointerId 1 残留，下面第一个 pointerdown 就会用幽灵坐标错误初始化
+    pinch(100, 200)
+    await nextFrame()
+    expect(zoom.value).toBe(2)
+    unmount()
+  })
+
+  it('双指 touchmove 被 preventDefault（夺回 Safari 手势），单指不受影响', () => {
+    const { el, unmount } = mountPinchZoom()
+    const two = touchMoveEvent(2)
+    el.dispatchEvent(two)
+    expect(two.defaultPrevented).toBe(true)
+    const one = touchMoveEvent(1)
+    el.dispatchEvent(one)
+    expect(one.defaultPrevented).toBe(false)
+    unmount()
+  })
+
+  it('gesturestart 被 preventDefault（挡 iOS 原生页面缩放）', () => {
+    const { el, unmount } = mountPinchZoom()
+    const gesture = new Event('gesturestart', { bubbles: true, cancelable: true })
+    el.dispatchEvent(gesture)
+    expect(gesture.defaultPrevented).toBe(true)
+    unmount()
+  })
+})
 
 describe('pinchedZoom', () => {
   it('双指距离比例缩放', () => {

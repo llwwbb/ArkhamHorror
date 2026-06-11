@@ -45,12 +45,16 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
   const onPointerDown = (e: PointerEvent) => {
     if (e.pointerType !== 'touch') return
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointers.size === 1) {
+      // up/cancel 从第一指起就要监听：iOS Safari 在单指滚动开始时会对该指
+      // 发 pointercancel，若此时不清理，map 里残留幽灵坐标会毒化下次捏合基线
+      window.addEventListener('pointerup', onPointerEnd)
+      window.addEventListener('pointercancel', onPointerEnd)
+    }
     if (pointers.size === 2) {
       initialDistance = currentDistance()
       initialZoom = zoom.value || 1
       window.addEventListener('pointermove', onPointerMove)
-      window.addEventListener('pointerup', onPointerEnd)
-      window.addEventListener('pointercancel', onPointerEnd)
     }
   }
 
@@ -72,11 +76,23 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
     rafId ??= requestAnimationFrame(flushZoom)
   }
 
+  // iOS Safari 会把双指手势认领为滚动/原生缩放并对 pointer 发 pointercancel，
+  // touch-action 声明拦不住（Safari 怪癖）。唯一可靠的夺回方式是在非 passive
+  // 的 touchmove 里对 ≥2 指 preventDefault；单指滚动/拖拽不受影响。
+  const onTouchMove = (e: TouchEvent) => {
+    if (e.touches.length >= 2) e.preventDefault()
+  }
+
+  // iOS 私有手势事件，挡掉 Safari 的原生页面缩放
+  const preventGesture = (e: Event) => e.preventDefault()
+
   const onPointerEnd = (e: PointerEvent) => {
     pointers.delete(e.pointerId)
     if (pointers.size < 2) {
       initialDistance = 0
       window.removeEventListener('pointermove', onPointerMove)
+    }
+    if (pointers.size === 0) {
       window.removeEventListener('pointerup', onPointerEnd)
       window.removeEventListener('pointercancel', onPointerEnd)
     } else if (pointers.size === 2) {
@@ -99,11 +115,19 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, zoom: Ref<number>)
       // 保证解锁模式下双指捏合仍可触发。pinch 只读坐标，不调用 preventDefault/
       // stopPropagation，是安全的被动观察者，不影响拖拽逻辑。
       el.addEventListener('pointerdown', onPointerDown, { capture: true })
-      // wheel 需要 non-passive 才能 preventDefault 掉浏览器页面缩放
+      // wheel/touchmove 需要 non-passive 才能 preventDefault 掉浏览器默认手势
       el.addEventListener('wheel', onWheel, { passive: false })
+      el.addEventListener('touchmove', onTouchMove, { passive: false })
+      el.addEventListener('gesturestart', preventGesture)
+      el.addEventListener('gesturechange', preventGesture)
+      el.addEventListener('gestureend', preventGesture)
       onCleanup(() => {
         el.removeEventListener('pointerdown', onPointerDown, { capture: true })
         el.removeEventListener('wheel', onWheel)
+        el.removeEventListener('touchmove', onTouchMove)
+        el.removeEventListener('gesturestart', preventGesture)
+        el.removeEventListener('gesturechange', preventGesture)
+        el.removeEventListener('gestureend', preventGesture)
       })
     },
     { immediate: true },
