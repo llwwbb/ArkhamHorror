@@ -196,6 +196,19 @@ const title = computed(() => {
   background: rgba(0, 0, 0, 0.85);
   padding: 10px;
   padding-top: 6px;
+  /* 与 OverlayDrawer 同语言的底部面板观感 */
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.choice-dock::before {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 3px;
+  margin: 2px auto 8px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .choice-dock-title {
