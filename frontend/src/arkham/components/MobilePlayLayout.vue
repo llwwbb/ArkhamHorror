@@ -156,15 +156,25 @@ watch(
   () => [props.game, hasQuestion.value] as const,
   async () => {
     await nextTick()
-    // 技能检定期间手牌抽屉的 watch 优先，不做自动开/收
-    if (props.game.skillTest) return
+    // 技能检定期间：仍然扫描并刷新红点；但 hand 抽屉的自动开/收由 skillTest watch 专管，
+    // 此处跳过对 hand 的自动开/收（players 的自动开/收照常）。
+    const inSkillTest = !!props.game.skillTest
     const zones = scanActionableZones()
 
     // 刷新红点（抽屉已开时不亮）
     attention.players = zones.players && !playersOpen.value
     attention.hand = zones.hand && !handOpen.value
 
-    if (!hasQuestion.value || zones.elsewhere) return
+    if (!hasQuestion.value || zones.elsewhere) {
+      // 早退路径：若曾自动打开 hand 且 inSkillTest，跳过自动收（由 skillTest watch 负责）
+      if (autoOpened.value === 'hand' && inSkillTest) return
+      // 原有逻辑：条件消失时自动收起已自动打开的抽屉
+      if (autoOpened.value) {
+        drawers[autoOpened.value].value = false
+        autoOpened.value = null
+      }
+      return
+    }
 
     // 恰好一个抽屉区有可操作元素 → 自动打开
     const onlyPlayers = zones.players && !zones.hand
@@ -175,7 +185,8 @@ watch(
       playersOpen.value = true
       autoOpened.value = 'players'
       attention.players = false
-    } else if (onlyHand && !handOpen.value) {
+    } else if (onlyHand && !handOpen.value && !inSkillTest) {
+      // 技能检定期间不自动弹手牌抽屉（skillTest watch 专管）
       for (const d of Object.values(drawers)) d.value = false
       handOpen.value = true
       autoOpened.value = 'hand'
@@ -183,6 +194,8 @@ watch(
     } else if (autoOpened.value) {
       // 条件不再满足（两区同时有、或对应区消失、或 question 消失）→ 自动收起
       const wasOpen = autoOpened.value
+      // 技能检定期间不自动收 hand（skillTest watch 负责收）
+      if (wasOpen === 'hand' && inSkillTest) return
       const stillActive =
         (wasOpen === 'players' && zones.players) || (wasOpen === 'hand' && zones.hand)
       if (!stillActive) {
