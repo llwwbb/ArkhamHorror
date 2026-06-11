@@ -775,3 +775,225 @@ desiccatedFarmland =
   (location_ "85020" "Desiccated Farmland" [Oozified] TheBlobThatAteEverything)
     { cdEncounterSetQuantity = Just 2
     }
+
+streetsOfCairo :: CardDef
+streetsOfCairo =
+  singleSided
+    $ location "83008" "Streets of Cairo" [Cairo] Equals [Diamond, Triangle, Square, Trefoil] TheEternalSlumber
+
+cairoBazaar :: CardDef
+cairoBazaar =
+  singleSided
+    $ location "83009" "Cairo Bazaar" [Cairo] Square [Triangle, Equals, Trefoil] TheEternalSlumber
+
+museumOfEgyptianAntiquities :: CardDef
+museumOfEgyptianAntiquities =
+  singleSided
+    $ location
+      "83010"
+      "Museum of Egyptian Antiquities"
+      [Cairo]
+      Triangle
+      [Diamond, Equals, Square]
+      TheEternalSlumber
+
+outskirtsOfCairo :: CardDef
+outskirtsOfCairo =
+  singleSided
+    $ location
+      "83011"
+      "Outskirts of Cairo"
+      [Cairo]
+      Diamond
+      [Circle, Triangle, Equals, Trefoil]
+      TheEternalSlumber
+
+templeCourtyard :: CardDef
+templeCourtyard =
+  singleSided
+    $ location "83012" "Temple Courtyard" [Cairo] Trefoil [Diamond, Equals, Square] TheEternalSlumber
+
+aDreamBetwixt :: CardDef
+aDreamBetwixt =
+  otherSideIs "83022b"
+    $ location "83022a" "A Dream Betwixt" [Otherworld, Extradimensional] Equals [Square] TheNightsUsurper
+
+theGreatAbyss :: CardDef
+theGreatAbyss =
+  victory 1
+    $ otherSideIs "83023b"
+    $ location
+      "83023a"
+      "The Great Abyss"
+      [Otherworld, Dreamlands]
+      Square
+      [Equals, Triangle, Diamond, Circle]
+      TheNightsUsurper
+
+tunnelsUnderNgranek :: CardDef
+tunnelsUnderNgranek =
+  otherSideIs "83024b"
+    $ location "83024a" "Tunnels under Ngranek" [Otherworld, Dreamlands] Triangle [Square] TheNightsUsurper
+
+stairwayToSarkomand :: CardDef
+stairwayToSarkomand =
+  otherSideIs "83025b"
+    $ location "83025a" "Stairway to Sarkomand" [Otherworld, Dreamlands] Diamond [Square] TheNightsUsurper
+
+mistFilledCaverns :: CardDef
+mistFilledCaverns =
+  otherSideIs "83026b"
+    $ location "83026a" "Mist-Filled Caverns" [Otherworld, Dreamlands] Circle [Square] TheNightsUsurper
+
+eldritchGate :: CardDef
+eldritchGate =
+  singleSided
+    $ location "83028" "Eldritch Gate" [Expedition, Desert, Ruins] Squiggle [Hourglass, T, Heart] TheNightsUsurper
+
+expeditionCampGuardiansOfTheAbyss :: CardDef
+expeditionCampGuardiansOfTheAbyss =
+  singleSided
+    $ location
+      "83037"
+      "Expedition Camp"
+      [Expedition, Cairo, Desert]
+      Circle
+      [Diamond, Hourglass, Moon, Plus]
+      SandsOfEgypt
+
+nileRiver :: CardDef
+nileRiver =
+  singleSided
+    $ location "83038" "Nile River" [Expedition, Desert] Moon [Circle, Star, Heart, Hourglass] SandsOfEgypt
+
+sandsOfDashur :: CardDef
+sandsOfDashur =
+  singleSided
+    $ location
+      "83039"
+      "Sands of Dashur"
+      [Expedition, Desert]
+      Hourglass
+      [Circle, Plus, T, Squiggle, Heart, Moon]
+      SandsOfEgypt
+
+dunesOfTheSahara :: CardDef
+dunesOfTheSahara =
+  singleSided
+    $ location
+      "83040"
+      "Dunes of the Sahara"
+      [Expedition, Desert]
+      Plus
+      [Circle, Hourglass, T, Droplet]
+      SandsOfEgypt
+
+untouchedVault :: CardDef
+untouchedVault =
+  singleSided
+    $ location "83041" "Untouched Vault" [Expedition, Ruins] Droplet [Plus, T] SandsOfEgypt
+
+facelessSphinx :: CardDef
+facelessSphinx =
+  singleSided
+    $ location "83042" "Faceless Sphinx" [Expedition, Desert, Ruins] Star [Moon, Heart] SandsOfEgypt
+
+desertOasis :: CardDef
+desertOasis =
+  singleSided
+    $ location "83043" "Desert Oasis" [Expedition, Desert] Heart [Star, Moon, Hourglass, Squiggle] SandsOfEgypt
+
+sandsweptRuins :: CardDef
+sandsweptRuins =
+  singleSided
+    $ location
+      "83044"
+      "Sandswept Ruins"
+      [Expedition, Desert, Ruins]
+      T
+      [Droplet, Plus, Hourglass, Squiggle]
+      SandsOfEgypt
+
+arkham :: CardDef
+arkham =
+  location
+    "86014"
+    "Arkham"
+    [RitualSite, Town]
+    Triangle
+    [Star, Hourglass, Circle]
+    WarOfTheOuterGods
+
+streetsOfProvidence :: CardDef
+streetsOfProvidence =
+  victory 1
+    $ location
+      "86015"
+      "Streets of Providence"
+      [Providence]
+      Star
+      [Triangle, T, Droplet]
+      WarOfTheOuterGods
+
+athenaeumOfTheEmptySky :: CardDef
+athenaeumOfTheEmptySky =
+  location
+    "86016"
+    "Athenaeum of the Empty Sky"
+    [RitualSite, Providence]
+    Droplet
+    [Star, T]
+    WarOfTheOuterGods
+
+theArcade :: CardDef
+theArcade = location "86017" "The Arcade" [Providence] T [Star, Droplet] WarOfTheOuterGods
+
+streetsOfMontreal :: CardDef
+streetsOfMontreal =
+  victory 1
+    $ location
+      "86018"
+      "Streets of Montréal"
+      [Montreal]
+      Hourglass
+      [Triangle, Equals, Heart]
+      WarOfTheOuterGods
+
+chateauRamezay :: CardDef
+chateauRamezay =
+  location "86019" "Chateau Ramezay" [Montreal] Equals [Hourglass, Heart] WarOfTheOuterGods
+
+shrineOfMaghanArkat :: CardDef
+shrineOfMaghanArkat =
+  location
+    "86020"
+    "Shrine of Magh'an Ark'at"
+    [RitualSite, Montreal]
+    Heart
+    [Hourglass, Equals]
+    WarOfTheOuterGods
+
+streetsOfNewYorkCity :: CardDef
+streetsOfNewYorkCity =
+  victory 1
+    $ location
+      "86021"
+      "Streets of New York City"
+      [NewYorkCity]
+      Circle
+      [Triangle, Moon, Spade]
+      WarOfTheOuterGods
+
+theBurningPit :: CardDef
+theBurningPit =
+  location "86022" "The Burning Pit" [RitualSite, NewYorkCity] Moon [Circle, Spade] WarOfTheOuterGods
+
+thePenthouse :: CardDef
+thePenthouse =
+  location "86023" "The Penthouse" [NewYorkCity] Spade [Circle, Moon] WarOfTheOuterGods
+
+hubDimension :: CardDef
+hubDimension =
+  (location "86024" "Hub Dimension" [Portal] NoSymbol [] WarOfTheOuterGods)
+    { cdRevealedName = Just ("Hub Dimension" <:> "Gateway to Destruction")
+    }

@@ -213,4 +213,11 @@ allStories =
     , SomeStoryCard recoverTheSample
     , SomeStoryCard driveOffTheMiGo
     , SomeStoryCard defuseTheExplosives
+    , -- Guardians of the Abyss
+      SomeStoryCard toTheDreamlands
+    , SomeStoryCard fateOfTheDreamers
+    , SomeStoryCard prisonersOfConquest
+    , SomeStoryCard ruinsOfSarkomand
+    , SomeStoryCard effigyOfNodens
+    , SomeStoryCard usurpTheNight
     ]

@@ -442,6 +442,18 @@ allActs =
       SomeActCard theCarnevaleConspiracy
     , SomeActCard getToTheBoats
     , SomeActCard row
+    , -- The Eternal Slumber
+      SomeActCard curseOfEndlessSleep
+    , SomeActCard secretsInTheSand
+    , SomeActCard theHourOfJudgment
+    , -- The Night's Usurper
+      SomeActCard searchForTheGate
+    , SomeActCard intoTheGate
+    , SomeActCard theNightsUsurper
+    , -- War of the Outer Gods
+      SomeActCard warOfTheOuterGods
+    , SomeActCard closeThePortal
+    , SomeActCard closeAllPortals
     , -- Murder at the Excelsior Hotel
       SomeActCard whatHappened
     , SomeActCard followingLeads

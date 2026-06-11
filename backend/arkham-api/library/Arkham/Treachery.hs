@@ -870,6 +870,15 @@ allTreacheries =
       , SomeTreacheryCard mesmerize
       , SomeTreacheryCard abduction
       , SomeTreacheryCard acridMiasma
+      , --- Sands of Egypt
+        SomeTreacheryCard eclipse
+      , SomeTreacheryCard sandstorm
+      , SomeTreacheryCard terrorUnderThePyramids
+      , SomeTreacheryCard swarmOfLocusts
+      , SomeTreacheryCard slumber
+      , SomeTreacheryCard darkSacrifice
+      , SomeTreacheryCard theBlackWind
+      , SomeTreacheryCard abyssalReach
       , --- Murder at the Excelsior Hotel
         SomeTreacheryCard whatHaveYouDone
       , SomeTreacheryCard noxiousFumes
@@ -1018,4 +1027,17 @@ allTreacheries =
       , SomeTreacheryCard replication
       , SomeTreacheryCard itsGotMe
       , SomeTreacheryCard alienFoodChain
+      , -- War of the Outer Gods
+        SomeTreacheryCard deathAndDecay
+      , SomeTreacheryCard predatorsCall
+      , SomeTreacheryCard feastOfLocusts
+      , SomeTreacheryCard hellfireWarOfTheOuterGods
+      , SomeTreacheryCard ravagesOfWar
+      , SomeTreacheryCard whileTheySleep
+      , -- Death of Stars
+        SomeTreacheryCard inevitableEnd
+      , -- Children of Paradise
+        SomeTreacheryCard huntDown
+      , -- Swarm of Assimilation
+        SomeTreacheryCard transmogrify
       ]

@@ -1421,6 +1421,19 @@ allAssets =
       , SomeAssetCard medicoDellaPeste
       , SomeAssetCard pantalone
       , SomeAssetCard gildedVolto
+      , -- Guardians of the Abyss
+        --- Abyssal Tribute
+        SomeAssetCard johnAndJessieBurke
+      , SomeAssetCard ancientAnkh
+      , --- Abyssal Gifts
+        SomeAssetCard khopeshOfTheAbyss
+      , SomeAssetCard summonedNightgaunt
+      , -- War of the Outer Gods
+        SomeAssetCard cloakOfTheOuterRealm
+      , SomeAssetCard pocketPortal
+      , SomeAssetCard dreadedEnd
+      , SomeAssetCard bladeOfArkat
+      , SomeAssetCard enchantedSkull
       , -- Murder at the Excelsior Hotel
         --- story [hotel]
         SomeAssetCard bloodstainedDagger

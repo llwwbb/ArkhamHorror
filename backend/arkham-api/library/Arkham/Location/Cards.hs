@@ -40,6 +40,7 @@ allLocationCards =
       , administrationBuilding
       , administrationOffice_130
       , administrationOffice_131
+      , aDreamBetwixt
       , airfield
       , akwan
       , alaskanWilds
@@ -151,6 +152,18 @@ allLocationCards =
       , burnedRuins_205
       , cafeLunaBastionOfRemembrance
       , cafeLunaCoterieHaunt
+      , cairoBazaar
+      , arkham
+      , streetsOfProvidence
+      , athenaeumOfTheEmptySky
+      , theArcade
+      , streetsOfMontreal
+      , chateauRamezay
+      , shrineOfMaghanArkat
+      , streetsOfNewYorkCity
+      , theBurningPit
+      , thePenthouse
+      , hubDimension
       , canalSaintMartin
       , canalSide
       , canalsOfTenochtitlan_180
@@ -267,6 +280,7 @@ allLocationCards =
       , depthsOfDemheTheHeightOfTheDepths
       , descentToYoth
       , desertedStation
+      , desertOasis
       , desolateCoastline
       , desolateRoad_a
       , desolateRoad_b
@@ -295,6 +309,7 @@ allLocationCards =
       , dressingRoom
       , drKenslersOffice
       , dryBurrow
+      , dunesOfTheSahara
       , dunwichVillage_242
       , dunwichVillage_243
       , dyersClassroom
@@ -304,6 +319,7 @@ allLocationCards =
       , easttownArkhamPoliceStation
       , eerieGlade
       , elderChamber
+      , eldritchGate
       , elMalecon
       , emergencyRoom
       , enchantedWoodsFungalForest
@@ -333,8 +349,10 @@ allLocationCards =
       , exhibitHallRestrictedHall
       , exhibitHallTheArchives
       , expeditionCamp
+      , expeditionCampGuardiansOfTheAbyss
       , experimentalTherapiesWard
       , eztliExhibit
+      , facelessSphinx
       , facultyOfficesTheHourIsLate
       , facultyOfficesTheNightIsStillYoung
       , fairbanks
@@ -396,7 +414,7 @@ allLocationCards =
       , gilmanHouse
       , gilmanHouseInTooDeep
       , glacialGrotto
-      , glimmeringMeadow
+      , glimmeringWoods
       , gondola
       , gothicSet
       , grandBazaarBusyWalkway
@@ -582,6 +600,7 @@ allLocationCards =
       , miskatonicRiver
       , miskatonicUniversity
       , miskatonicUniversityMiskatonicMuseum
+      , mistFilledCaverns
       , mistPylon_174
       , mistPylon_175
       , mistPylon_176
@@ -609,6 +628,7 @@ allLocationCards =
       , muddyFen
       , museumEntrance
       , museumHalls
+      , museumOfEgyptianAntiquities
       , mushroomGrove
       , mysteriousStairs_183
       , mysteriousStairs_184
@@ -623,6 +643,7 @@ allLocationCards =
       , newChurchGreenInTooDeep
       , nexusOfNKai
       , nightmareBreach
+      , nileRiver
       , northside
       , northsideTrainStation
       , northTower_287
@@ -658,6 +679,7 @@ allLocationCards =
       , outerWall_286
       , outsidersLair
       , outsidersLairWithoutATrace
+      , outskirtsOfCairo
       , overgrownCairns
       , overgrownRuins
       , overgrownTunnel
@@ -797,6 +819,8 @@ allLocationCards =
       , saltMarshes
       , sanctumDoorwayCeremonyRoom
       , sanctumDoorwayHoldingCells
+      , sandsOfDashur
+      , sandsweptRuins
       , sanMarcoBasilica
       , sarnath
       , sawboneAlley
@@ -853,6 +877,7 @@ allLocationCards =
       , spaceSet
       , staffAccessHallway
       , stageOfTheWardTheatre
+      , stairwayToSarkomand
       , stairwell
       , standingStones
       , statuesInTheDeep
@@ -864,6 +889,7 @@ allLocationCards =
       , stoneArchways
       , stoneBridge
       , strangeGeometry
+      , streetsOfCairo
       , streetsOfVenice
       , studentUnion
       , study
@@ -892,6 +918,7 @@ allLocationCards =
       , tearThroughTime
       , teatroColon
       , teetawnPassage
+      , templeCourtyard
       , templeOfRlyeh
       , templeOfTheElderThings
       , templeOfTheFang
@@ -937,6 +964,7 @@ allLocationCards =
       , theGateOfYquaa
       , theGateToHell
       , theGeistTrap
+      , theGreatAbyss
       , theGreatWebCosmicWeb
       , theGreatWebPrisonOfCocoons
       , theGreatWebTangledWeb
@@ -996,6 +1024,7 @@ allLocationCards =
       , treacherousPath
       , trophyRoom
       , trophyRoomSpectral
+      , tunnelsUnderNgranek
       , twilightAbyss
       , twistedUnderbrush
       , ulthar
@@ -1010,6 +1039,7 @@ allLocationCards =
       , universityHalls
       , unmarkedTomb
       , unstableVortex
+      , untouchedVault
       , unvisitedIsleDecayedWillow
       , unvisitedIsleForsakenWoods
       , unvisitedIsleHauntedSpring

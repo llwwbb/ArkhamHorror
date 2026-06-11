@@ -624,6 +624,7 @@ runGameMessage msg g = case msg of
     let
       -- isMovement = abilityIs ability #move
       isInvestigate = abilityIs ability #investigate
+      isExplore = abilityIs ability #explore
       isResign = abilityIs ability #resign
 
     doDelayAdditionalCosts <- case abilityDelayAdditionalCosts ability of
@@ -638,6 +639,15 @@ runGameMessage msg g = case msg of
             Just lid -> do
               mods' <- getModifiers lid
               pure [c | AdditionalCostToInvestigate c <- mods']
+            _ -> pure []
+        else pure []
+    exploreCosts <-
+      if isExplore && not doDelayAdditionalCosts
+        then do
+          getMaybeLocation iid >>= \case
+            Just lid -> do
+              mods' <- getModifiers lid
+              pure [c | AdditionalCostToExplore c <- mods']
             _ -> pure []
         else pure []
     resignCosts <-
@@ -677,7 +687,7 @@ runGameMessage msg g = case msg of
               fixEnemy
                 $ mconcat
                   ( costF (abilityCost ability)
-                      : additionalCosts ++ investigateCosts ++ resignCosts ++ [ActionCost 0]
+                      : additionalCosts ++ investigateCosts ++ exploreCosts ++ resignCosts ++ [ActionCost 0]
                   )
           , activeCostPayments = Cost.NoPayment
           , activeCostTarget = ForAbility ability
@@ -1951,6 +1961,9 @@ runGameMessage msg g = case msg of
                       prey <- select m
                       matches eid (#ready <> not_ (EnemyAt $ LocationWithInvestigator $ mapOneOf InvestigatorWithId prey))
                     _ -> matches eid (#ready <> #unengaged <> not_ (EnemyAt $ LocationWithInvestigator Anyone))
+                -- War of the Outer Gods: warring enemies move during this
+                -- step and are batched with hunters
+                Keyword.ScenarioKeyword "Warring" -> matches eid (ReadyEnemy <> UnengagedEnemy)
                 _ -> pure False
               pure (target, msgs)
           FailSkillTestGroup -> pure targetMap
@@ -2012,6 +2025,9 @@ runGameMessage msg g = case msg of
     let
       toUI msg' = case msg' of
         EnemyAttack details -> targetLabel (attackEnemy details) [msg']
+        -- scenario-specific attacks (e.g. warring) carry the attacking
+        -- enemy's id as their payload
+        ScenarioSpecific _ v | Just eid <- maybeResult @EnemyId v -> targetLabel eid [msg']
         _ -> error "unhandled"
       attackedInvestigator = \case
         EnemyAttack details -> details.investigator
@@ -2019,6 +2035,7 @@ runGameMessage msg g = case msg of
       attackingEnemies = nub $ mapMaybe attackingEnemy as
       attackingEnemy = \case
         EnemyAttack details -> Just details.enemy
+        ScenarioSpecific _ v -> maybeResult @EnemyId v
         _ -> Nothing
     case mNextMessage of
       Just (EnemyAttacks as2) -> do
@@ -2670,7 +2687,13 @@ runGameMessage msg g = case msg of
               player
               [ targetLabel
                   (toCardId card)
-                  [StoryMessage (ResolveStory iid storyMode storyId), StoryMessage (ResolvedStory storyMode storyId)]
+                  [ StoryMessage (ResolveStory iid storyMode storyId)
+                  , -- If resolving the story kicks off a skill test while another
+                    -- test is active, the new test is relocated to after the current
+                    -- one. ResolvedStory (which removes the story) must travel with
+                    -- it, or the story is removed before its own test resolves.
+                    MoveWithSkillTest (StoryMessage (ResolvedStory storyMode storyId))
+                  ]
               ]
           ]
       _ ->
@@ -2679,7 +2702,9 @@ runGameMessage msg g = case msg of
             player
             [ targetLabel
                 (toTarget storyId)
-                [StoryMessage (ResolveStory iid storyMode storyId), StoryMessage (ResolvedStory storyMode storyId)]
+                [ StoryMessage (ResolveStory iid storyMode storyId)
+                , MoveWithSkillTest (StoryMessage (ResolvedStory storyMode storyId))
+                ]
             ]
     pure $ g & entitiesL . storiesL . at storyId ?~ story'
   StoryMessage (PlaceStory card placement) -> do

@@ -955,7 +955,7 @@ allLocations =
     , SomeLocationCard coveredBridge
     , SomeLocationCard openWater10599b
     , --- The Twisted Hollow
-      SomeLocationCard glimmeringMeadow
+      SomeLocationCard glimmeringWoods
     , SomeLocationCard blightedGlade
     , SomeLocationCard poisonedMarsh
     , SomeLocationCard fecundThicket
@@ -1187,6 +1187,28 @@ allLocations =
     , SomeLocationCard floodedSquare
     , SomeLocationCard accademiaBridge
     , SomeLocationCard theGuardian
+    , -- The Eternal Slumber
+      SomeLocationCard streetsOfCairo
+    , SomeLocationCard cairoBazaar
+    , SomeLocationCard museumOfEgyptianAntiquities
+    , SomeLocationCard outskirtsOfCairo
+    , SomeLocationCard templeCourtyard
+    , -- The Night's Usurper
+      SomeLocationCard aDreamBetwixt
+    , SomeLocationCard theGreatAbyss
+    , SomeLocationCard tunnelsUnderNgranek
+    , SomeLocationCard stairwayToSarkomand
+    , SomeLocationCard mistFilledCaverns
+    , SomeLocationCard eldritchGate
+    , -- Sands of Egypt
+      SomeLocationCard expeditionCampGuardiansOfTheAbyss
+    , SomeLocationCard nileRiver
+    , SomeLocationCard sandsOfDashur
+    , SomeLocationCard dunesOfTheSahara
+    , SomeLocationCard untouchedVault
+    , SomeLocationCard facelessSphinx
+    , SomeLocationCard desertOasis
+    , SomeLocationCard sandsweptRuins
     , -- Murder at the Excelsior Hotel
       SomeLocationCard room225
     , SomeLocationCard suiteBalcony
@@ -1294,4 +1316,16 @@ allLocations =
     , SomeLocationCard oozyLakebed
     , SomeLocationCard slimyStreets
     , SomeLocationCard desiccatedFarmland
+    , -- War of the Outer Gods
+      SomeLocationCard arkham
+    , SomeLocationCard streetsOfProvidence
+    , SomeLocationCard athenaeumOfTheEmptySky
+    , SomeLocationCard theArcade
+    , SomeLocationCard streetsOfMontreal
+    , SomeLocationCard chateauRamezay
+    , SomeLocationCard shrineOfMaghanArkat
+    , SomeLocationCard streetsOfNewYorkCity
+    , SomeLocationCard theBurningPit
+    , SomeLocationCard thePenthouse
+    , SomeLocationCard hubDimension
     ]

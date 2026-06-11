@@ -65,6 +65,7 @@ allAgendaCards =
       , collidingRealities
       , confluxOfConsequence
       , crossroadsOfFate
+      , curseOfTheAbyss
       , dangerousRide
       , darknessClosesIn
       , darkClouds
@@ -99,6 +100,7 @@ allAgendaCards =
       , forbiddenPeaks
       , franticPursuit
       , furyThatShakesTheEarth
+      , gardenOfShadows
       , gnashingTeeth
       , growingSuspicion
       , hallsOfStMarys
@@ -115,6 +117,19 @@ allAgendaCards =
       , intoTheWhite
       , intruders
       , itAwaits
+      , jessiesRequest
+      , theSummoningOfSilenus
+      , theSummoningProgresses
+      , theSummoningNearsCompletion
+      , theIncubationOfTheEgg
+      , theIncubationProgresses
+      , theIncubationNearsCompletion
+      , theProliferationOfTheSwarm
+      , theProliferationProgresses
+      , theProliferationNearsCompletion
+      , silenusDescends
+      , theEggHatches
+      , ezelZenRezlEmerges
       , journeyAcrossTheDreamlands
       , journeyThroughTheGates
       , judgementXX
@@ -158,6 +173,7 @@ allAgendaCards =
       , runningOutOfTime
       , runningRed
       , sacrificeForTheDeep
+      , schemesInTheDarkBeyond
       , secretsBetterLeftHidden
       , secretsOfTheSeaV1
       , secretsOfTheSeaV2
@@ -184,6 +200,7 @@ allAgendaCards =
       , theBeatingHeart
       , theBoundaryBroken
       , theBridgeOfWebs
+      , theBrotherhoodBidesTheirTime
       , theChariotVII
       , theChase
       , theChaseIsOnV1

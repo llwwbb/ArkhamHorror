@@ -139,13 +139,13 @@ libraryHemlockHouse40 =
 parlorHemlockHouse :: CardDef
 parlorHemlockHouse =
   otherSideIs "10541b"
-    $ victory 0
+    $ victory 1
     $ location_ "10541" "Parlor" [Room, Dormant] HemlockHouse
 
 diningRoomHemlockHouse :: CardDef
 diningRoomHemlockHouse =
   otherSideIs "10542b"
-    $ victory 0
+    $ victory 1
     $ location_ "10542" "Dining Room" [Room, Dormant] HemlockHouse
 
 foyerHemlockHouse :: CardDef
@@ -207,13 +207,13 @@ fungalCave =
   victory 1
     $ locationWithUnrevealed_ "10582" "Cavern" [Cave] "Fungal Cave" [Cave, Lair, Dark] TheLostSister
 
-glimmeringMeadow :: CardDef
-glimmeringMeadow =
+glimmeringWoods :: CardDef
+glimmeringWoods =
   locationWithUnrevealed_
     "10612"
     "Western Woods"
     [Forest, Dark]
-    "Glimmering Meadow"
+    "Glimmering Woods"
     [Forest, Dark]
     TheTwistedHollow
 
@@ -526,7 +526,7 @@ iridescentPassage =
     "Cavern"
     [Cave, Dark]
     "Iridescent Passage"
-    [Cave, Dark]
+    [Cave]
     HorrorsInTheRock
 
 overgrownTunnel :: CardDef

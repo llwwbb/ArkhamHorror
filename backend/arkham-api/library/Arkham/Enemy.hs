@@ -744,6 +744,45 @@ allEnemies =
       , SomeEnemyCard poleman
       , SomeEnemyCard carnevaleSentinel
       , SomeEnemyCard writhingAppendage
+      , -- The Eternal Slumber
+        SomeEnemyCard neith
+      , SomeEnemyCard humbleSupplicant
+      , SomeEnemyCard creatureFromTheAbyss
+      , -- The Night's Usurper
+        SomeEnemyCard xzharah
+      , SomeEnemyCard dreadedShantak
+      , SomeEnemyCard speakerForTheDarkPharaoh
+      , -- Brotherhood of the Beast
+        SomeEnemyCard drLaylaElMasri
+      , SomeEnemyCard drWentworthMoore
+      , SomeEnemyCard nadiaNimr
+      , SomeEnemyCard farid
+      , SomeEnemyCard nassor
+      , SomeEnemyCard professorNathanielTaylor
+      , -- Sands of Egypt
+        SomeEnemyCard abyssalRevenant
+      , SomeEnemyCard thingInTheSarcophagus
+      , -- War of the Outer Gods
+        SomeEnemyCard nihilisticStargazer
+      , SomeEnemyCard zealotOfParadise
+      , SomeEnemyCard discipleOfTheSwarm
+      , SomeEnemyCard etherealEntityWarOfTheOuterGods
+      , SomeEnemyCard bringerOfParadiseWarOfTheOuterGods
+      , SomeEnemyCard trylogogWarOfTheOuterGods
+      , -- Death of Stars
+        SomeEnemyCard silenus
+      , SomeEnemyCard theInescapableMaw
+      , SomeEnemyCard huneStitchedHerald
+      , SomeEnemyCard etherealEntity
+      , -- Children of Paradise
+        SomeEnemyCard maghanArkat
+      , SomeEnemyCard vileBroodmaster
+      , SomeEnemyCard horrificShoggoth
+      , SomeEnemyCard bringerOfParadise
+      , -- Swarm of Assimilation
+        SomeEnemyCard ezelZenRezl
+      , SomeEnemyCard droningHorde
+      , SomeEnemyCard trylogog
       , -- Murder at the Excelsior Hotel
         SomeEnemyCard arkhamOfficer
       , SomeEnemyCard mrTrombly
