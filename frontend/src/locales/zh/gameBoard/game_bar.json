@@ -44,5 +44,10 @@
     "bugSubmittingContent": "当这个过程完成后，将在一个新窗口中打开GitHub，同时你可以继续游戏。",
     "bugSubmittingFail": "错误报告提交失败",
 
-    "toggleSidebar": "展开/收起侧边栏"
+    "toggleSidebar": "展开/收起侧边栏",
+
+    "rotateLayout": "旋转地点布局",
+
+    "yourTurnTitle": "轮到你了",
+    "yourTurnBody": "你有待处理的选择，回到游戏继续吧。"
 }

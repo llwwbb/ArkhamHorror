@@ -57,5 +57,8 @@
 
     "toggleSidebar": "Toggle Sidebar",
 
-    "rotateLayout": "Rotate Location Layout"
+    "rotateLayout": "Rotate Location Layout",
+
+    "yourTurnTitle": "Your Turn",
+    "yourTurnBody": "You have pending choices waiting in the game."
 }
