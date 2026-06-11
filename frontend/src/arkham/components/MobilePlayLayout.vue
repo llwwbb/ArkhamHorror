@@ -405,7 +405,10 @@ function runMenuItem(action: () => void) {
   flex: 1;
   min-height: 0;
   display: flex;
-  overflow: hidden;
+  /* 战局中 Scenario 自身 height:100% 不溢出（地图滚动由内部 scroller 管）；
+     整页内容（选补给/选牌组/战役间章等）超高时由这里纵向滚动。 */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .mobile-nav {
