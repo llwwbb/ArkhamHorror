@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 // 手机 shell（spec §4）：全屏地图为底，顶部 阶段条+撤销+汉堡，底部导航，统一浮层。
 // 逻辑（socket/undo/modals）全在 Game.vue，这里只做 chrome 与编排。
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Bars3Icon,
@@ -76,12 +76,12 @@ function toggleDrawer(name: DrawerName) {
   const next = !drawers[name].value
   for (const d of Object.values(drawers)) d.value = false
   drawers[name].value = next
-  autoOpenedPlayers.value = false
+  autoOpened.value = null
 }
 function closeAllDrawers() {
   for (const d of Object.values(drawers)) d.value = false
   menuOpen.value = false
-  autoOpenedPlayers.value = false
+  autoOpened.value = null
 }
 
 const inPlay = computed(() => props.game.gameState.tag === 'IsActive' && props.game.scenario !== null)
@@ -108,19 +108,22 @@ watch(
   },
 )
 
-// 角色抽屉自动联动：可操作元素只在角色区时自动打开，自动打开的在无可操作时自动收起。
+// 抽屉自动联动：可操作元素只在单一区域时自动打开对应抽屉，离开时自动收起。
 // DOM 探测（与 touchTapIntercept 的类约定一致）：keep-mounted 抽屉关闭时内容仍挂载
 // （v-show），querySelector 可达，无需解析 Question 模型。
 const ACTIONABLE = '[class*="--can-interact"], [class*="--can-progress"], .can-interact'
 
-const autoOpenedPlayers = ref(false)
-const playersAttention = ref(false)
+// autoOpened: 当前由自动逻辑打开的抽屉名，null 表示未自动打开任何抽屉。
+const autoOpened = ref<'hand' | 'players' | null>(null)
+// attention: 各 tab 的红点——区内有可操作元素但对应抽屉未开。
+const attention = reactive({ hand: false, players: false })
 
 function scanActionableZones() {
   const all = [...document.querySelectorAll<HTMLElement>(ACTIONABLE)]
   const inPlayers = all.some((el) => el.closest('#player-zone'))
+  const inHand = all.some((el) => el.closest('.mobile-hand'))
   const elsewhere = all.some((el) => !el.closest('#player-zone') && !el.closest('.mobile-hand'))
-  return { players: inPlayers, elsewhere }
+  return { players: inPlayers, hand: inHand, elsewhere }
 }
 
 watch(
@@ -130,19 +133,36 @@ watch(
     // 技能检定期间手牌抽屉的 watch 优先，不做自动开/收
     if (props.game.skillTest) return
     const zones = scanActionableZones()
-    playersAttention.value = zones.players && !playersOpen.value
-    if (hasQuestion.value && zones.players && !zones.elsewhere && !playersOpen.value) {
+
+    // 刷新红点（抽屉已开时不亮）
+    attention.players = zones.players && !playersOpen.value
+    attention.hand = zones.hand && !handOpen.value
+
+    if (!hasQuestion.value || zones.elsewhere) return
+
+    // 恰好一个抽屉区有可操作元素 → 自动打开
+    const onlyPlayers = zones.players && !zones.hand
+    const onlyHand = zones.hand && !zones.players
+
+    if (onlyPlayers && !playersOpen.value) {
       for (const d of Object.values(drawers)) d.value = false
       playersOpen.value = true
-      autoOpenedPlayers.value = true
-      playersAttention.value = false
-    } else if (
-      autoOpenedPlayers.value &&
-      playersOpen.value &&
-      (!zones.players || !hasQuestion.value)
-    ) {
-      playersOpen.value = false
-      autoOpenedPlayers.value = false
+      autoOpened.value = 'players'
+      attention.players = false
+    } else if (onlyHand && !handOpen.value) {
+      for (const d of Object.values(drawers)) d.value = false
+      handOpen.value = true
+      autoOpened.value = 'hand'
+      attention.hand = false
+    } else if (autoOpened.value) {
+      // 条件不再满足（两区同时有、或对应区消失、或 question 消失）→ 自动收起
+      const wasOpen = autoOpened.value
+      const stillActive =
+        (wasOpen === 'players' && zones.players) || (wasOpen === 'hand' && zones.hand)
+      if (!stillActive) {
+        drawers[wasOpen].value = false
+        autoOpened.value = null
+      }
     }
   },
   { flush: 'post' },
@@ -151,8 +171,12 @@ watch(
 // 手动关闭路径兜底（Scenario 内抽屉 @close 直接置 false，不经 toggleDrawer）：
 // 关闭即清自动标志；开合后刷新指示点，避免抽屉打开时灯还亮着。
 watch(playersOpen, (open) => {
-  if (!open) autoOpenedPlayers.value = false
-  playersAttention.value = !open && scanActionableZones().players
+  if (!open && autoOpened.value === 'players') autoOpened.value = null
+  attention.players = !open && scanActionableZones().players
+})
+watch(handOpen, (open) => {
+  if (!open && autoOpened.value === 'hand') autoOpened.value = null
+  attention.hand = !open && scanActionableZones().hand
 })
 
 function runMenuItem(action: () => void) {
@@ -213,10 +237,11 @@ function runMenuItem(action: () => void) {
         @click="toggleDrawer('hand')"
       >
         <HandRaisedIcon aria-hidden="true" />{{ $t('mobileShell.hand') }}
+        <span v-if="attention.hand" class="nav-dot" aria-hidden="true"></span>
       </button>
       <button type="button" :class="{ active: playersOpen }" @click="toggleDrawer('players')">
         <UserGroupIcon aria-hidden="true" />{{ $t('mobileShell.players') }}
-        <span v-if="playersAttention" class="nav-dot" aria-hidden="true"></span>
+        <span v-if="attention.players" class="nav-dot" aria-hidden="true"></span>
       </button>
       <button type="button" :class="{ active: logOpen }" @click="toggleDrawer('log')">
         <DocumentTextIcon aria-hidden="true" />{{ $t('mobileShell.log') }}
