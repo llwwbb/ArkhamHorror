@@ -7,5 +7,6 @@ import scenario from '@/locales/zh/gameBoard/scenario.json'
 import card from '@/locales/zh/gameBoard/card.json'
 import upgrade from '@/locales/zh/gameBoard/upgrade.json'
 import create from '@/locales/zh/gameBoard/create.json'
+import mobileShell from '@/locales/zh/gameBoard/mobile_shell.json'
 
-export default {...base, phase, skillTest, gameBar, investigator, scenario, card, upgrade, create}
+export default {...base, phase, skillTest, gameBar, investigator, scenario, card, upgrade, create, mobileShell}
