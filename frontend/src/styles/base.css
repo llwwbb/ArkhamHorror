@@ -7,7 +7,10 @@ body {
   margin: 0;
   padding: 0;
   color: #222;
+  /* 移动端 100vh 按地址栏收起后的大视口算，会把文档撑得比可见视口高
+     （页面可滚、底部露出空白条）；dvh 跟随当前可见视口，老浏览器回退 vh */
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--background);
   font-size: min(16px, 2vw);
   @media (max-width: 800px) and (orientation: portrait) {
@@ -21,6 +24,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
