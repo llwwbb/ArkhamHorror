@@ -66,18 +66,18 @@ const emit = defineEmits<{ close: [] }>()
   overscroll-behavior: contain;
 }
 
+/* 不留 safe-area-inset-bottom padding：内容延伸到屏幕底，手势条半透明悬浮其上，
+   留 padding 会在内容下露出一条空白带（底部 nav 不同——其背景填满 padding 区） */
 .overlay-drawer--bottom {
   width: 100%;
   max-height: 85dvh;
   border-radius: 12px 12px 0 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .overlay-drawer--right {
   height: 100dvh;
   width: min(85vw, 360px);
   box-shadow: -2px 0 16px rgba(0, 0, 0, 0.45);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .overlay-drawer-enter-active,
