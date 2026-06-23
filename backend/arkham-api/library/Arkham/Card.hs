@@ -257,6 +257,7 @@ cardMatch a (toCardMatcher -> cardMatcher) = case cardMatcher of
   CardWithClass role -> role `member` cdClassSymbols (toCardDef a)
   CardWithLevel n -> Just n == (toCard a).level
   CardWithMaxLevel n -> maybe False (<= n) $ (toCard a).level
+  CardWithMaxPrintedHealth n -> maybe False (<= n) (cdHealth (toCardDef a) >>= fixedHealth)
   FastCard -> isJust $ cdFastWindow (toCardDef a)
   CardMatches ms -> all (cardMatch a) ms
   CardWithVengeance -> isJust . cdVengeancePoints $ toCardDef a
@@ -347,9 +348,9 @@ setFacedown b card = do
   pure result
  where
   go = \case
+    PlayerCard pc -> PlayerCard pc {pcFacedown = Just b}
     EncounterCard ec -> EncounterCard ec {ecFacedown = Just b}
     VengeanceCard vc -> VengeanceCard (go vc)
-    other -> other
 
 data Card
   = PlayerCard PlayerCard

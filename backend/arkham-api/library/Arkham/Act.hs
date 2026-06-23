@@ -493,4 +493,57 @@ allActs =
     , SomeActCard blackwatersBane
     , SomeActCard exposeTheAnomalyEpicMultiplayer
     , SomeActCard blackwatersBaneEpicMultiplayer
+    , -- The Labyrinths of Lunacy
+      SomeActCard sealedInGroupA
+    , SomeActCard wateryGraveGroupB
+    , SomeActCard theLeversGroupC
+    , SomeActCard distortionsInTimeGroupA
+    , SomeActCard seepingDeathGroupB
+    , SomeActCard thePetGroupC
+    , SomeActCard theEscapeTheLabyrinthsOfLunacy
+    , -- Machinations Through Time
+      SomeActCard walkingThroughTime
+    , -- Read or Die
+      SomeActCard speedReading
+    , -- All or Nothing
+      SomeActCard playingCards
+    , SomeActCard hotOnYourTail
+    , -- Bad Blood
+      SomeActCard aWalkDownMemoryLane
+    , -- By the Book
+      SomeActCard captureTheConspirators
+    , -- Laid to Rest
+      SomeActCard laidToRest
+    , -- Red Tide Rising
+      SomeActCard searchingForDad
+    , -- Enthralling Encore
+      SomeActCard breakFreeFromThePast
+    , -- Relics of the Past
+      SomeActCard crumblingRuin
+    , SomeActCard findTheWayOut
+    , --- The Drowned City
+      SomeActCard questioningTheGangsV1
+    , SomeActCard questioningTheGangsV2
+    , SomeActCard theSheldonGang
+    , SomeActCard theOBannionGang
+    , SomeActCard faceTheMusic
+    , SomeActCard descendIntoTheAbyss
+    , SomeActCard ascendTheWall
+    , SomeActCard reactivateTheCore
+    , SomeActCard unsettlingSigns
+    , SomeActCard lostPilgrims
+    , SomeActCard theHiveMind
+    , SomeActCard carefulNavigation
+    , SomeActCard backThroughTheMachine
+    , SomeActCard stepsOfGiants
+    , SomeActCard escapeTheTowerV1
+    , SomeActCard escapeTheTowerV2
+    , SomeActCard searchingTheSpires
+    , SomeActCard toTheAncientDome
+    , SomeActCard scouringTheSpires
+    , SomeActCard deadlySkies
+    , SomeActCard returnToTheShoreline
+    , SomeActCard thePhantomShop
+    , SomeActCard fightBack
+    , SomeActCard banishHim
     ]

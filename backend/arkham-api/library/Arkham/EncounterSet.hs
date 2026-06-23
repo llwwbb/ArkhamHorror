@@ -283,6 +283,9 @@ data EncounterSet
   | TheBayou
   | CurseOfTheRougarou
   | CarnevaleOfHorrors
+  | TheLabyrinthsOfLunacy
+  | LabyrinthsOfLunacySingleGroup
+  | LabyrinthsOfLunacyEpicMultiplayer
   | TheEternalSlumber
   | TheNightsUsurper
   | BrotherhoodOfTheBeast
@@ -308,6 +311,9 @@ data EncounterSet
   | FortunesChosen
   | PlanInShambles
   | TheMidwinterGala
+  | MachinationsThroughTime
+  | MachinationsThroughTimeSingleGroup
+  | MachinationsThroughTimeEpicMultiplayer
   | FilmFatale
   | CosmicJourney
   | ForgottenIsland
@@ -335,6 +341,40 @@ data EncounterSet
   | Sewers
   | SmokeAndMirrors
   | QueenOfAsh
+  | ReadOrDie
+  | AllOrNothing
+  | BadBlood
+  | ByTheBook
+  | RedTideRising
+  | LaidToRest
+  | RelicsOfThePast
+  | EnthrallingEncore
+  | -- The Drowned City
+    OneLastJob
+  | TheWesternWall
+  | TheDrownedQuarter
+  | TheApiary
+  | TheGrandVault
+  | CourtOfTheAncients
+  | ObsidianCanyons
+  | SepulchreOfTheSleeper
+  | TheDoomOfArkhamPartI
+  | TheDoomOfArkhamPartII
+  | Tasks
+  | TdcExpedition
+  | StarSpawn
+  | UnderseaCreatures
+  | Flood
+  | Domination
+  | DeepOnes
+  | Stowaways
+  | Pilgrims
+  | CosmicLegacy
+  | ElderMist
+  | Rlyeh
+  | TheInescapable
+  | Dreams
+  | AlienMachinery
   | Test
   deriving stock (Show, Eq, Ord, Bounded, Enum, Data)
 

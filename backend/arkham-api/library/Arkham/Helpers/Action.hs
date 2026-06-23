@@ -86,7 +86,8 @@ canDo iid action isFast = do
     prevents = \case
       CannotPerformAction x -> preventsAction x
       CannotTakeAction x | isFast == NotFast && ActionsAreFree `notElem` mods -> preventsAction x
-      MustTakeAction x -> not <$> preventsAction x -- reads a little weird but we want only thing things x would prevent with cannot take action
+      MustTakeAction x | isFast == NotFast -> not <$> preventsAction x -- reads a little weird but we want only thing things x would prevent with cannot take action
+      MustTakeAction _ -> pure False
       CannotDrawCards -> pure $ action == #draw
       CannotDrawCardsFromPlayerCardEffects -> pure $ action == #draw
       CannotManipulateDeck -> pure $ action == #draw
@@ -325,3 +326,33 @@ hasInvestigateActions
 hasInvestigateActions iid requestor window windows' = do
   abilities <- selectMap (setRequestor requestor) (#basic <> #investigate <> AbilityWindow window)
   anyM (\a -> getCanPerformAbility iid windows' $ decreaseAbilityActionCost a 1) abilities
+
+-- | Each action can count as several types (e.g. a weapon's "[action]: Fight"
+-- is both an activate action and a fight action). A streak of "different types
+-- of actions in a row" is therefore a system of distinct representatives (SDR):
+-- one distinct type assigned per action. Input is a list of the per-action type
+-- groups.
+
+-- | The longest prefix of the (newest-first) action groups that still admits an
+-- SDR, i.e. the longest run of "different types in a row".
+longestUniqueStreak :: Eq a => [[a]] -> [[a]]
+longestUniqueStreak = go []
+ where
+  go acc [] = acc
+  go acc (xs : xss)
+    | sdrExists (xs : acc) = go (xs : acc) xss
+    | otherwise = acc
+
+-- | Does a system of distinct representatives exist for these groups?
+sdrExists :: Eq a => [[a]] -> Bool
+sdrExists [] = True
+sdrExists (xs : rest) = any (\x -> sdrExists (map (filter (/= x)) rest)) xs
+
+-- | Pick one concrete SDR (a distinct representative per group), or [] if none.
+pickSDR :: Eq a => [[a]] -> [a]
+pickSDR = fromMaybe [] . go
+ where
+  go [] = Just []
+  go (xs : rest) =
+    listToMaybe . catMaybes $
+      [fmap (x :) (go (map (filter (/= x)) rest)) | x <- xs]

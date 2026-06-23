@@ -125,7 +125,7 @@ h2 {
 }
 .game {
   display: flex;
-  color: #cecece;
+  color: var(--title);
   background-color: var(--box-background);
   border: 1px solid var(--box-border);
   border-radius: 3px;
@@ -210,7 +210,7 @@ h2 {
   }
 
   &:hover {
-    color: #cecece;
+    color: var(--title);
   }
 }
 
@@ -341,7 +341,7 @@ h2 {
   }
 
   * {
-    z-index: 1;
+    z-index: var(--z-index-1);
   }
 
   &:before {
@@ -357,7 +357,7 @@ h2 {
     background-repeat: no-repeat;
     background-position: center;
     background-size: cover;
-    z-index: 0;
+    z-index: var(--z-index-0);
   }
 }
 

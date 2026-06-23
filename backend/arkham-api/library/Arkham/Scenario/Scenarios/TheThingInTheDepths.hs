@@ -17,14 +17,16 @@ import Arkham.Helpers.Xp
 import Arkham.I18n
 import Arkham.Id
 import Arkham.Location.Grid
+import Arkham.Location.Types (Field (LocationTokens))
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Message.Lifted.Log
 import Arkham.Modifier (UIModifier (..))
+import Arkham.Projection (fieldMap)
 import Arkham.Resolution
 import Arkham.Scenario.Import.Lifted
 import Arkham.Scenarios.TheThingInTheDepths.Helpers
-import Arkham.Story.Cards qualified as Stories
+import Arkham.Token (countTokens)
 import Arkham.Trait (Trait (Bog, Sunken))
 import Data.Maybe (fromJust)
 
@@ -41,10 +43,12 @@ theThingInTheDepths difficulty = scenario TheThingInTheDepths "10588" "The Thing
 
 instance HasChaosTokenValue TheThingInTheDepths where
   getChaosTokenValue iid tokenFace (TheThingInTheDepths attrs) = case tokenFace of
-    Skull -> pure $ toChaosTokenValue attrs Skull 3 5
-    Cultist -> pure $ ChaosTokenValue Cultist NoModifier
-    Tablet -> pure $ ChaosTokenValue Tablet NoModifier
-    ElderThing -> pure $ ChaosTokenValue ElderThing NoModifier
+    Skull -> do
+      sunken <- selectCount $ LocationWithTrait Sunken
+      pure $ toChaosTokenValue attrs Skull (ceiling @Double $ fromIntegral sunken / 2.0) sunken
+    Cultist -> pure $ toChaosTokenValue attrs Cultist 1 3
+    Tablet -> pure $ toChaosTokenValue attrs Tablet 3 5
+    ElderThing -> pure $ toChaosTokenValue attrs ElderThing 4 5
     otherFace -> getChaosTokenValue iid otherFace attrs
 
 instance RunMessage TheThingInTheDepths where
@@ -54,7 +58,7 @@ instance RunMessage TheThingInTheDepths where
       time <- getCampaignTime
       let isNight = time == Night
       flavor do
-        setTitle "title"
+        h "title"
         p.basic "body"
         ul $ li.nested.validate isNight "nightSkip" do
           li.validate (not isNight && day == Day1) "day1"
@@ -62,10 +66,11 @@ instance RunMessage TheThingInTheDepths where
           li.validate (not isNight && day == Day3) "day3"
       case (day, time) of
         (Day1, Day) -> do
-          story $ i18nWithTitle "intro1"
           judithLevel <- getRelationshipLevel JudithPark
           let judithHighEnough = judithLevel >= 1
           flavor do
+            setTitle "title"
+            p "intro1"
             p.basic "checkJudith"
             ul do
               li.validate judithHighEnough "judithHigh"
@@ -74,47 +79,54 @@ instance RunMessage TheThingInTheDepths where
             then doStep 2 PreScenarioSetup
             else doStep 3 PreScenarioSetup
         (Day2, Day) -> doStep 4 PreScenarioSetup
-        (Day3, Day) -> story $ i18nWithTitle "intro7"
-        _ -> story $ i18nWithTitle "intro8"
+        (Day3, Day) -> flavor $ setTitle "title" >> p "intro7"
+        _ -> flavor $ setTitle "title" >> p "intro8"
       pure s
     DoStep 2 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro2"
+      flavor $ setTitle "title" >> p "intro2"
       increaseRelationshipLevel JudithPark 1
       interludeXpAll (toBonus "bonus" 1)
       pure s
     DoStep 3 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro3"
+      flavor $ setTitle "title" >> p "intro3"
       record JudithSharedAGrudge
       pure s
     DoStep 4 PreScenarioSetup -> scope "intro" do
-      storyWithChooseOneM' (setTitle "intro4.title" >> p "intro4.body") do
+      storyWithChooseOneM' (setTitle "title" >> p "intro4") do
         labeled' "push" $ doStep 5 PreScenarioSetup
         labeled' "rev" $ doStep 6 PreScenarioSetup
       pure s
     DoStep 5 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro5"
+      flavor $ setTitle "title" >> p "intro5"
       eachInvestigator \iid -> setupModifier attrs iid (StartingResources (-2))
       pure s
     DoStep 6 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro6"
+      flavor $ setTitle "title" >> p "intro6"
       eachInvestigator \iid -> setupModifier attrs iid (FewerActions 1)
       pure s
     Setup -> runScenarioSetup TheThingInTheDepths attrs do
+      day <- getCampaignDay
+      time <- getCampaignTime
+
       setup $ ul do
         li "gatherSets"
-        li "gatherResidents"
         li "currentDaySet"
         li.nested "currentDayMarker" do
-          li "doomDay2"
-          li "doomDay3"
+          li.validate (day == Day2) "doomDay2"
+          li.validate (time == Day && day == Day3) "doomDay3"
         li.nested "locations" do
           li "shuffleLocations"
           li "startingLocation"
-        li.nested "residents" do
-          li "judithDay1"
-          li "drMarquez"
-          li "riverDay2Day3"
-          li "removeResidents"
+        li.nested.validate (time == Day) "residents" do
+          if time == Day
+            then do
+              li.validate (day == Day1) "residentsDay1"
+              li.validate (day /= Day1) "residentsDay2Or3"
+              li "removeResidents"
+            else do
+              li "residentsDay1"
+              li "residentsDay2Or3"
+              li "removeResidents"
         li "setAsideEnemies"
         unscoped $ li "shuffleRemainder"
         unscoped $ li "readyToBegin"
@@ -128,25 +140,7 @@ instance RunMessage TheThingInTheDepths where
       gather Set.TheForest
       gather Set.Mutations
 
-      day <- getCampaignDay
-      time <- getCampaignTime
-
-      case day of
-        Day1 -> do
-          gather Set.TheFirstDay
-          placeStory $ case time of
-            Day -> Stories.dayOne
-            Night -> Stories.nightOne
-        Day2 -> do
-          gather Set.TheSecondDay
-          placeStory $ case time of
-            Day -> Stories.dayTwo
-            Night -> Stories.nightTwo
-        Day3 -> do
-          gather Set.TheFinalDay
-          placeStory $ case time of
-            Day -> Stories.dayThree
-            Night -> Stories.nightThree
+      setupHemlockDay day time
 
       setScenarioDayAndTime
 
@@ -154,9 +148,9 @@ instance RunMessage TheThingInTheDepths where
       setActDeck [Acts.aBotanicalSurvey, Acts.discoveryOfALifetime]
 
       case day of
-        Day1 -> pure ()
         Day2 -> placeDoomOnAgenda 1
-        Day3 -> placeDoomOnAgenda 2
+        Day3 -> when (time == Day) $ placeDoomOnAgenda 2
+        _ -> pure ()
 
       bogLocations <-
         drop 1
@@ -166,13 +160,13 @@ instance RunMessage TheThingInTheDepths where
         gridPositions =
           [ Pos (-1) 1
           , Pos 0 1
-          , Pos 1 1
+          , northShorePos -- 1 1
           , Pos (-1) 0
           , Pos 0 0
           , Pos 1 0
-          , Pos (-1) (-1)
+          , startingPos -- -1 -1
           , Pos 0 (-1)
-          , Pos 1 (-1)
+          , cranberryBogPos -- 1 -1
           ]
 
       let
@@ -222,6 +216,29 @@ instance RunMessage TheThingInTheDepths where
         , Enemies.graspingTendril
         , Enemies.graspingTendril
         ]
+    ResolveChaosToken _ Cultist iid | isEasyStandard attrs -> do
+      mayRemoveSinkhole iid
+      pure s
+    PassedSkillTest iid _ _ (ChaosTokenTarget token) _ _
+      | token.face == Cultist
+      , isHardExpert attrs -> do
+          mayRemoveSinkhole iid
+          pure s
+    ResolveChaosToken _ Tablet iid | isHardExpert attrs -> do
+      placeSinkhole iid Tablet
+      pure s
+    ResolveChaosToken _ ElderThing iid | isHardExpert attrs -> do
+      drawGraspingTendril iid attrs
+      pure s
+    FailedSkillTest iid _ _ (ChaosTokenTarget token) _ _ -> do
+      case token.face of
+        Tablet | isEasyStandard attrs -> placeSinkhole iid Tablet
+        ElderThing | isEasyStandard attrs -> drawGraspingTendril iid attrs
+        _ -> pure ()
+      pure s
+    FoundEncounterCard iid (isTarget attrs -> True) (toCard -> card) -> do
+      temporaryModifier card ElderThing NoSurge $ drawCard iid card
+      pure s
     ScenarioSpecific "codex" v -> scope "codex" do
       let (iid :: InvestigatorId, source :: Source, n :: Int) = toResult v
       let entry x = scope x $ flavor $ setTitle "title" >> p.green "body"
@@ -335,3 +352,23 @@ instance RunMessage TheThingInTheDepths where
         _ -> error "invalid resolution"
       pure s
     _ -> TheThingInTheDepths <$> liftRunMessage msg attrs
+
+mayRemoveSinkhole :: ReverseQueue m => InvestigatorId -> m ()
+mayRemoveSinkhole iid = do
+  bogs <-
+    select (NearestLocationTo iid (LocationWithTrait Bog))
+      >>= filterM (fieldMap LocationTokens (\ts -> countTokens #damage ts > 0))
+  when (notNull bogs) $ scenarioI18n $ chooseOneM iid do
+    labeled' "removeSinkhole" $ chooseOrRunOneM iid do
+      targets bogs \lid -> removeTokens Cultist lid #damage 1
+    labeled' "doNotRemoveSinkhole" nothing
+
+placeSinkhole :: (ReverseQueue m, Sourceable source) => InvestigatorId -> source -> m ()
+placeSinkhole iid source = do
+  bogs <- select (NearestLocationTo iid (LocationWithTrait Bog))
+  when (notNull bogs) $ scenarioI18n $ chooseOrRunOneM iid do
+    targets bogs \lid -> placeTokens source lid #damage 1
+
+drawGraspingTendril :: ReverseQueue m => InvestigatorId -> ScenarioAttrs -> m ()
+drawGraspingTendril iid attrs =
+  findEncounterCard iid attrs (#enemy <> cardIs Enemies.graspingTendril)

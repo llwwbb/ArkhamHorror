@@ -7,9 +7,12 @@ export interface Scenario {
   returnToName?: string
   beta?: boolean
   alpha?: boolean
+  dev?: boolean
   standaloneDifficulties?: Difficulty[]
   standalone?: boolean
   show?: boolean
+  requiredInvestigator?: string
+  deckRequirements?: string[]
   campaign?: string
   scenarios?: { id: string, name: string, box?: string, notAfter?: string[] }[]
 }

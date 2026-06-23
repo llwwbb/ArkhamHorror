@@ -19,6 +19,7 @@ import Arkham.Classes.GameLogger
 import Arkham.Classes.Query
 import Arkham.Classes.RunMessage
 import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameT
 import Arkham.Helpers
 import Arkham.Helpers.Deck
 import Arkham.Helpers.Investigator
@@ -51,6 +52,8 @@ defaultCampaignRunner msg a = case msg of
         )
   SetGlobal CampaignTarget k v -> do
     pure $ updateAttrs a (storeL . at (Aeson.toText k) ?~ v)
+  SetCampaignMeta v -> do
+    pure $ updateAttrs a (metaL .~ v)
   StartCampaign -> do
     -- [ALERT] StartCampaign
     players <- allPlayers
@@ -110,7 +113,6 @@ defaultCampaignRunner msg a = case msg of
     push $ Ask lead ContinueCampaign
     pure a
   CampaignStep (StandaloneScenarioStep sid _) -> do
-    let xp = getSideStoryCost sid
     pushAll
       [ ResetInvestigators
       , ResetGame
@@ -118,10 +120,9 @@ defaultCampaignRunner msg a = case msg of
       , ForInvestigators [] ResetGame
       , StartScenario sid Nothing
       ]
-    select Anyone >>= traverse_ \iid -> push $ SpendXP iid xp
+    spendSideStoryXp sid
     pure a
   CampaignStep (StandaloneScenarioStepWithOptions sid _ opts) -> do
-    let xp = getSideStoryCost sid
     pushAll
       [ ResetInvestigators
       , ResetGame
@@ -129,7 +130,7 @@ defaultCampaignRunner msg a = case msg of
       , ForInvestigators [] ResetGame
       , StartScenario sid (Just opts)
       ]
-    select Anyone >>= traverse_ \iid -> push $ SpendXP iid xp
+    spendSideStoryXp sid
     pure a
   SetChaosTokensForScenario -> a <$ push (SetChaosTokens $ campaignChaosBag $ toAttrs a)
   SetCampaignChaosBag tokens' -> pure $ updateAttrs a (chaosBagL .~ tokens')
@@ -424,11 +425,11 @@ defaultCampaignRunner msg a = case msg of
     activeIids <- select $ IncludeEliminated Anyone
     pure $ updateAttrs a \attrs ->
       let currentStep = normalizedCampaignStep (campaignStep attrs)
-      in case campaignXpBreakdown attrs of
-        XpBreakdownStep step iids xp : rest
-          | step == currentStep ->
-              attrs & xpBreakdownL .~ XpBreakdownStep step iids (xp <> report) : rest
-        _ -> attrs & xpBreakdownL %~ (XpBreakdownStep currentStep activeIids report :)
+       in case campaignXpBreakdown attrs of
+            XpBreakdownStep step iids xp : rest
+              | step == currentStep ->
+                  attrs & xpBreakdownL .~ XpBreakdownStep step iids (xp <> report) : rest
+            _ -> attrs & xpBreakdownL %~ (XpBreakdownStep currentStep activeIids report :)
   IgnoreGainXP step -> pure $ updateAttrs a \attrs -> attrs & xpBreakdownL %~ filter ((/= step) . (.xbsStep))
   UseAbility _ ab _ | ab.source == CampaignSource -> do
     push $ Do msg
@@ -436,8 +437,10 @@ defaultCampaignRunner msg a = case msg of
   Do (UseAbility iid ability windows) | ability.limitType == Just PerCampaign -> do
     let
       sameAbility u =
-        abilityCardCode (usedAbility u) == abilityCardCode ability
-          && abilityIndex (usedAbility u) == abilityIndex ability
+        abilityCardCode (usedAbility u)
+          == abilityCardCode ability
+          && abilityIndex (usedAbility u)
+          == abilityIndex ability
     case find sameAbility (campaignUsedAbilities (toAttrs a)) of
       Nothing -> do
         let
@@ -485,3 +488,23 @@ defaultCampaignRunner msg a = case msg of
     push $ DoStep (n - 1) RunDestiny
     pure a
   _ -> pure a
+
+{- | Side-stories cost each investigator xp to play. Challenge scenarios only
+charge their required investigator the full cost; everyone else pays 1.
+-}
+spendSideStoryXp :: ScenarioId -> GameT ()
+spendSideStoryXp sid = do
+  let baseCost = getSideStoryCost sid
+  investigators <- select Anyone
+  case challengeScenarioInvestigator sid of
+    Nothing -> for_ investigators \iid -> push $ SpendXP iid baseCost
+    Just title -> do
+      signatures <- select $ InvestigatorWithTitle title
+      when (null signatures)
+        $ error
+        $ "Cannot play challenge scenario "
+        <> show sid
+        <> " without "
+        <> unpack title
+      for_ investigators \iid ->
+        push $ SpendXP iid $ if iid `elem` signatures then baseCost else 1

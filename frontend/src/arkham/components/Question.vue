@@ -13,7 +13,7 @@ import { AmountChoice, QuestionType, amountTargetUnmet } from '@/arkham/types/Qu
 import Card from '@/arkham/components/Card.vue';
 import * as ArkhamGame from '@/arkham/types/Game';
 import { tarotCardImage } from '@/arkham/types/TarotCard';
-import { cardImage, toCardContents } from '@/arkham/types/Card';
+import { cardImage, toCardContents, type Card as ArkhamCard, type CardContents } from '@/arkham/types/Card';
 import DropDown from '@/components/DropDown.vue';
 import Token from '@/arkham/components/Token.vue';
 import type { Game } from '@/arkham/types/Game';
@@ -43,6 +43,8 @@ function zoneToLabel(s: string) {
     case "FromDeck": return t("fromDeck")
     case "FromHand": return t("fromHand")
     case "FromDiscard": return t("fromDiscard")
+    case "FromEncounterDeck": return t("fromEncounterDeck")
+    case "FromEncounterDiscard": return t("fromEncounterDiscard")
     default: return s
   }
 }
@@ -78,18 +80,38 @@ const choosePaymentAmounts = inject<(amounts: Record<string, number>) => Promise
 const chooseAmounts = inject<(amounts: Record<string, number>) => Promise<void>>('chooseAmounts')
 const question = computed(() => props.game.question[props.playerId])
 const focusedChaosTokens = computed(() => props.game.focusedChaosTokens)
-const searchedCards = computed(() => {
-  const playerCards = Object.entries(investigator.value?.foundCards ?? [])
 
-  const playerZones = playerCards.filter(([, c]) => c.length > 0)
+type SearchedCardGroup = {
+  key: string
+  zone: string
+  label: string
+  cards: ArkhamCard[]
+}
+
+function searchedZoneLabel(zone: string, source: 'player' | 'encounter') {
+  if (source === 'encounter') {
+    switch (zone) {
+      case 'FromDeck': return t('fromEncounterDeck')
+      case 'FromDiscard': return t('fromEncounterDiscard')
+    }
+  }
+
+  return zoneToLabel(zone)
+}
+
+const searchedCards = computed<SearchedCardGroup[]>(() => {
+  const playerCards = Object.entries(investigator.value?.foundCards ?? {})
+    .filter(([, cards]) => cards.length > 0)
+    .map(([zone, cards]) => ({ key: `player-${zone}`, zone, label: searchedZoneLabel(zone, 'player'), cards }))
 
   const encounterCards = Object.entries({
     ...(props.game.scenario?.foundCards ?? {}),
     ...props.game.foundCards,
   })
-  const encounterZones = encounterCards.filter(([, c]) => c.length > 0)
+    .filter(([, cards]) => cards.length > 0)
+    .map(([zone, cards]) => ({ key: `encounter-${zone}`, zone, label: searchedZoneLabel(zone, 'encounter'), cards }))
 
-  return [...playerZones, ...encounterZones]
+  return [...playerCards, ...encounterCards]
 })
 
 const focusedCards = computed(() => {
@@ -100,10 +122,81 @@ const focusedCards = computed(() => {
   return props.game.focusedCards
 })
 
+function zoneTag(zone: unknown): string | null {
+  if (typeof zone === 'string') return zone
+  if (zone && typeof zone === 'object' && 'tag' in zone) return String((zone as { tag: unknown }).tag)
+  return null
+}
+
+function cardContentsId(card: CardContents): string {
+  return card.id
+}
+
+function focusedCardSourceLabel(cardId: string): string | null {
+  if (props.game.scenario?.discard.some((card) => cardContentsId(card) === cardId)) {
+    return t('fromEncounterDiscard')
+  }
+
+  if (props.game.scenario?.encounterDeck.some((card) => cardContentsId(card) === cardId)) {
+    return t('fromEncounterDeck')
+  }
+
+  for (const [, [deck, discard]] of Object.entries(props.game.scenario?.encounterDecks ?? {})) {
+    if (deck.some((card) => cardContentsId(card) === cardId)) return t('fromEncounterDeck')
+    if (discard.some((card) => cardContentsId(card) === cardId)) return t('fromEncounterDiscard')
+  }
+
+  const choice = choices.value.find((choice) => {
+    return choice.tag === MessageType.TARGET_LABEL
+      && choice.target.tag === 'CardIdTarget'
+      && choice.target.contents === cardId
+  })
+
+  if (!choice || choice.tag !== MessageType.TARGET_LABEL) return null
+
+  const messages = 'messages' in choice && Array.isArray(choice.messages) ? choice.messages : []
+  const foundMessage = messages.find((message) => {
+    return typeof message === 'object' && message !== null && 'tag' in message && message.tag === 'FoundEncounterCardFrom'
+  })
+  const zone = zoneTag(
+    foundMessage && typeof foundMessage === 'object' && 'contents' in foundMessage && Array.isArray(foundMessage.contents)
+      ? foundMessage.contents[2]
+      : null
+  )
+  if (!zone) return null
+
+  switch (zone) {
+    case 'FromEncounterDeck': return t('fromEncounterDeck')
+    case 'FromEncounterDiscard': return t('fromEncounterDiscard')
+    case 'FromDiscard': return t('fromEncounterDiscard')
+    case 'FromDeck': return t('fromEncounterDeck')
+    default: return zoneToLabel(zone)
+  }
+}
+
+const focusedCardGroups = computed<SearchedCardGroup[]>(() => {
+  if (focusedCards.value.length === 0) return []
+
+  const grouped = new Map<string, ArkhamCard[]>()
+  for (const card of focusedCards.value) {
+    const label = focusedCardSourceLabel(toCardContents(card).id) ?? t('cards')
+    grouped.set(label, [...(grouped.get(label) ?? []), card])
+  }
+
+  return Array.from(grouped.entries()).map(([label, cards]) => ({
+    key: `focused-${label}`,
+    zone: label,
+    label,
+    cards,
+  }))
+})
+
 const visibleCardIds = computed(() => new Set([
   ...(investigator.value?.hand ?? []).map((card) => toCardContents(card).id),
   ...focusedCards.value.map((card) => toCardContents(card).id),
-  ...searchedCards.value.flatMap(([, cards]) => cards.map((card) => toCardContents(card).id)),
+  ...searchedCards.value.flatMap((group) => group.cards.map((card) => toCardContents(card).id)),
+  ...(props.game.scenario?.victoryDisplay ?? []).map((card) => toCardContents(card).id),
+  ...Object.values(props.game.assets).flatMap((asset) => asset.cardsUnderneath.map((card) => toCardContents(card).id)),
 ]))
 
 function abilityLabelHandledElsewhere(choice: Message) {
@@ -264,6 +357,30 @@ const paymentChoiceLabel = function(text: string): string {
   }
 
   return formatContent(text)
+}
+
+const traumaKind = (text: string) => {
+  const normalized = text.toLowerCase()
+  if (normalized.includes('physical')) return 'health'
+  if (normalized.includes('mental')) return 'horror'
+  return null
+}
+
+const traumaIcon = (text: string) => {
+  switch (traumaKind(text)) {
+    case 'health': return imgsrc('health-icon.png')
+    case 'horror': return imgsrc('horror-icon.png')
+    default: return null
+  }
+}
+
+const traumaIconStyle = (text: string) => {
+  const icon = traumaIcon(text)
+  if (!icon) return {}
+  return {
+    maskImage: `url(${icon})`,
+    WebkitMaskImage: `url(${icon})`,
+  }
 }
 
 const hasInnerContent = computed(() => {
@@ -536,80 +653,131 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
         </div>
 
         <div class='question-content'>
-          <div v-if="focusedCards.length > 0 && choices.length > 0" class="modal">
-            <div class="modal-contents focused-cards">
-              <Card
-                v-for="(card, index) in focusedCards"
-                :card="card"
-                :game="game"
-                :playerId="playerId"
-                :key="index"
-                @choose="$emit('choose', $event)"
-              />
+          <div v-if="focusedCardGroups.length > 0 && choices.length > 0" class="modal">
+            <div class="modal-contents searched-cards focused-cards">
+              <div v-for="group in focusedCardGroups" :key="group.key" class="group">
+                <h2>{{ group.label }}</h2>
+                <div class="group-cards">
+                  <div
+                    v-for="card in group.cards"
+                    :key="`${group.key}-${toCardContents(card).id}`"
+                    class="searched-card"
+                  >
+                    <Card
+                      :card="card"
+                      :game="game"
+                      :playerId="playerId"
+                      @choose="$emit('choose', $event)"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div v-if="searchedCards.length > 0 && choices.length > 0" class="modal">
             <div class="modal-contents searched-cards">
-              <div v-for="[group, cards] in searchedCards" :key="group" class="group">
-                <h2>{{zoneToLabel(group)}}</h2>
+              <div v-for="group in searchedCards" :key="group.key" class="group">
+                <h2>{{ group.label }}</h2>
                 <div class="group-cards">
-                  <Card
-                    v-for="card in cards"
-                    :card="card"
-                    :game="game"
-                    :playerId="playerId"
-                    :key="`${group}-${toCardContents(card).id}`"
-                    @choose="$emit('choose', $event)"
-                  />
+                  <div
+                    v-for="card in group.cards"
+                    :key="`${group.key}-${toCardContents(card).id}`"
+                    class="searched-card"
+                  >
+                    <Card
+                      :card="card"
+                      :game="game"
+                      :playerId="playerId"
+                      @choose="$emit('choose', $event)"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
           <div v-if="paymentAmountsLabel" class="modal amount-modal">
             <div class="modal-contents amount-contents">
-              <form @submit.prevent="submitPaymentAmounts" :disabled="unmetAmountRequirements">
+              <form class="amount-form" @submit.prevent="submitPaymentAmounts" :disabled="unmetAmountRequirements">
                 <legend v-html="paymentAmountsLabel"></legend>
-                <template v-for="amountChoice in paymentAmountsChoices" :key="amountChoice.investigatorId">
-                  <div v-if="amountChoice.maxBound !== 0">
-                    {{ amountChoice.title }}
-                    <input
-                      type="number"
-                      :min="amountChoice.minBound"
-                      :max="amountChoice.maxBound"
-                      v-model.number="amountSelections[amountChoice.choiceId]"
-                      onclick="this.select()"
-                    />
-                  </div>
-                </template>
-                <button :disabled="unmetAmountRequirements">{{ t('submit') }}</button>
+                <div class="amount-choice-list">
+                  <template v-for="amountChoice in paymentAmountsChoices" :key="amountChoice.choiceId">
+                    <div v-if="amountChoice.maxBound !== 0" class="amount-choice">
+                      <label :for="`payment-choice-${amountChoice.choiceId}`">{{ amountChoice.title }}</label>
+                      <span class="amount-input-wrapper">
+                        <span
+                          v-if="traumaIcon(amountChoice.title)"
+                          class="amount-input-icon"
+                          :class="`amount-input-icon--${traumaKind(amountChoice.title)}`"
+                          :style="traumaIconStyle(amountChoice.title)"
+                        ></span>
+                        <input
+                          :id="`payment-choice-${amountChoice.choiceId}`"
+                          class="amount-input"
+                          :class="{ 'with-icon': traumaIcon(amountChoice.title) }"
+                          type="number"
+                          :min="amountChoice.minBound"
+                          :max="amountChoice.maxBound"
+                          v-model.number="amountSelections[amountChoice.choiceId]"
+                          onclick="this.select()"
+                        />
+                      </span>
+                    </div>
+                  </template>
+                </div>
+                <button class="amount-submit" :disabled="unmetAmountRequirements">{{ t('submit') }}</button>
               </form>
             </div>
           </div>
           <div v-if="amountsLabel" class="modal amount-modal">
             <div v-if="searchedCards.length > 0" class="modal-contents searched-cards">
-              <div v-for="[group, cards] in searchedCards" :key="group" class="group">
-                <h2>{{ zoneToLabel(group) }}</h2>
+              <div v-for="group in searchedCards" :key="group.key" class="group">
+                <h2>{{ group.label }}</h2>
                 <div class="group-cards">
-                  <Card
-                    v-for="card in cards"
-                    :card="card"
-                    :game="game"
-                    :playerId="playerId"
-                    :key="`${group}-${toCardContents(card).id}`"
-                    @choose="$emit('choose', $event)"
-                  />
+                  <div
+                    v-for="card in group.cards"
+                    :key="`${group.key}-${toCardContents(card).id}`"
+                    class="searched-card"
+                  >
+                    <Card
+                      :card="card"
+                      :game="game"
+                      :playerId="playerId"
+                      @choose="$emit('choose', $event)"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
             <div class="modal-contents amount-contents">
-              <form @submit.prevent="submitAmounts" :disabled="unmetAmountRequirements">
+              <form class="amount-form" @submit.prevent="submitAmounts" :disabled="unmetAmountRequirements">
                 <legend v-html="amountsLabel"></legend>
-                <template v-for="paymentChoice in chooseAmountsChoices" :key="paymentChoice.choiceId">
-                  <div v-if="paymentChoice.maxBound !== 0">
-                    <label :for="`choice-${paymentChoice.choiceId}`" v-html="paymentChoiceLabel(paymentChoice.label)"></label> <input type="number" :min="paymentChoice.minBound" :max="paymentChoice.maxBound" v-model.number="amountSelections[paymentChoice.choiceId]" :name="`choice-${paymentChoice.choiceId}`" onclick="this.select()" />
-                  </div>
-                </template>
-                <button :disabled="unmetAmountRequirements">{{ t('submit') }}</button>
+                <div class="amount-choice-list">
+                  <template v-for="paymentChoice in chooseAmountsChoices" :key="paymentChoice.choiceId">
+                    <div v-if="paymentChoice.maxBound !== 0" class="amount-choice">
+                      <label :for="`choice-${paymentChoice.choiceId}`" v-html="paymentChoiceLabel(paymentChoice.label)"></label>
+                      <span class="amount-input-wrapper">
+                        <span
+                          v-if="traumaIcon(paymentChoice.label)"
+                          class="amount-input-icon"
+                          :class="`amount-input-icon--${traumaKind(paymentChoice.label)}`"
+                          :style="traumaIconStyle(paymentChoice.label)"
+                        ></span>
+                        <input
+                          :id="`choice-${paymentChoice.choiceId}`"
+                          class="amount-input"
+                          :class="{ 'with-icon': traumaIcon(paymentChoice.label) }"
+                          type="number"
+                          :min="paymentChoice.minBound"
+                          :max="paymentChoice.maxBound"
+                          v-model.number="amountSelections[paymentChoice.choiceId]"
+                          :name="`choice-${paymentChoice.choiceId}`"
+                          onclick="this.select()"
+                        />
+                      </span>
+                    </div>
+                  </template>
+                </div>
+                <button class="amount-submit" :disabled="unmetAmountRequirements">{{ t('submit') }}</button>
               </form>
             </div>
           </div>
@@ -697,7 +865,7 @@ section {
   display: inline-block;
   padding: 5px 10px;
   margin: 2px;
-  background-color: #333;
+  background-color: var(--neutral-dark);
   color: white;
   border: 1px solid #666;
   cursor: pointer;
@@ -722,7 +890,7 @@ section {
     padding-bottom: 20px;
   }
 
-  color: #222;
+  color: var(--neutral-extra-dark);
   max-width: 50vw;
   text-align: justify;
   background: linear-gradient(#DFDAD8, #c9c4c2);
@@ -767,7 +935,7 @@ section {
       box-sizing: border-box;
       content: "";
       filter: blur(0.25em);
-      z-index: 1;
+      z-index: var(--z-index-1);
     }
     h1 {
       color: #19214F;
@@ -781,7 +949,7 @@ section {
     padding: 50px;
     position: relative;
     &::before {
-      z-index: 2;
+      z-index: var(--z-index-2);
       pointer-events: none;
       position: absolute;
       inset: 10px;
@@ -818,7 +986,7 @@ section {
       background-image: v-bind(grunge), radial-gradient(ellipse at 50% 40%, #3a3d16 0%, #1f2110 55%, #0e0f06 80%);
       background-blend-mode: overlay;
       background-size: cover;
-      z-index: 0;
+      z-index: var(--z-index-0);
     }
 
     &::after {
@@ -829,13 +997,13 @@ section {
       background:
         radial-gradient(circle at 25% 75%, rgba(131, 137, 56, 0.16), transparent 55%),
         radial-gradient(circle at 75% 25%, rgba(131, 137, 56, 0.12), transparent 55%);
-      z-index: 0;
+      z-index: var(--z-index-0);
       animation: haunted-flicker 7s ease-in-out infinite;
     }
 
     .intro-text-body, &:deep(.intro-text-body) {
       position: relative;
-      z-index: 1;
+      z-index: var(--z-index-1);
       margin: -40px;
     }
   }
@@ -861,7 +1029,7 @@ button {
   transition: all 0.3s ease-in;
   border: 0;
   padding: 10px;
-  background-color: #532e61;
+  background-color: var(--button-2);
   text-align: justify;
   border-radius: 0.6em;
   color: #EEE;
@@ -987,7 +1155,7 @@ h2 {
 .standalone-label {
   text-transform: uppercase;
   color: white;
-  background-color: #222;
+  background-color: var(--neutral-extra-dark);
   padding: 10px;
 }
 
@@ -1023,7 +1191,7 @@ h2 {
       transition: all 0.3s ease-in;
       border: 0;
       padding: 10px;
-      background-color: #532e61;
+      background-color: var(--button-2);
       border-radius: 0.6em;
       color: #EEE;
       font: Arial, sans-serif;
@@ -1078,50 +1246,161 @@ h2 {
   flex-wrap: wrap;
 }
 
-.amount-contents {
-  background: #735e7b;
-  padding: 0px;
-  padding-top: 10px;
-  border-bottom-left-radius: 15px;
-  border-bottom-right-radius: 15px;
+.question-label:has(.amount-modal),
+.question-content:has(.amount-modal) {
   width: 100%;
-  form {
-    flex: 1;
-  }
+  box-sizing: border-box;
 }
 
-.amount-contents div {
-  display: inline;
+.amount-modal {
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.amount-contents button {
-  background: #4a3d50;
-  display: inline;
-  border: 0;
-  color: white;
-  padding: 0.5em;
-  margin-top: 0.5em;
+.amount-contents {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  overflow: hidden;
+  align-items: stretch;
+  background: #735e7b;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
 }
 
-.amount-contents button[disabled] {
-  cursor: not-allowed;
-}
-
-.amount-contents input {
-  padding: 0.5em;
+.amount-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 22px;
+  box-sizing: border-box;
 }
 
 .amount-contents legend {
-  font-size: 1.2em;
-  font-weight: bold;
+  width: 100%;
+  color: #fff;
+  font-size: 1.25em;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  text-wrap: balance;
+  margin: 0;
+  padding: 0 6px 6px;
 }
 
-.amount-contents .selection {
-  margin-left: 50px;
+.amount-choice-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
 }
 
-.amount-contents .selection:nth-of-type(1) {
-  margin-left: 0;
+.amount-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem;
+  flex: 0 0 calc(50% - 5px);
+  max-width: calc(50% - 5px);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  box-sizing: border-box;
+}
+
+.amount-choice:only-child {
+  flex-basis: 100%;
+  max-width: 100%;
+}
+
+.amount-choice label {
+  color: #f6edf8;
+  font-size: 1.05em;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.amount-input-wrapper {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.amount-input-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.55em;
+  width: 1.1em;
+  height: 1.1em;
+  transform: translateY(-50%);
+  pointer-events: none;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+.amount-input-icon--health {
+  background-color: #d44;
+}
+
+.amount-input-icon--horror {
+  background-color: #1f6fbf;
+}
+
+.amount-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.55em 0.65em;
+  color: #241a29;
+  background: #f7f0f8;
+  border: 1px solid rgba(36, 26, 41, 0.25);
+  border-radius: 11px;
+  font-size: 1.05em;
+  font-weight: 800;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.amount-input.with-icon {
+  padding-left: 2em;
+}
+
+.amount-input::-webkit-inner-spin-button,
+.amount-input::-webkit-outer-spin-button {
+  opacity: 1;
+}
+
+.amount-input:focus {
+  outline: 2px solid #d7b7df;
+  outline-offset: 2px;
+}
+
+.amount-submit {
+  width: 100%;
+  margin-top: 2px;
+  padding: 0.8em 1em;
+  background: #3f2f48;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 13px;
+  color: white;
+  text-align: center;
+}
+
+.amount-submit:hover {
+  background: #2f2238;
+}
+
+.amount-submit[disabled] {
+  cursor: not-allowed;
 }
 
 .choices {
@@ -1133,7 +1412,7 @@ h2 {
   border: 0;
   padding: 10px;
   text-transform: uppercase;
-  background-color: #532e61;
+  background-color: var(--button-2);
   font-weight: bold;
   border-radius: 0.6em;
   color: #EEE;
@@ -1146,18 +1425,51 @@ h2 {
 
 .searched-cards {
   flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
   overflow-x: auto;
 }
 
 .group {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid rgba(214, 205, 174, 0.18);
+  border-radius: 10px;
+  background: rgba(20, 16, 24, 0.74);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(0, 0, 0, 0.24);
+}
+
+.group h2 {
+  margin: -2px -2px 2px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(214, 205, 174, 0.16);
+  color: var(--title);
+  font-family: "Teutonic", serif;
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
 
 .group .group-cards {
   display: flex;
   flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.searched-card {
+  display: flex;
 }
 
 .done {
@@ -1166,7 +1478,7 @@ h2 {
   margin: 0;
   padding: 10px;
   text-transform: uppercase;
-  background-color: #532e61;
+  background-color: var(--button-2);
   font-weight: bold;
   border-radius: 0 0 1.2em 1.2em;
   color: #EEE;
@@ -1302,7 +1614,7 @@ h2 {
       box-sizing: border-box;
       content: "";
       filter: blur(0.25em);
-      z-index: -2;
+      z-index: var(--z-index-neg-2);
     }
     h1 {
       color: #19214F;
@@ -1314,7 +1626,7 @@ h2 {
       font-weight: 500;
     }
     &::before {
-      z-index: -1;
+      z-index: var(--z-index-neg-1);
       pointer-events: none;
       position: absolute;
       inset: 10px;
@@ -1344,7 +1656,7 @@ h2 {
       box-sizing: border-box;
       content: "";
       filter: blur(0.25em);
-      z-index: 1;
+      z-index: var(--z-index-1);
     }
     h1 {
       color: #19214F;
@@ -1358,7 +1670,7 @@ h2 {
     padding: 50px;
     position: relative;
     &::before {
-      z-index: 2;
+      z-index: var(--z-index-2);
       pointer-events: none;
       position: absolute;
       inset: 10px;
@@ -1480,10 +1792,10 @@ h2 {
   gap: 10px;
   padding: 10px;
   button {
-    border: 1px solid #444;
+    border: 1px solid var(--button-highlight);
   }
   border-radius: inherit;
-  border: 1px solid #444;
+  border: 1px solid var(--button-highlight);
 }
 
 .question-wrapper {

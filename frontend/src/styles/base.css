@@ -6,7 +6,7 @@ html {
 body {
   margin: 0;
   padding: 0;
-  color: #222;
+  color: var(--neutral-extra-dark);
   /* 移动端 100vh 按地址栏收起后的大视口算，会把文档撑得比可见视口高
      （页面可滚、底部露出空白条）；dvh 跟随当前可见视口，老浏览器回退 vh */
   min-height: 100vh;
@@ -45,7 +45,7 @@ footer {
   bottom: 0;
   width: 100%;
   text-align: center;
-  z-index: 100;
+  z-index: var(--z-index-100);
   @media (max-width: 800px) and (orientation: portrait) {
     display: none;
   }

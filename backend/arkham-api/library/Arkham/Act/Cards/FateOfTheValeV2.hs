@@ -3,11 +3,13 @@ module Arkham.Act.Cards.FateOfTheValeV2 (fateOfTheValeV2) where
 import Arkham.Ability
 import Arkham.Act.Cards qualified as Cards
 import Arkham.Act.Import.Lifted
-import Arkham.Campaigns.TheFeastOfHemlockVale.Helpers
-import Arkham.Scenarios.FateOfTheVale.Helpers
 import Arkham.Card
-import Arkham.I18n
+import Arkham.Enemy.Creation
+import Arkham.Helpers.Cost (getSpendableClueCount)
+import Arkham.Helpers.GameValue (getPlayerCountValue)
+import Arkham.Helpers.Location (withLocationOf)
 import Arkham.Helpers.SkillTest.Lifted (parley)
+import Arkham.I18n
 import Arkham.Location.Types (Field (LocationCardsUnderneath))
 import Arkham.Matcher hiding (DuringTurn)
 import Arkham.Message.Lifted.Choose
@@ -27,7 +29,12 @@ instance HasAbilities FateOfTheValeV2 where
       a
       [ skillTestAbility $ restricted a 1 (DuringTurn You) $ parleyAction (HandDiscardCost 1 #any)
       , onlyOnce
-          $ restricted a 2 (notExists $ EnemyWithTrait Trait.Resident)
+          $ restricted
+            a
+            2
+            ( notExists (InPlayEnemy $ EnemyWithTrait Trait.Resident)
+                <> notExists (LocationWithCardsUnderneath $ HasCard $ CardWithTrait Trait.Resident)
+            )
           $ Objective
           $ FastAbility (GroupClueCost (PerPlayer 3) Anywhere)
       ]
@@ -41,21 +48,20 @@ instance RunMessage FateOfTheValeV2 where
         skillLabeled #intellect $ parley sid iid (attrs.ability 1) attrs #intellect (Fixed 3)
       pure a
     PassedThisSkillTest iid (isAbilitySource attrs 1 -> True) -> do
-      mlid <- selectOne $ locationWithInvestigator iid
-      for_ mlid \lid -> do
+      withLocationOf iid \lid -> do
         beneath <- field LocationCardsUnderneath lid
-        for_
-          ( listToMaybe
-              [(card, resident) | card <- beneath, Just resident <- [residentFromCardDef $ toCardDef card]]
-          )
-          \(card, resident) -> do
-            focusCards [card] do
-              chooseOneM iid $ withI18n do
-                labeled' "continue" do
-                  unfocusCards
-                  obtainCard card
-                  eid <- createEnemyAt (residentEnemyDef resident) lid
-                  exhaustEnemy (attrs.ability 1) eid
+        for_ [card | card <- beneath, cardMatch card (CardWithTrait Trait.Resident)] \card -> do
+          focusCards [card] do
+            chooseOneM iid $ withI18n do
+              labeled' "continue" $ unfocusCards >> obtainCard card
+            cluesNeeded <- getPlayerCountValue (PerPlayer 1)
+            spendable <- getSpendableClueCount [iid]
+            chooseOrRunOneM iid $ withI18n do
+              when (spendable >= cluesNeeded) do
+                countVar cluesNeeded $ labeled' "spendClues" do
+                  spendClues iid cluesNeeded
+                  createEnemyAtEdit_ card lid createExhausted
+              labeled' "skip" $ createEnemyAt_ card lid
       pure a
     UseThisAbility _ (isSource attrs -> True) 2 -> do
       advanceVia #other attrs (attrs.ability 2)

@@ -13,15 +13,15 @@ newtype Poisonblossom = Poisonblossom EnemyAttrs
   deriving newtype (Show, Eq, ToJSON, FromJSON, Entity)
 
 poisonblossom :: EnemyCard Poisonblossom
-poisonblossom = enemy Poisonblossom Cards.poisonblossom (2, Static 3, 1) (0, 1)
+poisonblossom = enemy Poisonblossom Cards.poisonblossom
 
 instance HasModifiersFor Poisonblossom where
   getModifiersFor (Poisonblossom a) = do
     let overgrowth = a.token Overgrowth
     when (overgrowth > 0) do
       getCampaignTime >>= \case
-        Day -> modifySelf a [HealthModifier overgrowth, DamageDealt 1]
-        Night -> modifySelf a [EnemyFight 1, DamageDealt 1]
+        Day -> modifySelf a [HealthModifier overgrowth, DamageDealt overgrowth]
+        Night -> modifySelf a [EnemyFight overgrowth, DamageDealt overgrowth]
 
 instance HasAbilities Poisonblossom where
   getAbilities (Poisonblossom a) = extend a [mkAbility a 1 $ forced $ RoundEnds #when]

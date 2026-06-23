@@ -12,6 +12,11 @@ import { useI18n } from 'vue-i18n'
 import InvestigatorRow from '@/arkham/components/InvestigatorRow.vue'
 import LogIcons from '@/arkham/components/LogIcons.vue'
 import sideStories from '@/arkham/data/side-stories.json'
+import { useRoute } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { storeToRefs } from 'pinia'
+import { filterDisplayable, isDevBuild } from '@/arkham/displayRules'
+import { hasParallelContent } from '@/arkham/deckRestrictions'
 
 const props = defineProps<{
   game: Game
@@ -24,9 +29,16 @@ const props = defineProps<{
 }>();
 
 const { t, te } = useI18n()
+const route = useRoute()
+const store = useUserStore()
+const { currentUser } = storeToRefs(store)
 const send = inject<(msg: string) => void>('send', () => {})
 const addSideStory = ref(false)
 const hasSent = ref(false)
+const alpha = ref(false)
+const dev = isDevBuild()
+const isBetaUser = computed(() => !!currentUser.value?.beta)
+const displayRuleOptions = computed(() => ({ alpha: alpha.value, beta: isBetaUser.value, dev }))
 const sendOnce = (payload: unknown) => {
   if (hasSent.value) return
   hasSent.value = true
@@ -51,7 +63,11 @@ const normalizedContents = (step: CampaignStep): string => {
   }
 }
 // reset the lock on a "fresh update" of the step (new step name/kind)
-onMounted(() => { hasSent.value = false })
+onMounted(() => {
+  hasSent.value = false
+  alpha.value = route.query.alpha !== undefined || localStorage.getItem('alpha') === 'true'
+  if (route.query.alpha !== undefined) localStorage.setItem('alpha', 'true')
+})
 const stepKey = computed(() => `${props.step.tag}:${JSON.stringify(normalizedContents(props.step))}`)
 watch(stepKey, () => { hasSent.value = false })
 const bonusXp = computed(() => props.campaign?.meta?.bonusXp ?? null)
@@ -149,6 +165,11 @@ const investigators = computed(() => {
   return Object.values(props.game.investigators)
 })
 
+const usesTime = computed<boolean>(() => {
+  if(!props.campaign) return false
+  return props.campaign.log.recordedCounts.some(([c, _v]: [any, number]) => c.tag === 'TheScarletKeysKey' && c.contents === 'Time')
+})
+
 const minXp = computed<number>(() => {
   if(!props.campaign) return 0
   const time = props.campaign.log.recordedCounts.find(([c, v]) => c.tag === 'TheScarletKeysKey' && c.contents === 'Time')
@@ -184,8 +205,20 @@ const standalones = computed(() => {
     return acc
   }, [] as string[])
 
-  return sideStories.flatMap((s: { xp: number, id: string, name: string, scenarios?: { id: string, name: string, notAfter?: string[] }[] }) => {
-    if (!s.xp || s.xp > minXp.value) return []
+  return filterDisplayable(sideStories, displayRuleOptions.value).flatMap((s: { xp: number, id: string, name: string, requiredInvestigator?: string, deckRequirements?: string[], scenarios?: { id: string, name: string, notAfter?: string[] }[] }) => {
+    if (!s.xp) return []
+    if (s.id === '90094' && !investigators.value.some((i) => hasParallelContent(i.cardCode))) return []
+    if (s.requiredInvestigator) {
+      // challenge scenarios require their investigator; they pay the full
+      // cost while each other investigator only pays 1 xp
+      const signature = investigators.value.find((i) => i.name.title === s.requiredInvestigator)
+      if (!signature) return []
+      if (usesTime.value) {
+        if (s.xp > minXp.value) return []
+      } else if (signature.xp < s.xp || investigators.value.some((i) => i.id !== signature.id && i.xp < 1)) {
+        return []
+      }
+    } else if (s.xp > minXp.value) return []
     const parts = s.scenarios ?? [{ id: s.id, name: s.name }]
     return parts
       .filter((p) => !completed.includes(p.id))
@@ -275,7 +308,11 @@ const expeditionLeader = computed(() => {
         </div>
         <div class="scenario-info">
           <h2>{{ sideStory.name }}</h2>
-          <h3>({{ sideStory.xp }} XP)</h3>
+          <h3 v-if="sideStory.requiredInvestigator">{{ $t('sideStory.xpAsymmetric', { signatureXp: sideStory.xp, name: sideStory.requiredInvestigator, otherXp: 1 }) }}</h3>
+          <template v-else>
+            <h3>({{ sideStory.xp }} XP)</h3>
+            <h3 v-for="requirement in sideStory.deckRequirements" :key="requirement">{{ requirement }}</h3>
+          </template>
         </div>
 
         <button class="add" @click="loadSideStory(sideStory.id)" :disabled="hasSent">+</button>
@@ -503,7 +540,7 @@ button {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: #333;
+    background: var(--neutral-dark);
     transform: scale(0);
     opacity: 0;
     transition:

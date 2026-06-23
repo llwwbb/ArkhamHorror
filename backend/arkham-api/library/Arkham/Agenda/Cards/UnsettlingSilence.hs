@@ -5,6 +5,7 @@ import Arkham.Agenda.Cards qualified as Cards
 import Arkham.Agenda.Import.Lifted
 import Arkham.Campaigns.TheFeastOfHemlockVale.Helpers
 import Arkham.ChaosToken
+import Arkham.Deck qualified as Deck
 import Arkham.Enemy.Cards qualified as Enemies
 import Arkham.Helpers.ChaosToken (getModifiedChaosTokenFaces)
 import Arkham.Helpers.Query
@@ -36,13 +37,20 @@ instance RunMessage UnsettlingSilence where
       n <- selectCount $ VictoryDisplayCardMatch $ basic $ #enemy <> CardWithTrait Insect
       when (n > 0) $ requestChaosTokens iid (attrs.ability 1) n
       pure a
-    RequestedChaosTokens (isAbilitySource attrs 1 -> True) _ tokens -> do
+    RequestedChaosTokens (isAbilitySource attrs 1 -> True) (Just iid) tokens -> do
+      continue_ iid
       faces <- getModifiedChaosTokenFaces tokens
       when (any (`elem` [Skull, AutoFail]) faces) do
         lead <- getLead
         codex lead attrs Sigma
       pure a
     AdvanceAgenda (isSide B attrs -> True) -> do
+      lead <- getLead
+      discardUntilFirst lead attrs Deck.EncounterDeck (basic $ #enemy <> CardWithTrait Insect)
+      pure a
+    RequestedEncounterCard (isSource attrs -> True) (Just iid) mcard -> do
+      for_ mcard (drawCard iid)
+      shuffleEncounterDiscardBackIn
       advanceAgendaDeck attrs
       pure a
     _ -> UnsettlingSilence <$> liftRunMessage msg attrs

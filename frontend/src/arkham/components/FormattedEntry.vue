@@ -128,7 +128,7 @@ export default defineComponent({
     flex-direction: column;
     flex: 1 1 auto;
     padding: 10px 20px;
-    z-index: 5;
+    z-index: var(--z-index-5);
   }
 
   .composite {
@@ -200,7 +200,7 @@ export default defineComponent({
   background-color: color-mix(in srgb, #3a4a69, transparent 90%);
   padding: 20px;
   position: relative;
-  z-index: 0;
+  z-index: var(--z-index-0);
 
   &.nested {
     border: 0;
@@ -215,7 +215,7 @@ export default defineComponent({
     content: "";
     position: absolute;
     inset: 0;
-    z-index: -1;
+    z-index: var(--z-index-neg-1);
   }
 
   > p:first-child {
@@ -242,7 +242,7 @@ export default defineComponent({
   background-color: color-mix(in srgb, var(--color), transparent 90%);
   padding: 20px;
   position: relative;
-  z-index: 0;
+  z-index: var(--z-index-0);
 
   &:has(.composite > :nth-child(2)) {
     display: flex;
@@ -263,7 +263,7 @@ export default defineComponent({
     content: "";
     position: absolute;
     inset: 0;
-    z-index: 1;
+    z-index: var(--z-index-1);
   }
 
   > p:first-child {
@@ -412,7 +412,7 @@ p.billenia, :deep(p.billenia) {
         mix-blend-mode: multiply;
       }
       &::before {
-        z-index: 2;
+        z-index: var(--z-index-2);
         pointer-events: none;
         position: absolute;
         inset: 10px;
@@ -490,6 +490,16 @@ p.billenia, :deep(p.billenia) {
     background-color: var(--survivor-dark);
     background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"%3E%3Cpath d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636l4.95 4.95z"/%3E%3C/svg%3E');
   }
+}
+
+li:has(> .invalid) > ul,
+:deep(li:has(> .invalid) > ul) {
+  color: #666;
+}
+
+li:has(> .invalid) > ul .valid,
+:deep(li:has(> .invalid) > ul .valid) {
+  color: var(--neutral-extra-dark);
 }
 
 h3, :deep(h3) {
@@ -590,7 +600,7 @@ ul, :deep(ul) {
     padding: 0;
     text-align: center;
     gap: 0;
-    border-bottom: 2px solid #333;
+    border-bottom: 2px solid var(--neutral-dark);
 
     > .composite {
       padding: 0;
@@ -603,7 +613,7 @@ ul, :deep(ul) {
 
       &:has(.yea) {
         background-color: lightcoral;
-        border-left: 2px solid #333;
+        border-left: 2px solid var(--neutral-dark);
       }
     }
     h3 {
@@ -624,7 +634,7 @@ ul, :deep(ul) {
     isolation: isolate;
     mix-blend-mode: multiply;
     &::before {
-      z-index: -1;
+      z-index: var(--z-index-neg-1);
       content: '';
       position: absolute;
       inset: -10px;
@@ -658,7 +668,7 @@ ul, :deep(ul) {
       content: "";
       position: absolute;
       inset: 0;
-      z-index: 3;
+      z-index: var(--z-index-3);
       border: 3px solid black;
       filter: blur(5px);
     }
@@ -797,12 +807,12 @@ ul, :deep(ul) {
 :deep(h1) {
   font-family: "Teutonic";
   font-weight: 500;
-  color: #38615F;
+  color: var(--green-title);
   padding-bottom: 2px;
   &:not(.no-underline) {
-    border-bottom: 1px solid #38615f;
+    border-bottom: 1px solid var(--green-title);
     &::after {
-      border-bottom: 1px solid #38615f;
+      border-bottom: 1px solid var(--green-title);
     }
   }
   font-size: 2em;
@@ -817,7 +827,7 @@ ul, :deep(ul) {
   font-family: "Teutonic";
   font-weight: 500;
   font-size: 1.5em;
-  color: #222;
+  color: var(--neutral-extra-dark);
 }
 
 
@@ -870,7 +880,7 @@ img.remove {
 div:has(> img.remove) {
   position: relative;
   &::before {
-    z-index: 1;
+    z-index: var(--z-index-1);
     content: "";
     display: block;
     inset: 0;
@@ -935,7 +945,7 @@ div:has(> img.remove) {
       translateX(calc(-50% + (var(--i) - (var(--n) - 1)/2) * var(--shift)))
       rotate(calc((var(--i) - (var(--n) - 1)/2) * var(--spread)))
       translateY(var(--lift));
-    z-index: calc(var(--i) + 1);
+    z-index: calc(var(--i) + var(--z-index-1));
   }
 
   /* lift the hovered card and bring it to the top */
@@ -945,7 +955,7 @@ div:has(> img.remove) {
       rotate(calc((var(--i) - (var(--n) - 1)/2) * var(--spread)))
       translateY(var(--hover-lift));
     box-shadow: 0 16px 30px rgba(0,0,0,.35);
-    z-index: 999;
+    z-index: var(--z-index-999);
   }
 
   /* ---- small utility: assign index (--i) with :nth-child rules ---- */
@@ -998,7 +1008,7 @@ div:has(> img.remove) {
       translateX(calc(-50% + (var(--i) - (var(--n) - 1)/2) * var(--shift)))
       rotate(calc((var(--i) - (var(--n) - 1)/2) * var(--spread)))
       translateY(var(--lift));
-    z-index: calc(100 - var(--i));
+    z-index: calc(var(--z-index-100) - var(--i));
   }
 
   /* lift the hovered card and bring it to the top */
@@ -1008,7 +1018,7 @@ div:has(> img.remove) {
       rotate(calc((var(--i) - (var(--n) - 1)/2) * var(--spread)))
       translateY(var(--hover-lift));
     box-shadow: 0 16px 30px rgba(0,0,0,.35);
-    z-index: 999;
+    z-index: var(--z-index-999);
   }
 
   /* ---- small utility: assign index (--i) with :nth-child rules ---- */

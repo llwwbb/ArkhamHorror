@@ -8,12 +8,15 @@ import Arkham.Location.CardDefs.ReturnTo as X
 import Arkham.Location.CardDefs.Standalone as X
 import Arkham.Location.CardDefs.TheCircleUndone as X
 import Arkham.Location.CardDefs.TheDreamEaters as X
+import Arkham.Location.CardDefs.TheDrownedCity as X
 import Arkham.Location.CardDefs.TheDunwichLegacy as X
 import Arkham.Location.CardDefs.TheFeastOfHemlockVale as X
 import Arkham.Location.CardDefs.TheForgottenAge as X
 import Arkham.Location.CardDefs.TheInnsmouthConspiracy as X
 import Arkham.Location.CardDefs.ThePathToCarcosa as X
 import Arkham.Location.CardDefs.TheScarletKeys as X
+import Arkham.Location.CardDefs.ByTheBook as X
+import Arkham.Location.CardDefs.RelicsOfThePast as X
 
 import Arkham.Card.CardCode
 import Arkham.Card.CardDef
@@ -33,6 +36,7 @@ allLocationCards =
       , abandonedChapelSpectral
       , abandonedShack
       , abandonedSite
+      , abandonedWarehouse
       , abbeyChurch
       , abbeyTowerSpiresForbidden
       , abbeyTowerThePathIsOpen
@@ -57,6 +61,9 @@ allLocationCards =
       , ancientHallRearrangedByTime
       , ancientPlanetarium
       , anotherDimension
+      , arkhamAdvertiserFuture
+      , arkhamAdvertiserPresent
+      , arkhamGazette
       , arkhamPoliceStation
       , arkhamWoodsBootleggingOperation
       , arkhamWoodsCliffside
@@ -154,6 +161,22 @@ allLocationCards =
       , cafeLunaCoterieHaunt
       , cairoBazaar
       , arkham
+      , chamberOfDecay
+      , chamberOfHunger
+      , chamberOfNightEpicMultiplayer
+      , chamberOfNight
+      , chamberOfPoison
+      , chamberOfRain
+      , chamberOfRegret
+      , chamberOfRot
+      , chamberOfSecretsBloodyPrison
+      , chamberOfSecretsEnshroudedPrison
+      , chamberOfSecretsMysteriousPrison
+      , chamberOfSorrowsEpicMultiplayer
+      , chamberOfSorrows
+      , labyrinthineHallsCorpseFilledPath
+      , labyrinthineHallsFoulSmellingPath
+      , labyrinthineHallsOvergrownPath
       , streetsOfProvidence
       , athenaeumOfTheEmptySky
       , theArcade
@@ -203,6 +226,7 @@ allLocationCards =
       , chapultepecHill_178
       , chapultepecHill_179
       , chapultepecPark
+      , childhoodHome
       , choeurGothique_292
       , choeurGothique_293
       , chthonianDepths
@@ -237,6 +261,7 @@ allLocationCards =
       , controlStation
       , coop
       , corpseGrove
+      , corriganIndustries
       , cosmicGate
       , cosmicIngress
       , coterieLibraryLair
@@ -599,7 +624,10 @@ allLocationCards =
       , miskatonicQuad
       , miskatonicRiver
       , miskatonicUniversity
+      , miskatonicUniversityFuture
       , miskatonicUniversityMiskatonicMuseum
+      , miskatonicUniversityPast
+      , miskatonicUniversityPresent
       , mistFilledCaverns
       , mistPylon_174
       , mistPylon_175
@@ -650,6 +678,7 @@ allLocationCards =
       , northTower_288
       , notreDame
       , obeliskOfTheodosius
+      , oMalleysWatchShop
       , office
       , officeMurderAtTheExcelsiorHotel
       , officeSpectral
@@ -785,6 +814,9 @@ allLocationCards =
       , ritualSiteTeetawn
       , ritualSiteTothis
       , riverCanyon
+      , riverDocksFuture
+      , riverDocksPast
+      , riverDocksPresent
       , riversideTemple
       , rivertown
       , rivertown_292
@@ -996,12 +1028,15 @@ allLocationCards =
       , theWhiteShip
       , throneOfBloodRedAsBloodBlackAsNight
       , throneRoom
+      , tickTockClubFuture
+      , tickTockClubPresent
       , tidalPool
       , tightTurn_a
       , tightTurn_b
       , tightTurn_c
       , timeWrackedWoods
       , tinMine
+      , tindalos
       , titanicRamp_182
       , titanicRamp_183
       , titanicRamp_184
@@ -1109,6 +1144,7 @@ allLocationCards =
       , witchHouseRuins
       , xochimilco
       , yard
+      , yeOldeMagickShoppe
       , yithianOrrery
       , yourHouse
       , yuggoth
@@ -1159,6 +1195,106 @@ allLocationCards =
       , oozyLakebed
       , slimyStreets
       , desiccatedFarmland
+      , --- By the Book
+        arkhamPoliceStationByTheBook
+      , --- Relics of the Past
+        secretPassageRelicsOfThePast
+      , innerChamber
+      , ancientHallRelicsOfThePast
+      , --- The Drowned City
+        tillinghastEsoterica
+      , hibbsRoadhouse
+      , laBellaLunaTheDrownedCity
+      , treacherousPathSlickSteps
+      , treacherousPathErodedShelf
+      , treacherousPathPrecariousClimb
+      , treacherousPathDeadlyPass
+      , treacherousPathShallowDen
+      , sunkenStairway
+      , drownedShanty
+      , shatteredRuins
+      , obsidianFoundations
+      , westernWall_11530
+      , underseaVault
+      , barrierCoreInactive
+      , barrierCoreActive
+      , abyssalTrench
+      , drownedAcropolisEphemeralRuins
+      , drownedAcropolisCollapsedRuins
+      , blastedRuinsSunkenCircle
+      , blastedRuinsCrumblingEdifices
+      , coralReefStatuaryGarden
+      , coralReefFeedingGrounds
+      , ancientGallery
+      , apiaryEntranceBeckoningLight
+      , apiaryEntranceDangerousExit
+      , fleshyPathsEasternBurrows
+      , fleshyPathsWesternBurrows
+      , growingFields
+      , churningChasm
+      , corruptedVault
+      , luminousTunnels
+      , spawningGrounds
+      , lostCampsite
+      , graspingCorridor
+      , starvingCorridor
+      , acidicCoelom
+      , centralChamber
+      , hiddenVault
+      , theGreatStair
+      , movingPlatformObservationStation
+      , coreOfTheVaultHeartOfTheMachine
+      , shroudedCistern
+      , chamberOfRecordsArm
+      , chamberOfRecordsEarth
+      , otherworldlyMechanismsObsidianBulwark
+      , otherworldlyMechanismsSluiceControl
+      , otherworldlyMechanismsGrimeCoveredGears
+      , otherworldlyMechanismsInscrutableApparatus
+      , chamberOfTheTabletUnsealed
+      , westAntechamber
+      , eastAntechamber
+      , twistingCatwalks
+      , greatLiftInactive
+      , greatLiftActive
+      , ancientAltar
+      , ringLibraryArchiveOfTheStars
+      , ringLibraryArchiveOfTheAncients
+      , loftyWalkwayArchiveOfDreams
+      , loftyWalkwayArchiveOfConflict
+      , luminousArchivesArchiveOfHistory
+      , luminousArchivesArchiveOfMemory
+      , rlyehStreets
+      , centralSpire
+      , floatingSpire
+      , westernWall_11651
+      , ancientDome
+      , easternAthenaeum
+      , westernAthenaeum
+      , obsidianCliffs
+      , suspendedReef
+      , hangingShip
+      , ancientCanyons
+      , dazzlingSkyline
+      , aerialWaterfall
+      , magneticSpires
+      , glyphOrrery
+      , dreamersRest
+      , sigilCarvedAlcoveStoryOfAmbition
+      , sigilCarvedAlcoveStoryOfResilience
+      , sigilCarvedAlcoveStoryOfInfinity
+      , sigilCarvedAlcoveStoryOfDefiance
+      , sigilCarvedAlcoveStoryOfTheVoyage
+      , tillinghastEsotericaEphemeralShop
+      , northsideTheDrownedCity
+      , downtown
+      , easttownTheDrownedCity
+      , miskatonicUniversityTheDrownedCity
+      , rivertownTheDrownedCity
+      , stMarysHospitalTheDrownedCity
+      , southside
+      , westernRooftops
+      , easternRooftops
       ]
 
 allSpecialLocationCards :: Map CardCode CardDef

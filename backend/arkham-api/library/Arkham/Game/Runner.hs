@@ -8,7 +8,7 @@ import Arkham.Act.Types (Field (..))
 import Arkham.Action qualified as Action
 import Arkham.ActiveCost
 import Arkham.Agenda
-import Arkham.Agenda.Types (Field (..))
+import Arkham.Agenda.Types (Field (..), doomL)
 import Arkham.Asset
 import Arkham.Asset.Cards qualified as Assets
 import Arkham.Asset.Types (Asset, AssetAttrs (..), Field (..), assetIsStory)
@@ -412,6 +412,7 @@ runGameMessage msg g = case msg of
       & (inActionL .~ True)
       & (actionCanBeUndoneL .~ True)
       & (actionDiffL .~ [])
+      & (actionSnapshotL .~ Transient Nothing)
       & (undoActionStepL ?~ gameScenarioSteps g)
   FinishAction -> do
     iid <- getActiveInvestigatorId
@@ -425,6 +426,7 @@ runGameMessage msg g = case msg of
       & (inActionL .~ False)
       & (actionCanBeUndoneL .~ False)
       & (actionDiffL .~ [])
+      & (actionSnapshotL .~ Transient Nothing)
       & (inDiscardEntitiesL .~ mempty)
       & (phaseHistoryL %~ insertHistory iid historyItem)
       & setTurnHistory
@@ -460,6 +462,14 @@ runGameMessage msg g = case msg of
           & (activeAbilitiesL .~ mempty)
           & (actionRemovedEntitiesL .~ mempty)
           & (activeAbilitiesL .~ mempty)
+          -- A scenario-ending action (e.g. Resign) leaves the game "in action"
+          -- with a revert diff/snapshot pointing at the entities we just tore
+          -- down. Clear the action bookkeeping so we don't persist a stale diff
+          -- that fails to apply on reload (see handleActionDiff / unsafePatch).
+          & (inActionL .~ False)
+          & (actionDiffL .~ [])
+          & (actionCanBeUndoneL .~ False)
+          & (actionSnapshotL .~ Transient Nothing)
     case gameMode g of
       These c _ -> pure $ update $ g & (modeL .~ This c)
       _ -> pure $ update g
@@ -504,6 +514,12 @@ runGameMessage msg g = case msg of
       & (turnHistoryL .~ mempty)
       & (roundHistoryL .~ mempty)
       & (cardsL %~ if keepCardCache then id else const mempty)
+      -- See EndOfScenario: drop action bookkeeping so a reset never persists a
+      -- stale revert diff against torn-down entities.
+      & (inActionL .~ False)
+      & (actionDiffL .~ [])
+      & (actionCanBeUndoneL .~ False)
+      & (actionSnapshotL .~ Transient Nothing)
   StartScenario sid mopts -> do
     -- NOTE: The campaign log and player decks need to be copied over for
     -- standalones because we effectively reset it here when we `setScenario`.
@@ -1210,9 +1226,17 @@ runGameMessage msg g = case msg of
     pure $ g & entitiesL . actsL . at aid ?~ either throw id (lookupAct aid deckNum $ toCardId card)
   AddAgenda agendaDeckNum card -> do
     let aid = AgendaId $ toCardCode card
+    mods <- getModifiers aid
+    let startingDoom = sum [n | EntersPlayWithDoom n <- mods]
     let (before, _, after) = frame (Window.EnterPlay $ toTarget aid)
     pushAll [before, after]
-    pure $ g & entitiesL . agendasL . at aid ?~ lookupAgenda aid agendaDeckNum (toCardId card)
+    let theAgenda = lookupAgenda aid agendaDeckNum (toCardId card)
+    pure
+      $ g
+      & entitiesL
+      . agendasL
+      . at aid
+      ?~ (if startingDoom > 0 then overAttrs (doomL .~ startingDoom) theAgenda else theAgenda)
   ReassignHorror source target n -> do
     let
       matchesP = \case
@@ -1342,7 +1366,19 @@ runGameMessage msg g = case msg of
                 )
               DeferDiscard -> (Noop, Nothing)
 
-    pushAll $ map fst skillPairs
+    -- A committed skill leaving the test must return any chaos tokens it
+    -- sealed (e.g. Unrelenting (1)) to the bag. The discard/return dispositions
+    -- above do not route through RemoveFromPlay, so unseal here explicitly;
+    -- this mirrors Skill.Runner's RemoveFromPlay handler and is idempotent with
+    -- any card-level afterSkillTest unseal. Without this, sealed tokens are lost
+    -- permanently when the skill is cleaned up without a RemoveFromPlay.
+    let
+      sealedTokenUnseals =
+        [ UnsealChaosToken token
+        | (_, skill) <- mapToList skills'
+        , token <- skillSealedChaosTokens (toAttrs skill)
+        ]
+    pushAll $ sealedTokenUnseals <> map fst skillPairs
 
     let
       skillTypes = case skillTestType <$> g ^. skillTestL of
@@ -1413,8 +1449,12 @@ runGameMessage msg g = case msg of
       & (focusedCardsL %~ map (filter (`notElem` cards)))
       . (foundCardsL . each %~ filter (`notElem` cards))
   ReturnToHand iid (SkillTarget skillId) -> do
-    card <- field SkillCard skillId
-    pushAll [RemoveFromPlay (toSource skillId), addToHand iid card]
+    -- If the skill is no longer in play (e.g. a doubled "if this test succeeds"
+    -- result from Double or Nothing tries to return Arrogance after it has
+    -- already been returned to hand), do nothing.
+    for_ (preview (entitiesL . skillsL . ix skillId) g) \_ -> do
+      card <- field SkillCard skillId
+      pushAll [RemoveFromPlay (toSource skillId), addToHand iid card]
     pure g
   ReturnToHand iid (CardIdTarget cardId) -> do
     -- We need to check skills specifically as they aren't covered by the skill
@@ -2573,7 +2613,10 @@ runGameMessage msg g = case msg of
     iid' <- fromMaybe iid <$> selectOne (InvestigatorWithModifier DrawsEachEncounterCard)
     whenM (not <$> isEliminated iid) do
       player <- getPlayer iid'
-      push $ chooseOne player [TargetLabel EncounterDeckTarget [drawEncounterCard iid' GameSource]]
+      mods <- getModifiers iid'
+      viaTargets <- nub . concat <$> traverse select [tm | DrawEncounterCardsVia tm <- mods]
+      let drawTargets = if null viaTargets then [EncounterDeckTarget] else viaTargets
+      push $ chooseOne player [TargetLabel t [drawEncounterCard iid' GameSource] | t <- drawTargets]
     pure $ g & activeInvestigatorIdL .~ iid'
   EndMythos -> do
     pushAll
@@ -3718,10 +3761,37 @@ runPreGameMessage msg g = case msg of
   BeginRound -> pure $ g & undoRoundStepL ?~ (gameScenarioSteps g + 1)
   _ -> pure g
 
+{- | Maintain the revert information for the in-flight action.
+
+While an action resolves, 'gameActionDiff' holds a single lazy revert diff
+from the current state back to the snapshot the action started from (kept in
+the runtime-only 'gameActionSnapshot'). Replacing one unforced thunk per
+message costs nothing; the diff is only computed if the game is saved
+mid-action or the action is undone. This previously consed a fully-computed
+diff per processed message — two whole-game serializations plus a tree diff,
+times hundreds of messages, all forced at every mid-action save.
+
+The snapshot is reconstructed on the first message after a mid-action load by
+folding the saved revert patches into the just-loaded state — which also
+covers mid-action saves written by older builds (one patch per message), so
+'UndoAction' keeps working across the format change.
+-}
 handleActionDiff :: Game -> Game -> Game
 handleActionDiff old new
-  | gameInAction new = new & actionDiffL %~ (diff new old :)
-  | otherwise = new
+  | not (gameInAction new) = new
+  | otherwise = case getTransient (gameActionSnapshot new) of
+      Just snap -> new & actionDiffL .~ [diff new snap]
+      Nothing ->
+        let snap = case gameActionDiff new of
+              -- action began with this message; the pre-message state is the
+              -- action start
+              [] -> old
+              -- resumed from a mid-action save: fold the saved revert patches
+              -- into the just-loaded state to recover the action start
+              ps -> (foldl' unsafePatch old ps) {gameActionDiff = []}
+         in new
+              & (actionSnapshotL .~ Transient (Just snap))
+              & (actionDiffL .~ [diff new snap])
 
 rewriteUsedAbilityWindows
   :: (Window.WindowType -> Bool)

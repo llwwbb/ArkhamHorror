@@ -302,6 +302,7 @@ newGame scenarioOrCampaignId seed playerCount difficulty includeTarotReadings =
         , gameEnemyEvading = Nothing
         , gameActionCanBeUndone = False
         , gameActionDiff = []
+        , gameActionSnapshot = Transient Nothing
         , gameInAction = False
         , gameActiveCost = mempty
         , gameInSetup = True
@@ -548,7 +549,8 @@ withInvestigatorConnectionData
 withInvestigatorConnectionData inner@(With target _) = case target of
   WithDeckSize investigator' -> do
     additionalActions <- getAdditionalActions (toAttrs investigator')
-    engagedEnemies <- select (enemyEngagedWith $ toId investigator')
+    engagedEnemies <-
+      select (EnemyIsEngagedWith $ IncludeEliminated $ InvestigatorWithId $ toId investigator')
     assets <- select (AssetWithPlacement $ InPlayArea $ toId investigator')
     assets' <- select (AssetWithPlacement $ InThreatArea $ toId investigator')
     skills <- select (SkillWithPlacement $ InPlayArea $ toId investigator')
@@ -687,6 +689,7 @@ instance ToJSON gid => ToJSON (PublicGame gid) where
       <> ("playerOrder" .= gamePlayerOrder)
       <> ("phase" .= gamePhase)
       <> ("phaseStep" .= gamePhaseStep)
+      <> ("inAction" .= gameInAction)
       <> ("skillTest" .= skillTest)
       <> ("skillTestChaosTokens" .= skillTestChaosTokens)
       <> ("focusedCards" .= fromMaybe [] (headMay gameFocusedCards))
@@ -821,6 +824,7 @@ instance ToJSON gid => ToJSON (PublicGame gid) where
         , "playerOrder" .= toJSON gamePlayerOrder
         , "phase" .= toJSON gamePhase
         , "phaseStep" .= toJSON gamePhaseStep
+        , "inAction" .= toJSON gameInAction
         , "skillTest" .= toJSON skillTest
         , "skillTestChaosTokens" .= toJSON skillTestChaosTokens
         , "focusedCards" .= toJSON (fromMaybe [] $ headMay gameFocusedCards)
@@ -1162,8 +1166,9 @@ getInvestigatorsMatching MatcherFunc {..} matcher = do
       activeId <- view activeInvestigatorIdL <$> getGame
       pure $ runMatches ((== activeId) . toId) as
     YetToTakeTurn -> do
-      activeId <- view activeInvestigatorIdL <$> getGame
-      pure $ runMatches (\i -> toId i /= activeId && not (investigatorEndedTurn $ toAttrs i)) as
+      getTurnInvestigator <&> \case
+        Nothing -> asMatch as
+        Just (toId -> turnId) -> runMatches (\i -> toId i /= turnId && not (investigatorEndedTurn $ toAttrs i)) as
     LeadInvestigator -> do
       leadId <- gameLeadInvestigatorId <$> getGame
       pure $ runMatches ((== leadId) . toId) as
@@ -1209,7 +1214,10 @@ getInvestigatorsMatching MatcherFunc {..} matcher = do
     InvestigatorIs cardCode -> pure $ flip runMatches as \a ->
       toCardCode a == cardCode || case a.form of
         TransfiguredForm c -> c == cardCode
-        _ -> False
+        YithianForm -> coerce (toId a) == cardCode
+        HomunculusForm -> coerce (toId a) == cardCode
+        ShatteredForm -> coerce (toId a) == cardCode
+        RegularForm -> False
     InvestigatorWithLowestSkill skillType inner -> flip runMatchesM as $ \i ->
       isLowestAmongst (toId i) inner (getSkillValue skillType)
     InvestigatorWithHighestSkill skillType inner -> flip runMatchesM as $ \i ->
@@ -1419,7 +1427,13 @@ getInvestigatorsMatching MatcherFunc {..} matcher = do
         DamageType ->
           getSourceController source >>= \case
             Just performerId -> hasModifier performerId CannotHealDamage
-            Nothing -> pure False
+            -- During a playability check `ThisCard` becomes a `CardCostSource`, which
+            -- has no controller; fall back to the active investigator (the would-be
+            -- performer) so cards like Infuse Life are unplayable when the performer
+            -- cannot heal.
+            Nothing -> case source of
+              CardCostSource _ -> elem CannotHealDamage <$> getActiveInvestigatorModifiers
+              _ -> pure False
         HorrorType -> pure False
       if sourceBlocked
         then pure noMatch
@@ -1780,6 +1794,7 @@ getScenariosMatching matcher = do
     ScenarioWithModifier modifierType -> \s -> do
       modifiers' <- getModifiers (toTarget s)
       pure $ modifierType `elem` modifiers'
+    ScenarioWithId sid -> \s -> pure $ s.id == sid
 
 abilityMatches :: (HasGame m, Tracing m) => Ability -> AbilityMatcher -> m Bool
 abilityMatches a@Ability {..} = \case
@@ -2069,6 +2084,18 @@ getLocationsMatching lmatcher = do
     LocationIsInFrontOf investigatorMatcher -> do
       investigators <- select investigatorMatcher
       filterM (fmap (maybe False (`elem` investigators)) . field LocationInFrontOf . toId) ls
+    LocationWithSealedChaosToken chaosTokenMatcher -> do
+      case chaosTokenMatcher of
+        AnyChaosToken -> do
+          ls & filterM \loc -> do
+            fieldMap LocationSealedChaosTokens notNull (toId loc)
+        _ -> do
+          tokens <- select chaosTokenMatcher
+          ls & filterM \loc -> do
+            fieldMap LocationSealedChaosTokens (any (`elem` tokens)) (toId loc)
+    LocationWithPlacedChaosToken chaosTokenMatcher -> do
+      ls & filterM \loc -> do
+        fieldMapM LocationPlacedChaosTokens (anyM (`matches` IncludeSealed chaosTokenMatcher)) (toId loc)
     LocationWithPlacement placement -> do
       filterM (fieldMap LocationPlacement (== Just placement) . toId) ls
     ConnectedToSetAsideLocation -> do
@@ -2608,6 +2635,9 @@ getLocationsMatching lmatcher = do
     LocationSharesTraitWith inner -> do
       traits <- Set.unions <$> selectField LocationTraits inner
       let hasMatchingTrait = fieldP LocationTraits (any (`member` traits)) . toId
+      filterM hasMatchingTrait ls
+    LocationWithPrintedTrait trait -> do
+      let hasMatchingTrait = fieldP LocationCard (\c -> cardMatch c (CardWithTrait trait)) . toId
       filterM hasMatchingTrait ls
     LocationWithTrait trait -> do
       let hasMatchingTrait = fieldP LocationTraits (trait `member`) . toId
@@ -3220,7 +3250,11 @@ getAssetsMatching matcher = do
         $ fieldMapM AssetCardsUnderneath (`cardListMatches` cardListMatcher)
         . toId
     HealableAsset _source damageType matcher' -> case damageType of
-      DamageType -> filterMatcher as (matcher' <> AssetWithDamage <> AssetWithoutModifier CannotHaveDamageHealed)
+      DamageType -> do
+        modifiers' <- getActiveInvestigatorModifiers
+        if CannotHealDamage `elem` modifiers'
+          then pure []
+          else filterMatcher as (matcher' <> AssetWithDamage <> AssetWithoutModifier CannotHaveDamageHealed)
       HorrorType -> do
         let
           isCannotHealHorrorOnOtherCardsModifiers = \case
@@ -3296,7 +3330,7 @@ getEventsMatching matcher = case matcher of
       pure $ filter ((`elem` iids) . ownerOfEvent) as
     EventWithoutModifier modifierType -> filterM (fmap (notElem modifierType) . getModifiers . toId) as
     EventWithModifier modifierType -> filterM (fmap (elem modifierType) . getModifiers . toId) as
-    EventWithDoom valueMatcher -> filterM ((`gameValueMatches` valueMatcher) . attr eventDoom) as
+    EventWithDoom valueMatcher -> filterM ((`gameValueMatches` valueMatcher) . (.doom) . toAttrs) as
     EventWithToken tkn -> filterM (fieldMap EventTokens (Token.hasToken tkn) . toId) as
     EventReady -> pure $ filter (not . attr eventExhausted) as
     EventMatches ms -> foldM filterMatcher as ms
@@ -3655,8 +3689,12 @@ enemyMatcherFilter es matcher' = do
       adjust modifiers & allM \case
         CannotBeDamagedByPlayerSourcesExcept sourceMatcher ->
           sourceMatches source (oneOf [NotSource SourceIsPlayerCard, sourceMatcher])
+        -- Only the matcher; see Arkham.Helpers.Enemy.sourceCanDamageEnemy and
+        -- issue #4887. A basic attack resolves to an EnemySource, so folding in
+        -- NotSource SourceIsPlayerCard here would exclude every fighter, not the
+        -- matcher's target. (inShadows uses AnySource, which still matches all.)
         CannotBeDamagedByPlayerSources sourceMatcher ->
-          not <$> sourceMatches source (oneOf [NotSource SourceIsPlayerCard, sourceMatcher])
+          not <$> sourceMatches source sourceMatcher
         CannotBeDamaged -> pure False
         _ -> pure True
     EnemyWithAsset assetMatcher -> do
@@ -4341,14 +4379,19 @@ maybeAgenda aid = runMaybeT do
 
 instance Projection Location where
   getAttrs lid = toAttrs <$> getLocation lid
-  project lid = preview (entitiesL . locationsL . ix lid) <$> getGame
+
+  -- Use maybeLocation (not a bare locationsL lookup) so enemy-locations resolve
+  -- as Locations here too. Otherwise project/fieldMay disagree with field/getLocation,
+  -- and matchers that go through fieldMay (e.g. locationMatches for LocationWithClues)
+  -- silently treat enemy-locations as having no clues/doom/shroud/etc.
+  project lid = maybeLocation lid
   field f lid = do
     l <- getLocation lid
     let attrs@LocationAttrs {..} = toAttrs l
     case f of
       LocationCostToEnterUnrevealed -> do
         blank <- hasModifier attrs Blank
-        pure $ if blank then Free else locationCostToEnterUnrevealed
+        pure $ if blank then Free else replaceThisLocation lid locationCostToEnterUnrevealed
       LocationPosition -> pure locationPosition
       LocationInFrontOf -> pure $ case locationPlacement of
         Just (InPlayArea iid) -> Just iid
@@ -4370,6 +4413,8 @@ instance Projection Location where
         if isRevealed l && isJust locationShroud
           then Just <$> getModifiedShroudValueFor attrs
           else pure Nothing
+      LocationSealedChaosTokens -> pure locationSealedChaosTokens
+      LocationPlacedChaosTokens -> pure locationPlacedChaosTokens
       LocationJustShroud -> getModifiedShroudValueFor attrs
       LocationInvestigateDifficulty -> pure $ LocationMaybeFieldCalculation l.id LocationShroud
       LocationBrazier -> pure locationBrazier
@@ -4582,7 +4627,9 @@ instance Projection Act where
     let ActAttrs {..} = toAttrs a
     case f of
       ActSequence -> pure actSequence
-      ActClues -> pure actClues
+      ActClues -> pure $ Token.countTokens Token.Clue actTokens
+      ActResources -> pure $ Token.countTokens Token.Resource actTokens
+      ActTokens -> pure actTokens
       ActDeckId -> pure actDeckId
       ActAbilities -> pure $ getAbilities a
       ActCard -> pure $ lookupCard (unActId aid) actCardId
@@ -5114,7 +5161,8 @@ instance Query ChaosTokenMatcher where
           Just st ->
             -- At the #cancel/#when window the reveal isn't recorded yet
             -- (revealedChaosTokensCount == 0); at #after it is 1.
-            st.revealedChaosTokensCount == 0
+            st.revealedChaosTokensCount
+              == 0
               || (st.revealedChaosTokensCount == 1 && t `elem` st.revealedChaosTokens)
 
 instance Query AssetMatcher where
@@ -5803,7 +5851,7 @@ eventField e fld = do
     EventAbilities -> pure $ getAbilities e
     EventOwner -> pure eventOwner
     EventController -> pure eventController
-    EventDoom -> pure eventDoom
+    EventDoom -> pure attrs.doom
     EventCard -> pure $ toCard e
 
 instance Projection Event where

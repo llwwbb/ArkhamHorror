@@ -22,6 +22,7 @@ import Arkham.Act.Types (Field (..))
 import Arkham.Agenda.AdvancementReason
 import Arkham.Agenda.Sequence qualified as Agenda
 import Arkham.Agenda.Types (Field (..))
+import Arkham.Asset.Cards qualified as Assets
 import Arkham.Asset.Types (Field (..))
 import Arkham.Campaign.Types (Field (..))
 import Arkham.CampaignLog hiding (optionsL)
@@ -60,6 +61,7 @@ import Arkham.Helpers.Card
 import Arkham.Helpers.Deck
 import Arkham.Helpers.Enemy
 import Arkham.Helpers.Investigator
+import Arkham.Helpers.Log (getHasRecord)
 import Arkham.Helpers.Message qualified as Msg
 import Arkham.Helpers.Modifiers hiding (cardResolutionModifiers)
 import Arkham.Helpers.Playable
@@ -87,6 +89,7 @@ import Arkham.Search hiding (drawnCardsL, foundCardsL)
 import Arkham.Search qualified as Search
 import Arkham.Skill.Types qualified as Field
 import Arkham.Story.Types (Field (..))
+import Arkham.SideStory (challengeScenarioInvestigator)
 import Arkham.Tarot
 import Arkham.Token
 import Arkham.Treachery.Cards qualified as Treacheries
@@ -251,7 +254,20 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
             labeled' "healMentalTrauma" $ push $ HealTrauma iid 0 1
     pure a
   EndSetup -> do
-    pushAll [BeginGame, BeginRound, Begin InvestigationPhase]
+    -- Preludes are the same game as the scenario that follows them, so the
+    -- continuing scenario skips start-of-game windows (and opening-hand
+    -- revelations). See local-faq 2026-06-17_hemlock-vale-preludes-same-game.
+    let skipStartOfGame = maybe False (.skipStartOfGame) scenarioOptions
+    pushAll
+      $ [BeginGame | not skipStartOfGame] <> [BeginRound, Begin InvestigationPhase]
+    whenM (getHasRecord TheInvestigatorsSurvivedTheMidwinterGala) do
+      lead <- getLead
+      jewel <- genCard Assets.jewelOfSarnath
+      questionLabel' "label.shuffleJewelOfSarnath" lead
+        $ ChooseOne
+          [ Label "$label.shuffleIn" [ShuffleCardsIntoDeck Deck.EncounterDeck [jewel]]
+          , Label "$label.dontShuffle" []
+          ]
     pure a
   ResolveAmounts iid choiceMap (LabeledTarget "Purchase Trauma" (isTarget a -> True)) -> do
     let physical = getChoiceAmount "$physical" choiceMap
@@ -1203,28 +1219,32 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
         when
           (foundKey cardSource /= Zone.FromDeck)
           (error "Expects a deck: Investigator<PutBackInAnyOrder>")
-        chooseOneAtATime iid
-          $ mapTargetLabelWith
-            toCardId
-            (\c -> [AddFocusedToTopOfDeck iid t (toCardId c)])
-            (findWithDefault [] Zone.FromDeck $ a ^. foundCardsL)
+        let remaining = findWithDefault [] Zone.FromDeck $ a ^. foundCardsL
+        unless (null remaining) do
+          chooseOneAtATime iid
+            $ mapTargetLabelWith
+              toCardId
+              (\c -> [AddFocusedToTopOfDeck iid t (toCardId c)])
+              remaining
       PutBackInAnyOrderBothTopAndBottom -> do
         when
           (foundKey cardSource /= Zone.FromDeck)
           (error "Expects a deck: Investigator<PutBackInAnyOrderBothTopAndBottom>")
-        player <- getPlayer iid
-        chooseOneAtATime iid
-          $ mapTargetLabelWith
-            toCardId
-            ( \c ->
-                [ Msg.chooseOne
-                    player
-                    [ Label "$label.placeOnTop" [AddFocusedToTopOfDeck iid t (toCardId c)]
-                    , Label "$label.placeOnBottom" [PutCardOnBottomOfDeck iid deck c]
-                    ]
-                ]
-            )
-            (findWithDefault [] Zone.FromDeck $ a ^. foundCardsL)
+        let remaining = findWithDefault [] Zone.FromDeck $ a ^. foundCardsL
+        unless (null remaining) do
+          player <- getPlayer iid
+          chooseOneAtATime iid
+            $ mapTargetLabelWith
+              toCardId
+              ( \c ->
+                  [ Msg.chooseOne
+                      player
+                      [ Label "$label.placeOnTop" [AddFocusedToTopOfDeck iid t (toCardId c)]
+                      , Label "$label.placeOnBottom" [PutCardOnBottomOfDeck iid deck c]
+                      ]
+                  ]
+              )
+              remaining
       ShuffleBackIn -> do
         when (foundKey cardSource /= Zone.FromDeck) (error "Expects a deck: Investigator<ShuffleBackIn>")
         for_ scenarioSearch \MkSearch {searchType} ->
@@ -1688,6 +1708,12 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     do_ EnemiesAttack
     pure a
   LoadScenario opts -> do
+    for_ (challengeScenarioInvestigator scenarioId) \title -> do
+      hasSignature <- selectAny $ Matcher.InvestigatorWithTitle title
+      unless hasSignature
+        $ error
+        $ "Cannot play this challenge scenario without "
+        <> unpack title
     unless opts.delayChoosingLead do
       push $ maybe ChooseLeadInvestigator (`ChoosePlayer` SetLeadInvestigator) opts.leadInvestigator
       push SetPlayerOrder
@@ -1847,7 +1873,9 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       [] -> pure ()
     pure a
   ReportXp breakdown -> do
-    pure $ a & xpBreakdownL ?~ breakdown
+    pure $ a & xpBreakdownL %~ \case
+      Nothing -> Just breakdown
+      Just existing -> Just (existing <> breakdown)
   PlaceGrid gloc@(GridLocation pos lid) -> do
     let gridCleared = case findInGrid lid scenarioGrid of
           Nothing -> scenarioGrid

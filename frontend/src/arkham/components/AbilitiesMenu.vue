@@ -126,7 +126,7 @@ watch(showAbilities, (newValue) => {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  z-index: 1000;
+  z-index: var(--z-index-1000);
   &.abilities--above-drawer {
     z-index: 10001;
   }

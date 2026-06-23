@@ -1,6 +1,7 @@
 module Arkham.Location.Cards.CrookedPath (crookedPath) where
 
 import Arkham.Ability
+import Arkham.ForMovement
 import Arkham.Helpers.Location (getCanMoveTo)
 import Arkham.Helpers.Modifiers
 import Arkham.I18n
@@ -25,7 +26,11 @@ instance HasModifiersFor CrookedPath where
 
 instance HasAbilities CrookedPath where
   getAbilities (CrookedPath a) =
-    extendRevealed a [mkAbility a 1 $ freeReaction (DiscoverClues #after You (be a) (atLeast 1))]
+    extendRevealed
+      a
+      [ restricted a 1 (exists $ UnrevealedLocation <> ConnectedFrom NotForMovement (LocationWithId a.id))
+          $ freeReaction (DiscoverClues #after You (be a) (atLeast 1))
+      ]
 
 instance RunMessage CrookedPath where
   runMessage msg l@(CrookedPath attrs) = runQueueT $ case msg of

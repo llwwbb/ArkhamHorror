@@ -138,7 +138,26 @@ const skipTriggersAction = computed(() => {
 
 const skipAllTriggers = inject<(() => void)>('skipAllTriggers')
 const skipAllAvailable = inject<Ref<boolean>>('skipAllAvailable')
-const showSkipAll = computed(() => skipTriggersAction.value !== -1 && skipAllAvailable?.value === true)
+const skipAllInProgress = inject<Ref<boolean>>('skipAllInProgress')
+const solo = inject<Ref<boolean>>('solo')
+const isCurrentPlayersInvestigator = computed(() => props.investigator.playerId === props.playerId)
+const showSkipAll = computed(() => {
+  if (solo?.value === true) {
+    return skipTriggersAction.value !== -1 && skipAllAvailable?.value === true
+  }
+
+  return isCurrentPlayersInvestigator.value && skipAllAvailable?.value === true
+})
+const canSkipTriggers = computed(() => skipTriggersAction.value !== -1 || showSkipAll.value)
+
+function skipTriggers() {
+  if (skipTriggersAction.value !== -1) {
+    emit('choose', skipTriggersAction.value)
+    return
+  }
+
+  if (skipAllTriggers) skipAllTriggers()
+}
 
 const investigatorClass = computed(() => {
   return ['c03006', 'c90087'].includes(props.investigator.cardCode) && props.investigator.meta !== 'Neutral' ? (props.investigator.meta ?? props.investigator.class) : props.investigator.class
@@ -174,6 +193,33 @@ const investigatorPortraitImage = computed(() => {
 
   return portraitImage(props.investigator.cardCode, suffix)
 })
+
+const miniCardDevoured = computed(() => {
+  const devouredMiniCards = props.game.scenario?.meta?.devouredMiniCards
+  return Array.isArray(devouredMiniCards) && devouredMiniCards.includes(id.value)
+})
+
+const replacementMiniCardInitials = computed(() => {
+  const name = props.investigator.name.title
+    .replace(/["“”']/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .trim()
+  const words = name.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '?'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase()
+})
+
+const replacementMiniCardStyle = computed(() => ({
+  '--replacement-class-color': `var(--${investigatorClass.value.toLowerCase()})`,
+}))
+
+const portraitClasses = computed(() => ({
+  'investigator--can-interact--portrait': investigatorAction.value !== -1,
+  ethereal: ethereal.value,
+  dragging: dragging.value,
+  captured: captured.value,
+}))
 
 const emitter = useEmitter()
 const cardsUnderneath = computed(() => props.investigator.cardsUnderneath)
@@ -239,6 +285,18 @@ const captured = computed(() => {
 
 const ethereal = computed(() => {
   return modifiers.value?.some((m) => m.type.tag === "UIModifier" && m.type.contents === "Ethereal") ?? false
+})
+
+// While taking an immediate (granted) action there is no fast player window, so
+// fast/free abilities can't be used. The engine marks this with AsIfTurn (see
+// handlePlayerWindow), which reaches the client as an OtherModifier.
+// Once the game is resolving an action (gameInAction), the choice has already
+// been made, so there's nothing to warn about — hide the indicator then.
+const isTakingImmediateAction = computed(() => {
+  if (props.game.inAction) return false
+  return modifiers.value?.some(
+    (m) => m.type.tag === "OtherModifier" && m.type.contents === "AsIfTurn"
+  ) ?? false
 })
 
 function useEffectAction(action: { contents: string[] }) {
@@ -367,10 +425,48 @@ const spadeInjury = computed(() => {
 
 <template>
   <div v-if="portrait" class="portrait-container">
+    <span v-if="isMobile">
+      <i class="action" v-for="n in investigator.remainingActions" :key="n"></i>
+      <template v-for="action in investigator.additionalActions" :key="action">
+        <button @click="useEffectAction(action)" v-if="action.tag === 'EffectAction'" v-tooltip="action.contents[0]" :class="[{ activeButton: isActiveEffectAction(action)}, `${investigatorClass.toLowerCase()}ActionButton`]">
+          <i class="action"></i>
+        </button>
+        <i v-else class="action" :class="`${investigatorClass.toLowerCase()}Action`"></i>
+      </template>
+    </span>
+    <span
+      v-if="isMobile && isTakingImmediateAction"
+      class="no-free-abilities"
+      v-tooltip="{ content: $t('investigator.freeAbilitiesUnavailable'), html: true }"
+    >
+      <span class="fast-icon"></span>
+      <svg class="no-sign" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="5" y1="5" x2="19" y2="19" />
+      </svg>
+    </span>
+    <div
+      v-if="miniCardDevoured"
+      class="portrait portrait--replacement-marker portrait--devoured-mini-card"
+      :class="portraitClasses"
+      :style="replacementMiniCardStyle"
+      :draggable="debug.active"
+      v-tooltip="investigator.name.title"
+      @click="$emit('choose', investigatorAction)"
+      @dragstart="startDrag($event)"
+      @dragstop="endDrag"
+      @drop="onDrop($event)"
+      @dragover.prevent="dragover($event)"
+      @dragenter.prevent
+    >
+      {{ replacementMiniCardInitials }}
+      <img class="portrait--blob-overlay" :src="imgsrc('extra/the-blob-that-ate-everything/blob-overlay.png')" alt="" aria-hidden="true" />
+    </div>
     <img
+      v-else
       :src="investigatorPortraitImage"
       class="portrait"
-      :class="{ 'investigator--can-interact--portrait': investigatorAction !== -1, ethereal, dragging, captured }"
+      :class="portraitClasses"
       :draggable="debug.active"
       @click="$emit('choose', investigatorAction)"
       @dragstart="startDrag($event)"
@@ -405,21 +501,30 @@ const spadeInjury = computed(() => {
       </div>
       <div>
         <div class="player-buttons">
-          <div class="button-group">
-            <span class="action-container">
+          <div class="button-group" :class="{ 'button-group--skip-all-pending': isCurrentPlayersInvestigator && skipAllInProgress }">
+            <span v-if="!isMobile" class="action-container">
               <i class="spade" v-if="spadeInjury"></i>
               <i class="heart" v-if="heartInjury"></i>
               <i class="diamond" v-if="diamondInjury"></i>
               <i class="club" v-if="clubInjury"></i>
               <i class="action" v-for="n in investigator.remainingActions" :key="n"></i>
-            </span>
-            <span v-if="investigator.additionalActions.length > 0">
               <template v-for="action in investigator.additionalActions" :key="action">
-              <button @click="useEffectAction(action)" v-if="action.tag === 'EffectAction'" v-tooltip="action.contents[0]" :class="[{ activeButton: isActiveEffectAction(action)}, `${investigatorClass.toLowerCase()}ActionButton`]">
-                <i class="action"></i>
-              </button>
-              <i v-else class="action" :class="`${investigatorClass.toLowerCase()}Action`"></i>
+                <button @click="useEffectAction(action)" v-if="action.tag === 'EffectAction'" v-tooltip="action.contents[0]" :class="[{ activeButton: isActiveEffectAction(action)}, `${investigatorClass.toLowerCase()}ActionButton`]">
+                  <i class="action"></i>
+                </button>
+                <i v-else class="action" :class="`${investigatorClass.toLowerCase()}Action`"></i>
               </template>
+              <span
+                v-if="isTakingImmediateAction"
+                class="no-free-abilities"
+                v-tooltip="{ content: $t('investigator.freeAbilitiesUnavailable'), html: true }"
+              >
+                <span class="fast-icon"></span>
+                <svg class="no-sign" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="5" y1="5" x2="19" y2="19" />
+                </svg>
+              </span>
             </span>
             <template v-if="debug.active">
               <button
@@ -447,8 +552,8 @@ const spadeInjury = computed(() => {
 
             <span class="skip-triggers-group" :class="{ 'skip-triggers-group--paired': showSkipAll }">
               <button
-                :disabled="skipTriggersAction == -1"
-                @click="$emit('choose', skipTriggersAction)"
+                :disabled="!canSkipTriggers || skipAllInProgress"
+                @click="skipTriggers"
                 class="skip-triggers-button"
               >{{ isMobile ? t('skip') : $t('investigator.skipTriggers') }}</button>
               <button
@@ -524,6 +629,43 @@ i.action {
     font-family: "Arkham";
     content: "\0049";
   }
+}
+
+/* "no free abilities" indicator: the fast/free trigger glyph with a red
+   prohibition slash, shown while taking an immediate (granted) action. */
+.no-free-abilities {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  cursor: help;
+  line-height: 1;
+}
+
+.no-free-abilities :deep(.fast-icon) {
+  font-size: 15px;
+  color: #cfcfd6;
+}
+
+.no-free-abilities :deep(.fast-icon)::before {
+  margin-right: 0;
+}
+
+.no-free-abilities .no-sign {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-55%, -50%);
+  pointer-events: none;
+}
+
+.no-free-abilities .no-sign circle,
+.no-free-abilities .no-sign line {
+  fill: none;
+  stroke: #e0454d;
+  stroke-width: 2.2;
 }
 
 .turn-info {
@@ -618,13 +760,18 @@ i.action {
 .player-card {
   display: flex;
   flex-direction: column;
-  width: calc(var(--card-width) * var(--card-sideways-aspect));
+  align-items: flex-start;
+  gap: 2px;
+  width: min-content;
+
   @media (max-width: 800px) and (orientation: portrait) {
     width: 48%;
     display: flex;
     flex-direction: row;
-    gap: 1px;
+    gap: 2px;
+
     :deep(.card) {
+      width: auto;
       height: calc(var(--card-width) * 3);
     }
   }
@@ -640,7 +787,7 @@ i.action {
   :deep(span) {
     height: 0.87rem;
     overflow: visible;
-    z-index: 10;
+    z-index: var(--z-index-10);
   }
   :deep(.action) {
     font-size: 0.35rem;
@@ -652,6 +799,38 @@ i.action {
   width: calc(var(--card-width) * 0.6);
 }
 
+.portrait--replacement-marker {
+  aspect-ratio: 2 / 3;
+  border: 2px dashed color-mix(in srgb, var(--replacement-class-color) 70%, white);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--replacement-class-color) 82%, black), var(--replacement-class-color));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--card-width) * 0.24);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 75%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 20%);
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.portrait--devoured-mini-card {
+  position: relative;
+  overflow: visible;
+}
+
+.portrait--blob-overlay {
+  position: absolute;
+  inset: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
 .supplies {
   & ul {
     display: flex;
@@ -661,12 +840,48 @@ i.action {
 }
 
 .stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
+  display: inline-flex;
+  width: max-content;
+  border-radius: 5px;
+  overflow: hidden;
+
+  > div {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.06rem;
+    padding-inline: 0.36rem;
+    white-space: nowrap;
+  }
+
+  > div + div::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.22);
+  }
+
   @media (max-width: 800px) and (orientation: portrait) {
     display: flex;
     flex-direction: column;
-    width:6.8vw;
+    width: max-content;
+
+    > div {
+      padding-inline: 0.36rem;
+    }
+
+    > div + div::after {
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: auto;
+      width: auto;
+      height: 1px;
+    }
   }
 
 }
@@ -676,6 +891,10 @@ i.action {
   color: white;
   text-align: center;
   border-top-left-radius: 5px;
+
+  @media (max-width: 800px) and (orientation: portrait) {
+    border-top-right-radius: 5px;
+  }
 }
 
 .intellect {
@@ -695,10 +914,16 @@ i.action {
   color: white;
   text-align: center;
   border-top-right-radius: 5px;
+
+  @media (max-width: 800px) and (orientation: portrait) {
+    border-top-right-radius: 0;
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+  }
 }
 
 .activeButton {
-  border: 1px solid #FF00FF;
+  border: 1px solid var(--select);
 }
 
 @keyframes become-ghost {
@@ -736,6 +961,10 @@ i.action {
 }
 
 .player-container{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
   @media (max-width: 800px) and (orientation: portrait) {
     width: 100%;
   }
@@ -759,6 +988,17 @@ i.action {
       font-size: small;
     }
   }
+}
+
+.button-group--skip-all-pending > :not(.skip-triggers-group) {
+  opacity: 0.35;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+
+.button-group--skip-all-pending .skip-triggers-button {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .player-buttons {
@@ -832,6 +1072,26 @@ i.action {
 
 .investigator-image {
   position: relative;
+  align-self: stretch;
+  min-width: 0;
+
+  > .card {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    border-radius: 5px;
+  }
+
+  @media (max-width: 800px) and (orientation: portrait) {
+    width: auto;
+
+    > .card {
+      width: auto;
+      min-width: 0;
+      height: calc(var(--card-width) * 3);
+    }
+  }
 }
 
 .blanked-badge {
@@ -843,7 +1103,7 @@ i.action {
   color: #e05252;
   filter: drop-shadow(0 1px 4px rgba(0,0,0,0.7));
   cursor: default;
-  z-index: 2;
+  z-index: var(--z-index-2);
   display: flex;
   align-items: center;
   justify-content: center;

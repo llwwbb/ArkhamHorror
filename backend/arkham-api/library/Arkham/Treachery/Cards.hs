@@ -17,6 +17,7 @@ import Arkham.Treachery.CardDefs.TheForgottenAge as X
 import Arkham.Treachery.CardDefs.TheInnsmouthConspiracy as X
 import Arkham.Treachery.CardDefs.ThePathToCarcosa as X
 import Arkham.Treachery.CardDefs.TheScarletKeys as X
+import Arkham.Treachery.CardDefs.RelicsOfThePast as X
 
 import Arkham.Card.CardCode
 import Arkham.Card.CardDef
@@ -65,7 +66,6 @@ allPlayerTreacheryCards =
       , disruptivePoltergeist
       , doomed
       , downAndOut
-      , downpour
       , drawingTheSign
       , dreadCurse
       , dreamsOfTheFlood
@@ -169,6 +169,7 @@ allEncounterTreacheryCards =
       [ aBalefulWelcome
       , abandonedByTheGods
       , abandonedToMadness
+      , abducted
       , abduction
       , abyssalReach
       , accosted
@@ -190,6 +191,7 @@ allEncounterTreacheryCards =
       , arousingSuspicions
       , arrowsFromTheTrees
       , aTearInTime
+      , aTearInTimeMachinationsThroughTime
       , attractingAttention
       , avalanche
       , avariceCallsA
@@ -212,6 +214,7 @@ allEncounterTreacheryCards =
       , bleedingWallsTheMidwinterGala
       , bleedingWallsTheMidwinterGala
       , blindsense
+      , bloodAndRust
       , bloodOnYourHands
       , bloodthirstySpirits
       , bloom
@@ -220,6 +223,7 @@ allEncounterTreacheryCards =
       , brazierEnchantment
       , breakALeg
       , brokenRails
+      , brokenSpace
       , bumpyRide
       , burdensOfThePast
       , calcification
@@ -285,6 +289,7 @@ allEncounterTreacheryCards =
       , despoiled
       , dholeTunnel
       , diabolicVoices
+      , dimensionalBreach
       , dimensionalHypnosisA
       , dimensionalHypnosisB
       , dimensionalHypnosisC
@@ -292,8 +297,10 @@ allEncounterTreacheryCards =
       , disquietingDreams
       , dissonantVoices
       , distortedReasoning
+      , downpour
       , draggedUnder
       , draggedUnderDevilReef
+      , dreadfulMechanism
       , dreamersCurse
       , dreamlandsEclipse
       , dreamsOfRlyeh
@@ -307,6 +314,10 @@ allEncounterTreacheryCards =
       , encephalonSignal
       , endlessDescent
       , endlessNight
+      , harvestedPain
+      , paradoxEffectEpicMultiplayer
+      , paradoxEffect
+      , poisonousGas
       , sublimation
       , fragmentation
       , euphoria
@@ -338,6 +349,7 @@ allEncounterTreacheryCards =
       , foundFootage
       , fracturedConsciousness
       , fragileThoughts
+      , fromAllAngles
       , fromAnotherTime
       , fromTheDepths
       , fromTheOtherSide
@@ -416,6 +428,7 @@ allEncounterTreacheryCards =
       , lostInTheWilds
       , lostInTheWoods
       , lostInTime
+      , lostInTimeMachinationsThroughTime
       , lostInVenice
       , lowOnSupplies
       , lunarPatrol
@@ -437,6 +450,7 @@ allEncounterTreacheryCards =
       , memoryOfOblivion
       , memoryVariant
       , mergingTimelines
+      , mergingTimelinesMachinationsThroughTime
       , mesmerize
       , miasmaticTorment
       , mindExtraction
@@ -463,6 +477,7 @@ allEncounterTreacheryCards =
       , onTheProwl
       , onWingsOfDarkness
       , oozeAndFilth
+      , openPortal
       , oppressiveMists
       , otherworldlyVisions
       , outOfTheWalls
@@ -522,6 +537,7 @@ allEncounterTreacheryCards =
       , feastOfLocusts
       , hellfireWarOfTheOuterGods
       , ravagesOfWar
+      , unnaturalWeariness
       , whileTheySleep
       , inevitableEnd
       , huntDown
@@ -579,6 +595,7 @@ allEncounterTreacheryCards =
       , syzygy
       , takenCaptive
       , tasteOfLifeblood
+      , temporalDistortion
       , tenebrousEclipse
       , terrorFromBeyond
       , terrorGate
@@ -633,6 +650,7 @@ allEncounterTreacheryCards =
       , unstableEnergies
       , unnaturalGrowth
       , vampiresKiss
+      , vanishingHistory
       , vastExpanse
       , vaultOfEarthlyDemise
       , viceAndVillainy
@@ -719,4 +737,52 @@ allEncounterTreacheryCards =
       , replication
       , itsGotMe
       , alienFoodChain
+      , --- Relics of the Past
+        vengeantPast
+      , --- The Drowned City
+        caughtInTheCrossfire
+      , endOfNegotiations
+      , torturedVisions
+      , drawnToDarkness
+      , seafloorFrieze
+      , lookOut
+      , hungryWalls
+      , dangerousCuriosity
+      , alienEggs
+      , parasiticTransformation
+      , deadlyMechanisms
+      , ancientVaultO
+      , ancientVaultN
+      , ancientVaultP
+      , ancientVaultG
+      , ancientVaultI
+      , ruinedOrrery
+      , cosmicOmen
+      , erodedFrieze
+      , stElmosFire
+      , acrophobia
+      , wingsOfTerror
+      , lostInTheClouds
+      , layWaste
+      , eyesOfYchlecht
+      , grossPlasticity
+      , arkhamUnderAssault
+      , infected
+      , eyeOfTheDeep
+      , cunningMimicry
+      , elderMist
+      , corrosiveFog
+      , dreamingMigration
+      , underseaHunt
+      , deadlyTorrent
+      , somethingInTheWater
+      , ominousSilence
+      , cyclopeanArchitecture
+      , crumblingMasonry
+      , cthulhuFhtagn
+      , oppressiveInfluence
+      , domination
+      , stillBehindYou
+      , deepOneAmbush
+      , infernalMachinery
       ]

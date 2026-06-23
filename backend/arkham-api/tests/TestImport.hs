@@ -755,6 +755,14 @@ chooseOptionMatching _reason f = do
         push (uiToRun msg)
         runMessages
       Nothing -> notFound msgs
+    ChooseUpToN n msgs -> case find f msgs of
+      Just msg -> do
+        case msg of
+          Done _ -> pure ()
+          _ -> pushWhen (n > 1) (Ask iid $ ChooseUpToN (n - 1) $ deleteFirst msg msgs)
+        push (uiToRun msg)
+        runMessages
+      Nothing -> notFound msgs
     _ -> error $ "unsupported questions type: " <> show question
 
 debug :: (Investigator -> TestAppT ()) -> Investigator -> TestAppT ()
@@ -903,6 +911,7 @@ newGame scenario' investigator = do
         , gameQuestion = mempty
         , gameActionCanBeUndone = False
         , gameActionDiff = []
+        , gameActionSnapshot = Transient Nothing
         , gameInAction = False
         , gameCards = mempty
         , gameActiveCost = mempty

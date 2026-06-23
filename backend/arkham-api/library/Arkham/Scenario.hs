@@ -32,7 +32,6 @@ import Arkham.Investigator.Types qualified as Field
 import Arkham.Matcher qualified as Matcher
 import Arkham.Message
 import Arkham.Message.Lifted qualified as Lifted
-import Arkham.Modifier
 import Arkham.Name
 import Arkham.Prelude
 import Arkham.Projection
@@ -713,12 +712,32 @@ allScenarios =
     , ("83016", SomeScenario theNightsUsurper)
     , ("85001", SomeScenario theBlobThatAteEverything)
     , ("86001", SomeScenario warOfTheOuterGods)
+    , ("87001", SomeScenario machinationsThroughTime)
+    , ("70001", SomeScenario theLabyrinthsOfLunacy)
     , ("84001", SomeScenario murderAtTheExcelsiorHotel)
     , ("88001", SomeScenario fortuneAndFolly)
     , ("88001b", SomeScenario fortuneAndFollyPart2)
     , ("12105", SomeScenario spreadingFlames)
     , ("12133", SomeScenario smokeAndMirrors)
     , ("12168", SomeScenario queenOfAsh)
+    , ("11501", SomeScenario oneLastJob)
+    , ("11517", SomeScenario theWesternWall)
+    , ("11536", SomeScenario theDrownedQuarter)
+    , ("11553", SomeScenario theApiary)
+    , ("11587", SomeScenario theGrandVault)
+    , ("11612", SomeScenario courtOfTheAncients)
+    , ("11639", SomeScenario obsidianCanyons)
+    , ("11673", SomeScenario sepulchreOfTheSleeper)
+    , ("11682", SomeScenario theDoomOfArkhamPartI)
+    , ("11688a", SomeScenario theDoomOfArkhamPartII)
+    , ("90032", SomeScenario byTheBook)
+    , ("90011", SomeScenario allOrNothing)
+    , ("90020", SomeScenario badBlood)
+    , ("90054", SomeScenario laidToRest)
+    , ("90094", SomeScenario enthrallingEncore)
+    , ("90004", SomeScenario readOrDie)
+    , ("90041", SomeScenario redTideRising)
+    , ("90065", SomeScenario relicsOfThePast)
     ]
 
 scenarioEncounterSets :: Map CardCode EncounterSet
@@ -857,10 +876,30 @@ scenarioEncounterSets =
     , ("83016", EncounterSet.TheNightsUsurper)
     , ("85001", EncounterSet.TheBlobThatAteEverything)
     , ("86001", EncounterSet.WarOfTheOuterGods)
+    , ("87001", EncounterSet.MachinationsThroughTime)
+    , ("70001", EncounterSet.TheLabyrinthsOfLunacy)
     , ("84001", EncounterSet.MurderAtTheExcelsiorHotel)
     , ("88001", EncounterSet.FortuneAndFolly)
     , ("88001b", EncounterSet.FortuneAndFolly)
     , ("12105", EncounterSet.SpreadingFlames)
     , ("12133", EncounterSet.SmokeAndMirrors)
     , ("12168", EncounterSet.QueenOfAsh)
+    , ("11501", EncounterSet.OneLastJob)
+    , ("11517", EncounterSet.TheWesternWall)
+    , ("11536", EncounterSet.TheDrownedQuarter)
+    , ("11553", EncounterSet.TheApiary)
+    , ("11587", EncounterSet.TheGrandVault)
+    , ("11612", EncounterSet.CourtOfTheAncients)
+    , ("11639", EncounterSet.ObsidianCanyons)
+    , ("11673", EncounterSet.SepulchreOfTheSleeper)
+    , ("11682", EncounterSet.TheDoomOfArkhamPartI)
+    , ("11688a", EncounterSet.TheDoomOfArkhamPartII)
+    , ("90032", EncounterSet.ByTheBook)
+    , ("90011", EncounterSet.AllOrNothing)
+    , ("90020", EncounterSet.BadBlood)
+    , ("90054", EncounterSet.LaidToRest)
+    , ("90094", EncounterSet.EnthrallingEncore)
+    , ("90004", EncounterSet.ReadOrDie)
+    , ("90041", EncounterSet.RedTideRising)
+    , ("90065", EncounterSet.RelicsOfThePast)
     ]

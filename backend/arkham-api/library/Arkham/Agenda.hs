@@ -437,4 +437,51 @@ allAgendas =
       SomeAgendaCard theAnomalySpreads
     , SomeAgendaCard theAnomalySwells
     , SomeAgendaCard theAnomalyConsumes
+    , -- The Labyrinths of Lunacy
+      SomeAgendaCard awakeningTheLabyrinthsOfLunacy
+    , SomeAgendaCard agonyAndDespair
+    , SomeAgendaCard theMastermind
+    , -- Machinations Through Time
+      SomeAgendaCard intoTheVoid
+    , SomeAgendaCard timeMarchesOn
+    , -- Read or Die
+      SomeAgendaCard mortalInquiry
+    , -- All or Nothing
+      SomeAgendaCard eyesAllAroundYou
+    , -- Bad Blood
+      SomeAgendaCard hyperboreanBlood
+    , -- By the Book
+      SomeAgendaCard aCovertConspiracy
+    , SomeAgendaCard yourDeadlineNears
+    , -- Laid to Rest
+      SomeAgendaCard gatheringMists
+    , -- Red Tide Rising
+      SomeAgendaCard theNewGirl
+    , SomeAgendaCard trailGoesCold
+    , -- Enthralling Encore
+      SomeAgendaCard theHauntingOfTheWardTheatre
+    , -- Relics of the Past
+      SomeAgendaCard somethingElseStirs
+    , SomeAgendaCard guardianOfTheRelics
+    , --- The Drowned City
+      SomeAgendaCard arkhamNightlife
+    , SomeAgendaCard longNight
+    , SomeAgendaCard floodedPaths
+    , SomeAgendaCard theSunkenRuins
+    , SomeAgendaCard collapsingDome
+    , SomeAgendaCard stirringInTheDark
+    , SomeAgendaCard loathsomeParasites
+    , SomeAgendaCard bowelsOfTheCity
+    , SomeAgendaCard devilInTheMachine
+    , SomeAgendaCard everShiftingWalls
+    , SomeAgendaCard ruinedArchives
+    , SomeAgendaCard floodedArchives
+    , SomeAgendaCard unstableFoundations
+    , SomeAgendaCard otherworldlyStorms
+    , SomeAgendaCard encroachingStorms
+    , SomeAgendaCard beneathTheCity
+    , SomeAgendaCard cthulhuAwakened
+    , SomeAgendaCard theComingStorm
+    , SomeAgendaCard theDoomOfArkham
+    , SomeAgendaCard theFinalSeal
     ]

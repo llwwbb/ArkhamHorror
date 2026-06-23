@@ -233,6 +233,10 @@ filterOutEnemyMessages eid msg = case msg of
   Discarded (EnemyTarget eid') _ _ | eid == eid' -> Nothing
   Do (Discarded (EnemyTarget eid') _ _) | eid == eid' -> Nothing
   PlaceEnemy eid' _ | eid' == eid -> Nothing
+  EnemyEntered eid' _ | eid' == eid -> Nothing
+  EnemyEnteredFollowing _ eid' _ | eid' == eid -> Nothing
+  EnemySpawn details | details.enemy == eid -> Nothing
+  EnemySpawned details | details.enemy == eid -> Nothing
   m -> Just m
 
 filterOutEnemyUiMessages :: EnemyId -> UI Message -> Maybe (UI Message)
@@ -581,11 +585,20 @@ instance RunMessage EnemyAttrs where
       unless (null details.after) do
         pushAll details.after
       pure $ a & spawnDetailsL .~ Nothing
-    EnemyEntered eid lid | eid == enemyId -> do
+    EnemyEntered eid lid | eid == enemyId && not enemyDefeated -> do
       case enemyPlacement of
         AsSwarm eid' _ -> do
           push $ EnemyEntered eid' lid
           pure a
+        -- The enemy was in play when this move was created but has since left
+        -- play (e.g. an act objective firing on its engagement set it aside).
+        -- Abort the entry so the stale move can't drag it back into play. Spawns
+        -- (which carry enemySpawnDetails) are a legitimate out-of-play entry.
+        _
+          | isNothing enemySpawnDetails
+              && maybe False moveFromInPlay enemyMovement
+              && isOutOfPlayPlacement enemyPlacement ->
+              pure a
         _ -> do
           swarm <- select $ SwarmOf eid
           -- If enemySpawnDetails is present it means this enemy is using the
@@ -637,7 +650,7 @@ instance RunMessage EnemyAttrs where
           -- (Will EnemyEngageInvestigator) and are skipped here.
           pushAll $ [EnemyCheckEngagement eid | isNothing enemySpawnDetails] <> [afterWindows]
       pure a
-    EnemyEnteredFollowing movingIid eid lid | eid == enemyId -> do
+    EnemyEnteredFollowing movingIid eid lid | eid == enemyId && not enemyDefeated -> do
       -- Variant of EnemyEntered for an engaged enemy following the moving
       -- investigator. `iidsHere` excludes `movingIid` so the "your location"
       -- flavour of EnemyEnters does not fire for the investigator the enemy
@@ -767,7 +780,7 @@ instance RunMessage EnemyAttrs where
           push
             $ chooseOrRunOne player
             $ [targetLabel lid [Move $ movement {moveDestination = ToLocation lid}] | lid <- lids]
-      pure $ a & movementL ?~ movement
+      pure $ a & movementL ?~ movement {moveFromInPlay = isInPlayPlacement enemyPlacement}
     EnemyMove eid lid | eid == enemyId -> case enemyPlacement of
       AsSwarm eid' _ -> do
         push $ EnemyMove eid' lid
@@ -777,6 +790,18 @@ instance RunMessage EnemyAttrs where
         if willMove
           then do
             batchId <- getRandom
+            -- The `Move` path records `enemyMovement` (with its `moveFromInPlay`
+            -- flag) before pushing EnemyMove, but MoveToward/MoveUntil/hunter
+            -- moves reach EnemyMove directly without it. Record it here when
+            -- absent so that if the enemy leaves play mid-move (e.g. a forced
+            -- ability fires in the enter window and removes it) the `Do EnemyMove`
+            -- / `EnemyEntered` guards abort the placement instead of dragging the
+            -- removed enemy back into play.
+            mMovement <- case enemyMovement of
+              Just _ -> pure enemyMovement
+              Nothing -> do
+                m <- move (toSource eid) (toTarget eid) lid
+                pure $ Just m {moveFromInPlay = isInPlayPlacement enemyPlacement}
             mRunWouldMove <- runMaybeT do
               from <- MaybeT $ getLocationOf eid
               let source = fromMaybe (toSource eid) a.movement.source
@@ -798,7 +823,7 @@ instance RunMessage EnemyAttrs where
             -- causes After (EnemyEntered) to re-emit the after-EnemySpawns
             -- window at the new location, re-firing enters-play abilities
             -- in an infinite loop.
-            pure $ a & spawnDetailsL .~ Nothing
+            pure $ a & spawnDetailsL .~ Nothing & movementL .~ mMovement
           else do
             push (EnemyCheckEngagement eid)
             pure a
@@ -807,7 +832,13 @@ instance RunMessage EnemyAttrs where
       -- adjust the placement as it will affect engagement (such as Knight of
       -- the Inner Circle)
       current <- getLocationOf enemyId
-      if current == Just lid
+      -- Don't drag an enemy back into play if it left play (e.g. was set aside)
+      -- after this in-play move was queued.
+      let leftPlayMidMove =
+            isNothing enemySpawnDetails
+              && maybe False moveFromInPlay enemyMovement
+              && isOutOfPlayPlacement enemyPlacement
+      if current == Just lid || leftPlayMidMove
         then pure a
         else pure $ a & placementL .~ AtLocation lid
     After (EndTurn _) | not enemyDefeated -> a <$ push (EnemyCheckEngagement $ toId a)
@@ -2064,11 +2095,19 @@ instance RunMessage EnemyAttrs where
                         then do
                           canBeEngaged <- matches iid (InvestigatorCanBeEngagedBy eid)
                           isAloof <- matches eid AloofEnemy
+                          -- An enemy with an exclusive prey ("Prey - X only") never
+                          -- automatically engages a non-prey investigator on spawn. When
+                          -- a non-prey investigator draws it, it spawns unengaged via the
+                          -- prey-aware SpawnAtLocation path (which only engages its prey).
+                          prey <- getPreyMatcher a
+                          onlyPreyAllows <- case prey of
+                            OnlyPrey _ -> (iid `elem`) <$> select prey
+                            _ -> pure True
                           pushAll
                             $ resolve
                             $ EnemySpawn
                             $ ( mkSpawnDetails eid
-                                  $ if canBeEngaged && not isAloof
+                                  $ if canBeEngaged && not isAloof && onlyPreyAllows
                                     then SpawnEngagedWith (InvestigatorWithId iid)
                                     else SpawnAtLocation lid
                               )

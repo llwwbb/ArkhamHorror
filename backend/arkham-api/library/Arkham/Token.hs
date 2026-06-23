@@ -35,10 +35,13 @@ data Token
   | Leyline
   | Lock
   | LostSoul
+  | Memory
+  | Newspaper
   | Offering
   | Overgrowth
   | Pillar
   | Portent
+  | Redemption
   | Renown
   | Resource
   | Rumor
@@ -46,8 +49,10 @@ data Token
   | Scrap
   | Seal
   | Secret
+  | Seed
   | Shard
   | Shell
+  | Shipment
   | Study
   | Supply
   | Suspicion
@@ -55,6 +60,7 @@ data Token
   | Target
   | Ticket
   | Time
+  | TimeCapsule
   | Truth
   | Try
   | Ward

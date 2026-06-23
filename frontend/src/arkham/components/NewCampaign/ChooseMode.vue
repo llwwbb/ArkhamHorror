@@ -26,6 +26,15 @@ const chapter1Campaigns = computed(() =>
 const chapter2Campaigns = computed(() =>
   props.campaigns.filter((c) => CHAPTER_2_CAMPAIGN_IDS.has(c.id))
 )
+const isChallengeScenario = (scenario: Scenario) =>
+  Boolean(scenario.requiredInvestigator) || Boolean(scenario.deckRequirements?.length)
+
+const sideStoryScenarios = computed(() =>
+  props.sideStories.filter((s) => !isChallengeScenario(s))
+)
+const challengeScenarios = computed(() =>
+  props.sideStories.filter(isChallengeScenario)
+)
 </script>
 
 <template>
@@ -38,26 +47,67 @@ const chapter2Campaigns = computed(() =>
   </div>
 
   <template v-if="gameMode === 'SideStory'">
-    <div class="scenarios">
-      <div
-        v-for="s in sideStories"
-        :key="s.id"
-        class="scenario"
-      >
+    <section v-if="sideStoryScenarios.length" class="chapter">
+      <header class="chapter-header">
+        <span class="chapter-line" />
+        <h3 class="chapter-title">{{ $t('create.sideStoriesHeading') }}</h3>
+        <span class="chapter-line" />
+      </header>
+      <div class="scenarios">
         <div
-          class="vt-box"
-          :style="selectedScenario == s.id ? { 'view-transition-name': 'selected-game-box' } : {}"
-          :class="{ beta: s.beta, alpha: s.alpha }"
+          v-for="s in sideStoryScenarios"
+          :key="s.id"
+          class="scenario"
         >
-          <img
-            class="scenario-box"
-            :class="{ 'selected-scenario': selectedScenario == s.id }"
-            :src="imgsrc(`boxes/${s.id}.jpg`)"
-            @click="selectedScenario = s.id; emits('go')"
-          />
+          <div
+            class="vt-box"
+            :style="selectedScenario == s.id ? { 'view-transition-name': 'selected-game-box' } : {}"
+            :class="{ beta: s.beta, alpha: s.alpha }"
+          >
+            <img
+              class="scenario-box"
+              :class="{ 'selected-scenario': selectedScenario == s.id }"
+              :src="imgsrc(`boxes/${s.id}.jpg`)"
+              @click="selectedScenario = s.id; emits('go')"
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </section>
+
+    <section v-if="challengeScenarios.length" class="chapter">
+      <header class="chapter-header">
+        <span class="chapter-line" />
+        <h3 class="chapter-title">{{ $t('create.challengeScenariosHeading') }}</h3>
+        <span class="chapter-line" />
+      </header>
+      <div class="scenarios">
+        <div
+          v-for="s in challengeScenarios"
+          :key="s.id"
+          class="scenario"
+        >
+          <div
+            class="vt-box"
+            :style="selectedScenario == s.id ? { 'view-transition-name': 'selected-game-box' } : {}"
+            :class="{ beta: s.beta, alpha: s.alpha }"
+          >
+            <img
+              class="scenario-box"
+              :class="{ 'selected-scenario': selectedScenario == s.id }"
+              :src="imgsrc(`boxes/${s.id}.jpg`)"
+              @click="selectedScenario = s.id; emits('go')"
+            />
+          </div>
+          <span v-if="s.requiredInvestigator" class="requires-investigator">
+            {{ $t('create.requiresInvestigator', { name: s.requiredInvestigator }) }}
+          </span>
+          <span v-for="requirement in s.deckRequirements" :key="requirement" class="requires-investigator">
+            {{ requirement }}
+          </span>
+        </div>
+      </div>
+    </section>
   </template>
 
   <template v-else>
@@ -188,6 +238,16 @@ input[type='radio']:checked + label {
   position: relative;
 }
 
+.requires-investigator {
+  display: block;
+  margin-top: 8px;
+  line-height: 1.2;
+  text-align: center;
+  color: rgba(206, 206, 206, 0.88);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
 .vt-box {
   display: block;
   border-radius: 14px;
@@ -238,7 +298,7 @@ input[type='radio']:checked + label {
 .vt-box.beta:after,
 .vt-box.alpha:after {
   position: absolute;
-  z-index: 1070;
+  z-index: var(--z-index-1070);
   width: 86px;
   height: 26px;
   top: 9px;

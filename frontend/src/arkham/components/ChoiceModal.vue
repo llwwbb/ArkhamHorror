@@ -150,7 +150,12 @@ const title = computed(() => {
         <Question v-if="question" :game="game" :playerId="playerId" @choose="choose" />
       </div>
     </div>
-    <Draggable v-else>
+    <Draggable
+      v-else
+      center-in-selector=".scenario-body"
+      avoid-selector=".location-cell--can-interact, .location-cell--can-interact .location-wrapper, .location-cell--can-interact .card-frame"
+      click-through-chrome
+    >
       <template #handle><h1 v-html="label(title)"></h1></template>
       <div class='choice-modal-wrapper'>
         <p class="body" v-if="body" v-html="label(body)"></p>

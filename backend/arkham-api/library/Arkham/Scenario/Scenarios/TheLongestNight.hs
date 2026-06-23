@@ -10,7 +10,9 @@ import Arkham.Card
 import Arkham.Deck qualified as Deck
 import Arkham.EncounterSet qualified as Set
 import Arkham.Enemy.Cards qualified as Enemies
+import Arkham.Helpers.Doom (getDoomCount)
 import Arkham.Helpers.FlavorText
+import Arkham.Helpers.Location (withLocationOf)
 import Arkham.Helpers.Modifiers (ModifierType (..), modifySelectWith)
 import Arkham.Helpers.Query (allInvestigators, getLead)
 import Arkham.Helpers.Window (wouldDo)
@@ -62,26 +64,28 @@ theLongestNight difficulty = scenario TheLongestNight "10626" "The Longest Night
 
 instance HasChaosTokenValue TheLongestNight where
   getChaosTokenValue iid tokenFace (TheLongestNight attrs) = case tokenFace of
-    Skull -> pure $ toChaosTokenValue attrs Skull 3 5
-    Cultist -> pure $ ChaosTokenValue Cultist NoModifier
-    Tablet -> pure $ ChaosTokenValue Tablet NoModifier
-    ElderThing -> pure $ ChaosTokenValue ElderThing NoModifier
+    Skull -> do
+      doom <- getDoomCount
+      pure $ toChaosTokenValue attrs Skull ((doom + 1) `div` 2) doom
+    Cultist -> pure $ toChaosTokenValue attrs Cultist 2 3
+    Tablet -> pure $ toChaosTokenValue attrs Tablet 1 4
+    ElderThing -> pure $ toChaosTokenValue attrs ElderThing 4 5
     otherFace -> getChaosTokenValue iid otherFace attrs
 
 instance RunMessage TheLongestNight where
   runMessage msg s@(TheLongestNight attrs) = runQueueT $ scenarioI18n $ case msg of
     PreScenarioSetup -> scope "intro" do
-      storyWithChooseOneM' (setTitle "title" >> p "intro1.body") do
+      storyWithChooseOneM' (h "title" >> p "intro1") do
         labeled' "confront" $ doStep 2 PreScenarioSetup
         labeled' "keepHidden" $ doStep 3 PreScenarioSetup
       pure s
     DoStep 2 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro2"
+      flavor $ setTitle "title" >> p "intro2"
       addChaosToken #tablet
       doStep 4 PreScenarioSetup
       pure s
     DoStep 3 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro3"
+      flavor $ setTitle "title" >> p "intro3"
       addChaosToken #skull
       doStep 4 PreScenarioSetup
       pure s
@@ -99,8 +103,9 @@ instance RunMessage TheLongestNight where
             , toCampaignLogKey RiverSharedADance
             , toCampaignLogKey HelenSharedADance
             ]
-      story $ i18nWithTitle "intro4"
       flavor do
+        setTitle "title"
+        p "intro4"
         p.basic "checkDance"
         ul do
           li.validate (danceCount >= 2) "danceTwo"
@@ -114,26 +119,30 @@ instance RunMessage TheLongestNight where
             else doStep 7 PreScenarioSetup
       pure s
     DoStep 5 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro5"
+      flavor $ setTitle "title" >> p "intro5"
       addChaosToken #cultist
       doStep 8 PreScenarioSetup
       pure s
     DoStep 6 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro6"
+      flavor $ setTitle "title" >> p "intro6"
       addChaosToken #cultist
       addChaosToken #elderthing
       doStep 8 PreScenarioSetup
       pure s
     DoStep 7 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro7"
+      flavor $ setTitle "title" >> p "intro7"
       record TheInvestigatorsFacedTheLongestNightAlone
       addChaosToken #elderthing
       doStep 8 PreScenarioSetup
       pure s
     DoStep 8 PreScenarioSetup -> scope "intro" do
-      story $ i18nWithTitle "intro8"
+      flavor $ setTitle "title" >> p "intro8"
       pure s
     Setup -> runScenarioSetup TheLongestNight attrs do
+      facedAlone <- getHasRecord TheInvestigatorsFacedTheLongestNightAlone
+      helenDanced <- getHasRecord HelenSharedADance
+      bearWounded <- getHasRecord TheBearWasWounded
+
       setup $ ul do
         li "gatherSets"
         li "midnightMasks"
@@ -147,17 +156,17 @@ instance RunMessage TheLongestNight where
           li "gatherEnemies"
           li "ursineHybrid"
           li "shuffleEnemyDeck"
-        li "bearWounded"
+        li.validate bearWounded "bearWounded"
         li.nested "defenses" do
           li "placeDefenses"
           li "tokenReferenceCard"
         li.nested "clues" do
-          li "facedAlone"
-          li "facedWithHelp"
+          li.validate facedAlone "facedAlone"
+          li.validate (not facedAlone) "facedWithHelp"
         li.nested "residents" do
           li "drMarquez"
           li "dancedResidents"
-          li "helenPeters"
+          li.validate helenDanced "helenPeters"
           li "removeResidents"
         li "setAside"
         unscoped $ li "shuffleRemainder"
@@ -199,7 +208,6 @@ instance RunMessage TheLongestNight where
       removeEvery removed
 
       farmhouse <- placeInGrid (Pos 0 0) Locations.theFarmhouse
-
       atwoodFarms <-
         shuffle [Locations.milkhouse, Locations.vineyard, Locations.coop, Locations.barn, Locations.pasture]
       let farmPositions = [Pos (-1) 0, Pos (-2) 0, Pos 1 0, Pos 0 (-1), Pos 0 1]
@@ -222,14 +230,12 @@ instance RunMessage TheLongestNight where
       enemyCards <- fromGathered (CardFromEncounterSet Set.TheLongestNight <> #enemy)
       addExtraDeck EnemyDeck =<< shuffle enemyCards
 
-      bearWounded <- getHasRecord TheBearWasWounded
       when bearWounded do
         nonAttackEnemyDamage Nothing ScenarioSource 2 ursine
         exhaustEnemy ScenarioSource ursine
 
       doStep 1 msg
 
-      facedAlone <- getHasRecord TheInvestigatorsFacedTheLongestNightAlone
       let clueCount = if facedAlone then 3 else 2
       eachInvestigator \iid -> gainClues iid ScenarioSource clueCount
 
@@ -266,7 +272,6 @@ instance RunMessage TheLongestNight where
           questionLabeledCard (toCardDef resident)
           portraits investigators (`takeControlOfAsset` residentAsset)
 
-      helenDanced <- getHasRecord HelenSharedADance
       when helenDanced do
         helenPeters <- createAsset =<< genCard Assets.helenPetersTheEldestSister
         leadChooseOneM do
@@ -298,6 +303,70 @@ instance RunMessage TheLongestNight where
       connected <- select $ connectedTo (LocationWithId lid)
       chooseTargetM lead connected \lid2 ->
         push $ ScenarioCountIncrementBy (Barriers lid lid2) 1
+      pure s
+    ResolveChaosToken _ Cultist iid | isEasyStandard attrs -> do
+      withLocationOf iid \lid -> doStep 1 (ForTarget (LocationTarget lid) (ScenarioSpecific "placeBarrierAt" (toJSON iid)))
+      pure s
+    PassedSkillTest iid _ _ (ChaosTokenTarget token) _ _ -> do
+      case token.face of
+        Cultist | isHardExpert attrs -> do
+          withLocationOf iid \lid -> doStep 1 (ForTarget (LocationTarget lid) (ScenarioSpecific "placeBarrierAt" (toJSON iid)))
+        _ -> pure ()
+      pure s
+    DoStep 1 (ForTarget (LocationTarget lid) (ScenarioSpecific "placeBarrierAt" v)) -> do
+      let iid :: InvestigatorId = toResult v
+      connected <- select $ connectedTo (LocationWithId lid)
+      chooseTargetM iid connected \lid2 ->
+        push $ ScenarioCountIncrementBy (Barriers lid lid2) 1
+      pure s
+    ResolveChaosToken _ Tablet iid | isEasyStandard attrs -> do
+      drawAnotherChaosToken iid
+      pure s
+    ResolveChaosToken _ Tablet iid | isHardExpert attrs -> do
+      doStep 1 (ScenarioSpecific "nearestEnemyAttacks" (toJSON iid))
+      pure s
+    ResolveChaosToken _ ElderThing iid | isHardExpert attrs -> do
+      withLocationOf iid \lid -> doStep 1 (ForTarget (LocationTarget lid) (ScenarioSpecific "removeDefenseAt" (toJSON iid)))
+      pure s
+    FailedSkillTest iid _ _ (ChaosTokenTarget token) _ _ -> do
+      case token.face of
+        Tablet | isEasyStandard attrs -> doStep 1 (ScenarioSpecific "nearestEnemyAttacks" (toJSON iid))
+        ElderThing | isEasyStandard attrs ->
+          withLocationOf iid \lid -> doStep 1 (ForTarget (LocationTarget lid) (ScenarioSpecific "removeDefenseAt" (toJSON iid)))
+        _ -> pure ()
+      pure s
+    DoStep 1 (ScenarioSpecific "nearestEnemyAttacks" v) -> do
+      let iid :: InvestigatorId = toResult v
+      enemies <- select $ NearestEnemyTo iid AnyEnemy
+      chooseTargetM iid enemies \eid -> do
+        ready eid
+        resolveHunterKeyword eid
+        doStep 2 (ForTarget (EnemyTarget eid) (ScenarioSpecific "nearestEnemyAttacks" v))
+      pure s
+    DoStep 2 (ForTarget (EnemyTarget eid) (ScenarioSpecific "nearestEnemyAttacks" v)) -> do
+      let iid :: InvestigatorId = toResult v
+      whenMatch eid (enemyEngagedWith iid) $ initiateEnemyAttack eid ScenarioSource iid
+      pure s
+    DoStep 1 (ForTarget (LocationTarget lid) (ScenarioSpecific "removeDefenseAt" v)) -> do
+      let iid :: InvestigatorId = toResult v
+      hasDecoy <- lid <=~> LocationWithHorror (atLeast 1)
+      hasTrap <- lid <=~> LocationWithDamage (atLeast 1)
+      connected <- select $ connectedTo (LocationWithId lid)
+      let meta = toResultDefault defaultMeta attrs.meta
+      let barrierPairs =
+            filter
+              (\lid2 -> Map.findWithDefault 0 (sortedPair lid lid2) meta.barriers > 0)
+              connected
+      when (hasDecoy || hasTrap || notNull barrierPairs) do
+        chooseOneM iid do
+          when hasDecoy do
+            labeled' "removeDecoy" $ removeTokens ScenarioSource lid Horror 1
+          when hasTrap do
+            labeled' "removeTrap" $ removeTokens ScenarioSource lid Damage 1
+          when (notNull barrierPairs) do
+            labeled' "removeBarrier" do
+              chooseTargetM iid barrierPairs \lid2 ->
+                push $ ScenarioCountDecrementBy (Barriers lid lid2) 1
       pure s
     ScenarioSpecific "codex" v -> scope "codex" do
       let (iid :: InvestigatorId, source :: Source, n :: Int) = toResult v
@@ -370,26 +439,30 @@ instance RunMessage TheLongestNight where
       lid <- selectJust $ locationWithInvestigator iid
       hasDecoy <- lid <=~> LocationWithHorror (atLeast 1)
       hasTrap <- lid <=~> LocationWithDamage (atLeast 1)
+      decoyDestinations <- select $ LocationWithoutModifier CannotHaveDecoys <> not_ (LocationWithHorror (atLeast 1))
+      trapDestinations <- select $ LocationWithoutModifier CannotHaveTraps <> not_ (LocationWithDamage (atLeast 1))
+      let canMoveDecoy = hasDecoy && notNull decoyDestinations
+      let canMoveTrap = hasTrap && notNull trapDestinations
       connected <- select $ connectedTo (LocationWithId lid)
       let meta = toResultDefault defaultMeta attrs.meta
       let barrierPairs =
             filter
               (\lid2 -> Map.findWithDefault 0 (sortedPair lid lid2) meta.barriers > 0)
               connected
-      let hasOptions = hasDecoy || hasTrap || notNull barrierPairs
+      let hasOptions = canMoveDecoy || canMoveTrap || notNull barrierPairs
       allLocations <- select Anywhere
       when hasOptions do
         chooseOneM iid do
-          when hasDecoy do
+          when canMoveDecoy do
             labeled' "moveDecoy" do
-              chooseTargetM iid allLocations \toLid -> do
+              chooseTargetM iid decoyDestinations \toLid -> do
                 removeTokens source lid Horror 1
                 placeTokens source toLid Horror 1
                 selectEach (enemyEngagedWith iid) $ disengageEnemy iid
                 moveTo_ source iid toLid
-          when hasTrap do
+          when canMoveTrap do
             labeled' "moveTrap" do
-              chooseTargetM iid allLocations \toLid -> do
+              chooseTargetM iid trapDestinations \toLid -> do
                 removeTokens source lid Damage 1
                 placeTokens source toLid Damage 1
                 selectEach (enemyEngagedWith iid) $ disengageEnemy iid

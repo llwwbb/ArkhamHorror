@@ -2,11 +2,13 @@
 
 module Arkham.CampaignLogKey where
 
+import Arkham.Campaigns.BrethrenOfAsh.Key
 import Arkham.Campaigns.EdgeOfTheEarth.Key
 import Arkham.Campaigns.NightOfTheZealot.Key
 import Arkham.Campaigns.TheCircleUndone.Key
 import Arkham.Campaigns.TheCircleUndone.Memento
 import Arkham.Campaigns.TheDreamEaters.Key
+import Arkham.Campaigns.TheDrownedCity.Key
 import Arkham.Campaigns.TheDunwichLegacy.Key
 import Arkham.Campaigns.TheFeastOfHemlockVale.Key
 import Arkham.Campaigns.TheForgottenAge.Key
@@ -14,7 +16,6 @@ import Arkham.Campaigns.TheInnsmouthConspiracy.Key
 import Arkham.Campaigns.TheInnsmouthConspiracy.Memory
 import Arkham.Campaigns.ThePathToCarcosa.Key
 import Arkham.Campaigns.TheScarletKeys.Key
-import Arkham.Campaigns.BrethrenOfAsh.Key
 import Arkham.Card.CardCode
 import Arkham.Classes.GameLogger
 import Arkham.Prelude hiding (toLower)
@@ -40,6 +41,7 @@ data CampaignLogKey
   | TheScarletKeysKey TheScarletKeysKey
   | TheFeastOfHemlockValeKey TheFeastOfHemlockValeKey
   | BrethrenOfAshKey BrethrenOfAshKey
+  | TheDrownedCityKey TheDrownedCityKey
   | -- | Curse of the Rougarou
     TheRougarouContinuesToHauntTheBayou
   | TheRougarouIsDestroyed
@@ -70,6 +72,8 @@ data CampaignLogKey
     PracticedRoles
   | -- | The Blob That Ate Everything
     YouHaveNoSoul
+  | -- | Challenge Scenarios
+    ByTheBookBonusCards
   | -- | Player Cards
     YouHaveIdentifiedTheSolution
   | YouHaveTranslatedTheGlyphs
@@ -103,6 +107,7 @@ instance FromJSON CampaignLogKey where
       <|> (TheScarletKeysKey <$> parseJSON o)
       <|> (TheFeastOfHemlockValeKey <$> parseJSON o)
       <|> (BrethrenOfAshKey <$> parseJSON o)
+      <|> (TheDrownedCityKey <$> parseJSON o)
       <|> $(mkParseJSON defaultOptions ''CampaignLogKey) o
       <|> parseStringKey o
       <|> fail ("Could not parse CampaignLogKey" <> show o)
@@ -270,6 +275,12 @@ instance IsCampaignLogKey BrethrenOfAshKey where
     BrethrenOfAshKey k -> Just k
     _ -> Nothing
 
+instance IsCampaignLogKey TheDrownedCityKey where
+  toCampaignLogKey = TheDrownedCityKey
+  fromCampaignLogKey = \case
+    TheDrownedCityKey k -> Just k
+    _ -> Nothing
+
 instance ToJSONKey CampaignLogKey
 instance FromJSONKey CampaignLogKey
 
@@ -332,6 +343,7 @@ instance ToGameLoggerFormat CampaignLogKey where
     TheScarletKeysKey k -> pack . go $ show k
     TheFeastOfHemlockValeKey k -> pack . go $ show k
     BrethrenOfAshKey k -> pack . go $ show k
+    TheDrownedCityKey k -> pack . go $ show k
     s -> pack . go $ show s
    where
     go :: String -> String

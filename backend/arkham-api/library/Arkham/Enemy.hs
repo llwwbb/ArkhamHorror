@@ -912,4 +912,80 @@ allEnemies =
       , SomeEnemyCard miGoHarvester
       , SomeEnemyCard miGoMeddler
       , SomeEnemyCard miGoAbductor
+      , -- The Labyrinths of Lunacy
+        SomeEnemyCard eixodolon
+      , SomeEnemyCard eixodolonsPet
+      , SomeEnemyCard facelessAbductor
+      , SomeEnemyCard torturedVictim
+      , SomeEnemyCard miGoGuard
+      , -- Machinations Through Time
+        SomeEnemyCard edwinBennetBitterAdversary
+      , SomeEnemyCard oldSadieSheldon
+      , SomeEnemyCard sheldonGang
+      , SomeEnemyCard tyrthrha
+      , SomeEnemyCard ghastlySatyr
+      , SomeEnemyCard houndOfTindalos
+      , SomeEnemyCard manyAngledThing
+      , SomeEnemyCard tindalosAlphaMachinationsThroughTime
+      , -- Read or Die
+        SomeEnemyCard namerOfTheDead
+      , -- All or Nothing
+        SomeEnemyCard siobhanRiley
+      , SomeEnemyCard cloverClubBouncer
+      , -- Bad Blood
+        SomeEnemyCard elspethBaudin
+      , -- By the Book
+        SomeEnemyCard mrGrey
+      , -- Laid to Rest
+        SomeEnemyCard jeanDevereuxSeekingClosure
+      , SomeEnemyCard jeanDevereuxPossessed
+      , SomeEnemyCard ravenousSpirit
+      , -- Enthralling Encore
+        SomeEnemyCard sinisterSoloist
+      , -- Relics of the Past
+        SomeEnemyCard dwellerInThePit
+      , --- The Drowned City
+        SomeEnemyCard sadieSheldon
+      , SomeEnemyCard naomiOBannion
+      , SomeEnemyCard gangSoldier
+      , SomeEnemyCard gangEnforcer
+      , SomeEnemyCard gangInformant
+      , SomeEnemyCard deepOneMatron
+      , SomeEnemyCard huntingParasite
+      , SomeEnemyCard seafloorLeviathan
+      , SomeEnemyCard underseaParasite
+      , SomeEnemyCard medusa
+      , SomeEnemyCard mother
+      , SomeEnemyCard grotesqueAmalgam
+      , SomeEnemyCard apiaryTender
+      , SomeEnemyCard squamousParasite
+      , SomeEnemyCard slithererInDarkness
+      , SomeEnemyCard vaultAttendant
+      , SomeEnemyCard courtKeeperObserverOfDreams
+      , SomeEnemyCard courtKeeperWeaverOfNightmares
+      , SomeEnemyCard colossalTyrant
+      , SomeEnemyCard wingedKeeper
+      , SomeEnemyCard primevalTerror
+      , SomeEnemyCard starVampire
+      , SomeEnemyCard cthulhuDeadAndDreaming
+      , SomeEnemyCard randallTillinghast
+      , SomeEnemyCard cthulhuAncientEvil
+      , SomeEnemyCard cthulhuHoaryWings
+      , SomeEnemyCard cthulhuHoaryWingsEnraged
+      , SomeEnemyCard cthulhuFierceVisage
+      , SomeEnemyCard cthulhuFierceVisageEnraged
+      , SomeEnemyCard cthulhuWickedClaw
+      , SomeEnemyCard cthulhuWickedClawEnraged
+      , SomeEnemyCard stowawayDrone
+      , SomeEnemyCard pilgrimAcolyte
+      , SomeEnemyCard pilgrimLeader
+      , SomeEnemyCard monstrousStarSpawn
+      , SomeEnemyCard infectedStarSpawn
+      , SomeEnemyCard coralStarSpawn
+      , SomeEnemyCard starSpawnObserver
+      , SomeEnemyCard voltaicEel
+      , SomeEnemyCard theInescapable
+      , SomeEnemyCard deepOneThrall
+      , SomeEnemyCard elderDeepOne
+      , SomeEnemyCard persistentConstruct
       ]

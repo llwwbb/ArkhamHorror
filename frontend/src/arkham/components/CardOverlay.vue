@@ -166,7 +166,7 @@ watch(hoveredElement, (el) => {
  * ========================================================================== */
 
 const CARD_SELECTOR = '.card,[data-image-id],[data-target],[data-image]'
-const OVERLAY_BLOCKER_SELECTOR = '.draggable,.intro-text,.choice-modal-wrapper'
+const OVERLAY_BLOCKER_SELECTOR = '.draggable,.intro-text,.choice-modal-wrapper,.no-card-overlay'
 let hoverTimer: number | null = null
 let pressTimer: number | null = null
 let canDisablePress = false
@@ -1122,7 +1122,7 @@ watchEffect(() => {
           </template>
 
           <template v-for="s in skillItems" :key="`skill-09079-${s.name}`">
-            <circle :cx="s.cx" :cy="s.cy" :r="s.r" fill="rgba(0,0,0,0.4)" stroke="#222" stroke-width="2" />
+            <circle :cx="s.cx" :cy="s.cy" :r="s.r" fill="rgba(0,0,0,0.4)" stroke="var(--neutral-extra-dark)" stroke-width="2" />
           </template>
         </g>
       </svg>
@@ -1365,7 +1365,7 @@ watchEffect(() => {
 
 .card-overlay {
   position: absolute;
-  z-index: 20000;
+  z-index: var(--z-card-hover-overlay);
   display: flex;
   width: max-content;
   height: auto;
@@ -1402,7 +1402,7 @@ watchEffect(() => {
   position: absolute;
   bottom: 7%;
   right: 5.1%;
-  z-index: 3;
+  z-index: var(--z-index-3);
   font-size: 1.7em;
   color: rgba(180, 230, 255, 0.95);
   filter:
@@ -1501,7 +1501,7 @@ watchEffect(() => {
 .cosmic-emissary-prompt-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 30000;
+  z-index: var(--z-modal-overlay);
   display: flex;
   align-items: center;
   justify-content: center;

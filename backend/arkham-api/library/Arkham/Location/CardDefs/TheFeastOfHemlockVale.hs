@@ -183,15 +183,15 @@ suspendedGraveyard =
 
 hiddenCoveTheLostSister :: CardDef
 hiddenCoveTheLostSister =
-  locationWithUnrevealed_ "10577" "Cavern" [Cave] "Hidden Cove" [Coastal] TheLostSister
+  locationWithUnrevealed_ "10577" "Cavern" [Cave, Dark] "Hidden Cove" [Coastal] TheLostSister
 
 weedChokedBeach :: CardDef
 weedChokedBeach =
-  locationWithUnrevealed_ "10578" "Cavern" [Cave] "Weed-Choked Beach" [Coastal] TheLostSister
+  locationWithUnrevealed_ "10578" "Cavern" [Cave, Dark] "Weed-Choked Beach" [Coastal, Cave] TheLostSister
 
 rockyShoreline :: CardDef
 rockyShoreline =
-  locationWithUnrevealed_ "10579" "Cavern" [Cave] "Rocky Shoreline" [Coastal] TheLostSister
+  locationWithUnrevealed_ "10579" "Cavern" [Cave, Dark] "Rocky Shoreline" [Coastal] TheLostSister
 
 undergroundPools :: CardDef
 undergroundPools =
@@ -316,7 +316,7 @@ theFarmhouse :: CardDef
 theFarmhouse = location_ "10630" "The Farmhouse" [Sanctum] TheLongestNight
 
 milkhouse :: CardDef
-milkhouse = locationWithUnrevealed_ "10631" "Atwood Farm" [Farm] "The Farmhouse" [Farm] TheLongestNight
+milkhouse = locationWithUnrevealed_ "10631" "Atwood Farm" [Farm] "Milkhouse" [Farm] TheLongestNight
 
 vineyard :: CardDef
 vineyard = locationWithUnrevealed_ "10632" "Atwood Farm" [Farm] "Vineyard" [Farm] TheLongestNight

@@ -642,14 +642,16 @@ theMilitarysPlan =
 universalSolvent :: CardDef
 universalSolvent =
   (storyAsset "85029" "Universal Solvent" 2 MiGoIncursion)
-    { cdCardTraits = setFromList [Item, Science]
+    { cdSkills = [#intellect, #wild]
+    , cdCardTraits = setFromList [Item, Science]
     , cdUses = uses Supply 4
     }
 
 petOozeling :: CardDef
 petOozeling =
   (storyAsset "85030" "Pet Oozeling" 2 MiGoIncursion)
-    { cdCardTraits = setFromList [Ally, Monster, Ooze]
+    { cdSkills = [#agility, #wild]
+    , cdCardTraits = setFromList [Ally, Monster, Ooze]
     , cdSlots = [#ally]
     , cdUnique = True
     }
@@ -657,14 +659,17 @@ petOozeling =
 miGoWeapon :: CardDef
 miGoWeapon =
   (storyAsset "85031" "Mi-Go Weapon" 2 MiGoIncursion)
-    { cdCardTraits = setFromList [Weapon, Science]
+    { cdSkills = [#combat, #wild]
+    , cdCardTraits = setFromList [Weapon, Science]
+    , cdSlots = [#hand]
     , cdUses = uses Ammo 3
     }
 
 ltWilsonStewart :: CardDef
 ltWilsonStewart =
   (storyAsset "85032" "Lt. Wilson Stewart" 2 MiGoIncursion)
-    { cdCardTraits = setFromList [Ally, Agency, Veteran]
+    { cdSkills = [#willpower, #wild]
+    , cdCardTraits = setFromList [Ally, Agency, Veteran]
     , cdSlots = [#ally]
     , cdUnique = True
     }
@@ -752,4 +757,159 @@ enchantedSkull =
     , cdCardTraits = setFromList [Item, Relic]
     , cdSlots = [#arcane, #accessory]
     , cdDeckRestrictions = [PerDeckLimit 1]
+    }
+
+thomasCorriganPast :: CardDef
+thomasCorriganPast =
+  (storyAsset "87012" ("Thomas Corrigan" <:> "Physics Student") 0 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Past]
+    , cdCost = Nothing
+    }
+
+maryZielinskiPast :: CardDef
+maryZielinskiPast =
+  (storyAsset "87013" ("Mary Zielinski" <:> "Chemistry Student") 0 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Past]
+    , cdCost = Nothing
+    }
+
+nikolaTesla :: CardDef
+nikolaTesla =
+  (storyAsset "87014" ("Nikola Tesla" <:> "Renowned Inventor") 1 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Past]
+    , cdUnique = True
+    }
+
+thomasCorriganPresent :: CardDef
+thomasCorriganPresent =
+  (storyAsset "87021" ("Thomas Corrigan" <:> "Preeminent Astrophysicist") 0 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Present]
+    , cdCost = Nothing
+    }
+
+maryZielinskiPresent :: CardDef
+maryZielinskiPresent =
+  (storyAsset "87022" ("Mary Zielinski" <:> "Distinguished Chemist") 0 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Present]
+    , cdCost = Nothing
+    }
+
+ezraGraves :: CardDef
+ezraGraves =
+  (storyAsset "87023" ("Ezra Graves" <:> "Professor of the Arcane") 3 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Present]
+    , cdUnique = True
+    }
+
+thomasCorriganFuture :: CardDef
+thomasCorriganFuture =
+  (storyAsset "87030" ("Thomas Corrigan" <:> "Cofounder of Corrigan Industries") 0 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Future]
+    , cdCost = Nothing
+    }
+
+maryZielinskiFuture :: CardDef
+maryZielinskiFuture =
+  (storyAsset "87031" ("Mary Zielinski" <:> "Cofounder of Corrigan Industries") 0 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Scientist, Ally, Future]
+    , cdCost = Nothing
+    }
+
+dimensionalBeamMachine :: CardDef
+dimensionalBeamMachine =
+  (storyAsset "87032" "Dimensional Beam Machine" 1 MachinationsThroughTime)
+    { cdCardTraits = setFromList [Item, Science, Tool, Future]
+    , cdUses = uses Charge 2
+    }
+
+edwinBennetAstuteAssociate :: CardDef
+edwinBennetAstuteAssociate =
+  (storyAsset "87036b" ("Edwin Bennet" <:> "Astute Associate") 0 MachinationsThroughTimeSingleGroup)
+    { cdCardTraits = setFromList [Scientist, Ally]
+    , cdCost = Nothing
+    , cdUnique = True
+    , cdDoubleSided = True
+    , cdOtherSide = Just "87036a"
+    }
+
+edwinBennetEsteemedColleague :: CardDef
+edwinBennetEsteemedColleague =
+  (storyAsset "87037b" ("Edwin Bennet" <:> "Esteemed Colleague") 0 MachinationsThroughTimeEpicMultiplayer)
+    { cdCardTraits = setFromList [Scientist, Ally]
+    , cdCost = Nothing
+    , cdUnique = True
+    , cdDoubleSided = True
+    , cdOtherSide = Just "87037a"
+    }
+
+eixodolonsNote :: CardDef
+eixodolonsNote =
+  (storyAsset "70039" "Eixodolon's Note" 0 TheLabyrinthsOfLunacy)
+    { cdCardTraits = setFromList [Item, Script]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+keyOfMysteries :: CardDef
+keyOfMysteries =
+  (storyAsset "70040" "Key of Mysteries" 0 TheLabyrinthsOfLunacy)
+    { cdCardTraits = setFromList [Item, Key]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+mysteriousSyringe :: CardDef
+mysteriousSyringe =
+  (storyAsset "70041" "Mysterious Syringe" 0 TheLabyrinthsOfLunacy)
+    { cdCardTraits = setFromList [Item]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+rotDiagramEpicMultiplayer :: CardDef
+rotDiagramEpicMultiplayer =
+  (storyAsset "70042" "Rot Diagram" 0 LabyrinthsOfLunacyEpicMultiplayer)
+    { cdCardTraits = setFromList [Item, Script]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+rotDiagram :: CardDef
+rotDiagram =
+  (storyAsset "70043" "Rot Diagram" 0 LabyrinthsOfLunacySingleGroup)
+    { cdCardTraits = setFromList [Item, Script]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+hungerDiagramEpicMultiplayer :: CardDef
+hungerDiagramEpicMultiplayer =
+  (storyAsset "70044" "Hunger Diagram" 0 LabyrinthsOfLunacyEpicMultiplayer)
+    { cdCardTraits = setFromList [Item, Script]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+hungerDiagram :: CardDef
+hungerDiagram =
+  (storyAsset "70045" "Hunger Diagram" 0 LabyrinthsOfLunacySingleGroup)
+    { cdCardTraits = setFromList [Item, Script]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+decayDiagramEpicMultiplayer :: CardDef
+decayDiagramEpicMultiplayer =
+  (storyAsset "70046" "Decay Diagram" 0 LabyrinthsOfLunacyEpicMultiplayer)
+    { cdCardTraits = setFromList [Item, Script]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
+    }
+
+decayDiagram :: CardDef
+decayDiagram =
+  (storyAsset "70047" "Decay Diagram" 0 LabyrinthsOfLunacySingleGroup)
+    { cdCardTraits = setFromList [Item, Script]
+    , cdCost = Nothing
+    , cdCardType = EncounterAssetType
     }

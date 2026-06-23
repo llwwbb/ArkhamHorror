@@ -16,7 +16,8 @@ import Arkham.Message.Lifted.Log
 import Arkham.Projection
 import Arkham.Scenario.Deck
 import Arkham.Trait (Trait (Resident))
-import Arkham.Window (getBatchId)
+import Arkham.Window (Window (windowType), getBatchId)
+import Arkham.Window qualified as Window
 
 newtype TheOnslaught = TheOnslaught AgendaAttrs
   deriving anyclass IsAgenda
@@ -24,6 +25,11 @@ newtype TheOnslaught = TheOnslaught AgendaAttrs
 
 theOnslaught :: AgendaCard TheOnslaught
 theOnslaught = agenda (1, A) TheOnslaught Cards.theOnslaught (Static 10)
+
+getWindowDoom :: [Window] -> Int
+getWindowDoom ((windowType -> Window.WouldPlaceDoom _ _ n) : _) = n
+getWindowDoom (_ : rest) = getWindowDoom rest
+getWindowDoom [] = error "No doom amount found"
 
 instance HasModifiersFor TheOnslaught where
   getModifiersFor (TheOnslaught a) = modifySelf a [OtherDoomSubtracts]
@@ -40,10 +46,10 @@ instance HasAbilities TheOnslaught where
 
 instance RunMessage TheOnslaught where
   runMessage msg a@(TheOnslaught attrs) = runQueueT $ case msg of
-    UseCardAbility _ (isSource attrs -> True) 1 (getBatchId -> batchId) _ -> do
+    UseCardAbility _ (isSource attrs -> True) 1 (getBatchId &&& getWindowDoom -> (batchId, n)) _ -> do
       captives <- selectJust $ assetIs Assets.theCaptives
       cancelBatch batchId
-      placeDoom attrs captives 1
+      placeDoom attrs captives n
       pure a
     UseThisAbility _ (isSource attrs -> True) 2 -> do
       eachInvestigator \iid ->
@@ -52,11 +58,11 @@ instance RunMessage TheOnslaught where
     AdvanceAgenda (isSide B attrs -> True) -> do
       lead <- getLead
       residents <- select $ AssetWithTrait Resident <> AssetControlledBy Anyone
-      chooseOneM lead do
-        labeled "Each undefeated investigator suffers 1 mental trauma" do
+      chooseOneM lead $ campaignI18n do
+        labeled' "theOnslaught.eachUndefeatedInvestigatorSuffersMentalTrauma" do
           eachInvestigator (`sufferMentalTrauma` 1)
         when (notNull residents) do
-          labeled "Choose a resident to sacrifice" do
+          labeled' "theOnslaught.chooseResidentToSacrifice" do
             chooseTargetM lead residents \aid -> do
               cardDef <- field AssetCardDef aid
               for_ (residentFromCardDef cardDef) \resident -> do

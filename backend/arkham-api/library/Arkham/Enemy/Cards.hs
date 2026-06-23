@@ -9,12 +9,20 @@ import Arkham.Enemy.CardDefs.ReturnTo as X
 import Arkham.Enemy.CardDefs.Standalone as X
 import Arkham.Enemy.CardDefs.TheCircleUndone as X
 import Arkham.Enemy.CardDefs.TheDreamEaters as X
+import Arkham.Enemy.CardDefs.TheDrownedCity as X
 import Arkham.Enemy.CardDefs.TheDunwichLegacy as X
 import Arkham.Enemy.CardDefs.TheFeastOfHemlockVale as X
 import Arkham.Enemy.CardDefs.TheForgottenAge as X
 import Arkham.Enemy.CardDefs.TheInnsmouthConspiracy as X
 import Arkham.Enemy.CardDefs.ThePathToCarcosa as X
 import Arkham.Enemy.CardDefs.TheScarletKeys as X
+import Arkham.Enemy.CardDefs.ByTheBook as X
+import Arkham.Enemy.CardDefs.AllOrNothing as X
+import Arkham.Enemy.CardDefs.BadBlood as X
+import Arkham.Enemy.CardDefs.LaidToRest as X
+import Arkham.Enemy.CardDefs.EnthrallingEncore as X
+import Arkham.Enemy.CardDefs.ReadOrDie as X
+import Arkham.Enemy.CardDefs.RelicsOfThePast as X
 
 import Arkham.Card.CardCode
 import Arkham.Card.CardDef
@@ -198,6 +206,13 @@ allEncounterEnemyCards =
       , dmitriKonstantinovTakingTheLongView
       , caldwellPhilipsCompelledByDreams
       , carlSanfordIntimidatingPresence
+      , eixodolon
+      , eixodolonsPetEpicMultiplayer
+      , eixodolonsPet
+      , theJailor
+      , facelessAbductor
+      , miGoGuard
+      , torturedVictim
       , valeriyaAntonovaDontMessWithHer
       , deepOneBull
       , deepOneHatchling
@@ -222,6 +237,8 @@ allEncounterEnemyCards =
       , dromaeosaurus
       , drWentworthMoore
       , eaterOfTheDepths
+      , edwinBennetBitterAdversary
+      , edwinBennetEnviousRival
       , elderThingScavenger
       , elisabettaMagro
       , eliyahAshevakDogHandler
@@ -251,6 +268,7 @@ allEncounterEnemyCards =
       , frenziedMiner
       , furtiveZoog
       , gavriellaMizrah
+      , ghastlySatyr
       , ghostLight
       , ghoulFromTheDepths
       , ghoulMinion
@@ -286,6 +304,7 @@ allEncounterEnemyCards =
       , hitVan
       , hordeOfNight
       , horrifyingShade
+      , houndOfTindalos
       , hostOfInsanity
       , hotelGuest
       , hotelManager
@@ -370,6 +389,7 @@ allEncounterEnemyCards =
       , malformedSkeleton
       , maniac
       , manifestationOfMadness
+      , manyAngledThing
       , mariaDeSilvaKnowsMoreThanSheLetsOn
       , marshGug
       , memoryOfAHuntGoneAwry
@@ -421,6 +441,7 @@ allEncounterEnemyCards =
       , nyarlathotepTheFacelessWhisperer
       , oBannionsThug
       , oceirosMarsh
+      , oldSadieSheldon
       , otheraGilmanProprietessOfTheHotel
       , otherworldlyMeddler
       , otherworldlyMimic
@@ -493,6 +514,7 @@ allEncounterEnemyCards =
       , sethBishop
       , sethBishopThrallOfYogSothoth
       , shadowHound
+      , sheldonGang
       , silasBishop
       , sinisterAspirantA
       , sinisterAspirantB
@@ -563,6 +585,8 @@ allEncounterEnemyCards =
       , thrallDeadHeat
       , tidalTerror
       , tindalosAlpha
+      , tindalosAlphaMachinationsThroughTime
+      , tyrthrha
       , tzuSanNiangAWhisperInYourEar
       , tzuSanNiangOutForBlood
       , tzuSanNiangTheLadyWithTheRedParasol
@@ -642,6 +666,67 @@ allEncounterEnemyCards =
       , miGoHarvester
       , miGoMeddler
       , miGoAbductor
+      , --- By the Book
+        mrGrey
+      , --- All or Nothing
+        siobhanRiley
+      , cloverClubBouncer
+      , --- Bad Blood
+        elspethBaudin
+      , --- Laid to Rest
+        jeanDevereuxSeekingClosure
+      , jeanDevereuxPossessed
+      , ravenousSpirit
+      , --- Enthralling Encore
+        sinisterSoloist
+      , --- Read or Die
+        namerOfTheDead
+      , --- Relics of the Past
+        dwellerInThePit
+      , --- The Drowned City
+        sadieSheldon
+      , naomiOBannion
+      , gangSoldier
+      , gangEnforcer
+      , gangInformant
+      , deepOneMatron
+      , huntingParasite
+      , seafloorLeviathan
+      , underseaParasite
+      , medusa
+      , mother
+      , grotesqueAmalgam
+      , apiaryTender
+      , squamousParasite
+      , slithererInDarkness
+      , vaultAttendant
+      , courtKeeperObserverOfDreams
+      , courtKeeperWeaverOfNightmares
+      , colossalTyrant
+      , wingedKeeper
+      , primevalTerror
+      , starVampire
+      , cthulhuDeadAndDreaming
+      , randallTillinghast
+      , cthulhuAncientEvil
+      , cthulhuHoaryWings
+      , cthulhuHoaryWingsEnraged
+      , cthulhuFierceVisage
+      , cthulhuFierceVisageEnraged
+      , cthulhuWickedClaw
+      , cthulhuWickedClawEnraged
+      , stowawayDrone
+      , pilgrimAcolyte
+      , pilgrimLeader
+      , monstrousStarSpawn
+      , infectedStarSpawn
+      , coralStarSpawn
+      , starSpawnObserver
+      , voltaicEel
+      , theInescapable
+      , deepOneThrall
+      , elderDeepOne
+      , persistentConstruct
       ]
 
 allSpecialEnemyCards :: Map CardCode CardDef
@@ -654,32 +739,52 @@ allSpecialEnemyCards =
 flyingPolyp :: CardDef
 flyingPolyp =
   (enemy "xpolyp" "Flying Polyp" ShatteredAeons 0)
-    { cdCardTraits = singleton Monster
+    { cdHealthDamage = healthDamage 1
+    , cdFight = fight 2
+    , cdEvade = evade 2
+    , cdHealth = health 2
+    , cdCardTraits = singleton Monster
     }
 
 reanimatedDead :: CardDef
 reanimatedDead =
   (enemy "xreanimated" "Reanimated Dead" TheWagesOfSin 0)
-    { cdCardTraits = singleton Monster
+    { cdHealthDamage = healthDamage 1
+    , cdFight = fight 1
+    , cdEvade = evade 1
+    , cdHealth = health 1
+    , cdCardTraits = singleton Monster
     }
 
 nyarlathotepTrueShape :: CardDef
 nyarlathotepTrueShape =
   unique
     $ (enemy "xnyarlathotep" ("Nyarlathotep" <:> "True Shape") WhereTheGodsDwell 0)
-      { cdCardTraits = setFromList [AncientOne, Elite]
+      { cdFight = fight 0
+      , cdEvade = evade 0
+      , cdHealth = health 1
+      , cdCardTraits = setFromList [AncientOne, Elite]
       , cdVictoryPoints = Just 0
       }
 
 golem :: CardDef
 golem =
   (enemy "xgolem" "Golem" WithoutATrace 0)
-    { cdCardTraits = setFromList [Monster, Outsider]
+    { cdHealthDamage = healthDamage 1
+    , cdFight = fight 1
+    , cdEvade = evade 1
+    , cdHealth = health 1
+    , cdCardTraits = setFromList [Monster, Outsider]
     , cdKeywords = singleton Keyword.Hunter
     }
 
 extradimensionalEnemy :: CardDef
 extradimensionalEnemy =
   (enemy "xextra" "Extradimensional Enemy" FortuneAndFolly 0)
-    { cdCardTraits = singleton Extradimensional
+    { cdHealthDamage = healthDamage 1
+    , cdSanityDamage = sanityDamage 1
+    , cdFight = fight 1
+    , cdEvade = evade 1
+    , cdHealth = health 1
+    , cdCardTraits = singleton Extradimensional
     }

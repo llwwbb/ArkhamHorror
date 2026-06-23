@@ -52,6 +52,7 @@ import EncounterDeck from '@/arkham/components/EncounterDeck.vue';
 import VictoryDisplay from '@/arkham/components/VictoryDisplay.vue';
 import SkillTest from '@/arkham/components/SkillTest.vue';
 import ScenarioDeck from '@/arkham/components/ScenarioDeck.vue';
+import ScenarioDebug from '@/arkham/components/ScenarioDebug.vue';
 import CardsUnderIndicator from '@/arkham/components/CardsUnderIndicator.vue';
 import Story from '@/arkham/components/Story.vue';
 import Asset from '@/arkham/components/Asset.vue';
@@ -102,9 +103,11 @@ const forcedShowOutOfPlay = ref(false)
 const forcedShowDiscard = ref(false)
 const forcedShowHollowed = ref(false)
 const encounterDiscardPopoverShown = ref(false)
+const showScenarioDebugOptions = ref(false)
 const locationMap = ref<Element | null>(null)
 const scrollerRef = ref<HTMLElement | null>(null)
 const viewingDiscard = ref(false)
+const revealingCards = ref(false)
 const cardRowTitle = ref("")
 // Atlach Nacha specific refs
 const previousRotation = ref(0)
@@ -526,11 +529,48 @@ const onCosmicEmissarySettingChange = (event: Event) => {
   if (detail?.key === cosmicEmissaryAnimationSettingKey) updateCosmicEmissaryAnimationSetting(detail.value ?? null)
 }
 
+function proxyClippedLocationClick(event: MouseEvent) {
+  if (event.defaultPrevented || event.button !== 0) return
+
+  const target = event.target as HTMLElement | null
+  if (!target?.closest('.location-cards-container')) return
+  if (target.closest('.location-cell, .draggable, button, a, input, select, textarea, [role="button"]')) return
+
+  const cell = [...document.querySelectorAll<HTMLElement>('.location-cell--can-interact')]
+    .find((el) => {
+      const rects = [el, ...el.querySelectorAll<HTMLElement>('.location-wrapper, .location, .card-frame')]
+        .map((node) => node.getBoundingClientRect())
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+
+      return rects.some((rect) => event.clientX >= rect.left
+        && event.clientX <= rect.right
+        && event.clientY >= rect.top
+        && event.clientY <= rect.bottom)
+    })
+
+  if (!cell) return
+
+  const clickTarget = cell.querySelector<HTMLElement>('.card-frame') ?? cell.querySelector<HTMLElement>('.location') ?? cell
+  event.preventDefault()
+  event.stopPropagation()
+  clickTarget.dispatchEvent(new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+  }))
+}
+
 // callbacks
 onMounted(() => {
   setGameId(props.game.id)
   window.addEventListener('storage', onCosmicEmissaryStorage)
   window.addEventListener('arkham-setting-change', onCosmicEmissarySettingChange)
+  document.addEventListener('click', proxyClippedLocationClick, true)
   updateScrollMargins()
   updateCellDimensions()
   updateLayoutPadding()
@@ -624,6 +664,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('storage', onCosmicEmissaryStorage)
   window.removeEventListener('arkham-setting-change', onCosmicEmissarySettingChange)
+  document.removeEventListener('click', proxyClippedLocationClick, true)
   legObserver?.disconnect()
   legObserver = null
   cosmicEmissaryObserver?.disconnect()
@@ -693,7 +734,6 @@ addEntry({
 // Computed
 const pendingScenarioDifficulty = ref<string | null>(null)
 const displayedScenarioDifficulty = computed(() => pendingScenarioDifficulty.value ?? props.scenario.difficulty)
-
 watch(() => props.scenario.difficulty, (difficulty) => {
   if (pendingScenarioDifficulty.value === difficulty) pendingScenarioDifficulty.value = null
 })
@@ -779,6 +819,61 @@ const abilities = computed(() => {
       return acc;
     }, []);
 })
+
+interface ScenarioBadge {
+  key: string
+  icon: string
+  label: string
+  detail?: string
+}
+
+const scenarioBadges = computed<ScenarioBadge[]>(() => {
+  if (props.scenario.id !== 'c85001') return []
+
+  const badges: ScenarioBadge[] = []
+  if (props.scenario.meta?.foodAndDrinksActive === true) {
+    const damage = typeof props.scenario.meta.foodAndDrinksDamageDealt === 'number' ? props.scenario.meta.foodAndDrinksDamageDealt : 0
+    badges.push({
+      key: 'foodAndDrinks',
+      icon: '🚫🍔',
+      label: 'No food or drinks',
+      detail: `${Math.min(damage, 3)}/3 damage dealt to Subject 8L-08`,
+    })
+  }
+
+  if (props.scenario.meta?.languageActive === true) {
+    badges.push({
+      key: 'language',
+      icon: '🗣️?',
+      label: 'Gibberish only',
+      detail: 'The concept of language is devoured until the end of the investigation phase.',
+    })
+  }
+
+  if (props.scenario.meta?.friendshipsActive === true) {
+    badges.push({
+      key: 'friendships',
+      icon: '🤝⃠',
+      label: 'No cross-commits',
+      detail: 'Friendships are devoured until the end of the round.',
+    })
+  }
+
+  const voiceActive = props.scenario.meta?.voiceActive
+  if (Array.isArray(voiceActive) && voiceActive.length > 0) {
+    const names = voiceActive.map((iid) => props.game.investigators[iid]?.name?.title).filter(Boolean)
+    badges.push({
+      key: 'voice',
+      icon: '🤐',
+      label: names.length === 1 ? `${names[0]} cannot speak` : 'No speaking/noise',
+      detail: names.length > 0 ? names.join(', ') : 'One or more investigators cannot speak or make noise until the end of the round.',
+    })
+  }
+
+  return badges
+})
+
+const showScenarioNotifierBar = computed(() => scenarioBadges.value.length > 0)
 
 const rotationSteps = ref(0)
 const transpose = <T>(grid: T[][]): T[][] =>
@@ -1116,10 +1211,11 @@ const gameOver = computed(() => props.game.gameState.tag === "IsOver")
 
 // Reactive
 const showCards = reactive<RefWrapper<any>>({ ref: noCards })
-const doShowCards = (cards: ComputedRef<Card[]>, title: string, isDiscards: boolean) => {
+const doShowCards = (cards: ComputedRef<Card[]>, title: string, isDiscards: boolean, revealed = false) => {
   cardRowTitle.value = title
   showCards.ref = cards
   viewingDiscard.value = isDiscards
+  revealingCards.value = revealed
 }
 const showRemovedFromPlay = () => doShowCards(removedFromPlay, t('scenario.removedFromPlay'), true)
 const showHollowed = () => doShowCards(hollowed, t('scenario.hollowed'), true)
@@ -1130,7 +1226,10 @@ const handleHollowedChoose = (idx: number) => {
     choose(idx)
   }
 }
-const hideCards = () => showCards.ref = noCards
+const hideCards = () => {
+  showCards.ref = noCards
+  revealingCards.value = false
+}
 
 // Watchers
 watchEffect(() => {
@@ -1358,7 +1457,7 @@ function compactCosmicEmissaryFormation(force = false) {
       nextEnemyStyles[label] = {
         translate: `${dx}px ${dy}px`,
         transition,
-        zIndex: '20',
+        zIndex: 'var(--z-index-20)',
       }
 
       const locationEl = locationElements[label]
@@ -1380,7 +1479,7 @@ function compactCosmicEmissaryFormation(force = false) {
         nextLocationCellStyles[locationLabel] = {
           translate: `${dx}px ${locationDy}px`,
           transition,
-          zIndex: '10',
+          zIndex: 'var(--z-index-10)',
         }
       }
     }
@@ -1588,7 +1687,7 @@ async function addChaosToken(face: any){
     <UpgradeDeck :game="game" :key="playerId" :playerId="playerId" @choose="choose"/>
   </div>
   <div v-else-if="!gameOver" id="scenario" class="scenario" :data-scenario="scenario.id">
-    <div class="scenario-body" :class="{'split-view': splitView }">
+    <div class="scenario-body" :class="{'split-view': splitView, 'scenario-body--notifier-overlays': showScenarioNotifierBar }">
       <Draggable v-if="showOutOfPlay || forcedShowOutOfPlay">
         <template #handle><header><h2>{{ $t('gameBar.outOfPlay') }}</h2></header></template>
         <div class="card-row-cards">
@@ -1715,10 +1814,11 @@ async function addChaosToken(face: any){
         :isDiscards="viewingDiscard"
         :title="cardRowTitle"
         :playerId="playerId"
+        :revealed="revealingCards"
         @choose="choose"
         @close="hideCards"
       />
-      <div class="scenario-cards">
+      <div class="scenario-cards" :class="{ 'scenario-cards--has-badges': showScenarioNotifierBar }">
         <div v-if="anyInTheShadowLocations || inTheShadows.length > 0 || inTheShadowsInvestigators.length > 0" class="in-the-shadows">
           <template v-if="anyInTheShadowLocations">
             <Location
@@ -1872,7 +1972,7 @@ async function addChaosToken(face: any){
             />
           </template>
           <div v-else-if="agendaGroupedTreacheries.length > 0" class="treacheries">
-            <div v-for="([cCode, treacheries], idx) in agendaGroupedTreacheries" :key="cCode" class="treachery-group" :style="{ zIndex: (agendaGroupedTreacheries.length - idx) * 10 }">
+            <div v-for="([cCode, treacheries], idx) in agendaGroupedTreacheries" :key="cCode" class="treachery-group" :style="{ zIndex: `calc(var(--z-index-10) * ${agendaGroupedTreacheries.length - idx})` }">
               <div v-for="treacheryId in treacheries" class="treachery-card" :key="treacheryId" >
                 <TreacheryView
                   :treachery="game.treacheries[treacheryId]"
@@ -1938,54 +2038,56 @@ async function addChaosToken(face: any){
         />
 
         <div class="scenario-guide">
-          <div class="scenario-guide-card-wrapper">
-            <div class="scenario-guide-card">
-              <img
-                class="card"
-                :src="scenarioGuide"
-                :data-spent-keys="JSON.stringify(spentKeys)"
-                :data-depth="currentDepth"
+          <div class="scenario-guide-main">
+            <div class="scenario-guide-card-wrapper">
+              <div class="scenario-guide-card">
+                <img
+                  class="card"
+                  :src="scenarioGuide"
+                  :data-spent-keys="JSON.stringify(spentKeys)"
+                  :data-depth="currentDepth"
+                />
+                <img
+                  v-for="reference in additionalReferences"
+                  class="card"
+                  :src="reference"
+                />
+                <AbilityButton
+                  v-for="ability in abilities"
+                  :key="ability.index"
+                  :ability="ability.contents"
+                  :game="game"
+                  @click="choose(ability.index)"
+                />
+              </div>
+              <PoolItem class="depth" v-if="currentDepth" type="resource" :amount="currentDepth" />
+              <PoolItem class="civilians-slain" v-if="civiliansSlain" type="resource" :amount="civiliansSlain" />
+              <PoolItem class="strength-of-the-abyss" v-if="strengthOfTheAbyss !== undefined" type="resource" :amount="strengthOfTheAbyss" />
+              <PoolItem class="targets" v-if="targets" type="resource" :amount="targets" />
+              <PoolItem class="scraps" v-if="scraps" type="resource" :amount="scraps" />
+              <PoolItem class="switches" v-if="switches" type="resource" :amount="switches" />
+              <PoolItem class="darkness-level" v-if="darknessLevel" type="resource" :amount="darknessLevel" />
+              <div class="spent-keys" v-if="spentKeys.length > 0">
+                <KeyToken v-for="k in spentKeys" :key="keyToId(k)" :keyToken="k" :game="game" :playerId="playerId" @choose="choose" />
+              </div>
+              <PoolItem
+                v-if="signOfTheGods"
+                class="signOfTheGods"
+                type="resource"
+                tooltip="Sign of the Gods"
+                :amount="signOfTheGods"
               />
-              <img
-                v-for="reference in additionalReferences"
-                class="card"
-                :src="reference"
+              <PoolItem
+                v-if="distortion"
+                class="distortion"
+                type="damage"
+                tooltip="Distortion"
+                :amount="distortion"
               />
-              <AbilityButton
-                v-for="ability in abilities"
-                :key="ability.index"
-                :ability="ability.contents"
-                :game="game"
-                @click="choose(ability.index)"
-              />
-            </div>
-            <PoolItem class="depth" v-if="currentDepth" type="resource" :amount="currentDepth" />
-            <PoolItem class="civilians-slain" v-if="civiliansSlain" type="resource" :amount="civiliansSlain" />
-            <PoolItem class="strength-of-the-abyss" v-if="strengthOfTheAbyss !== undefined" type="resource" :amount="strengthOfTheAbyss" />
-            <PoolItem class="targets" v-if="targets" type="resource" :amount="targets" />
-            <PoolItem class="scraps" v-if="scraps" type="resource" :amount="scraps" />
-            <PoolItem class="switches" v-if="switches" type="resource" :amount="switches" />
-            <PoolItem class="darkness-level" v-if="darknessLevel" type="resource" :amount="darknessLevel" />
-            <div class="spent-keys" v-if="spentKeys.length > 0">
-              <KeyToken v-for="k in spentKeys" :key="keyToId(k)" :keyToken="k" :game="game" :playerId="playerId" @choose="choose" />
-            </div>
-            <PoolItem
-              v-if="signOfTheGods"
-              class="signOfTheGods"
-              type="resource"
-              tooltip="Sign of the Gods"
-              :amount="signOfTheGods"
-            />
-            <PoolItem
-              v-if="distortion"
-              class="distortion"
-              type="damage"
-              tooltip="Distortion"
-              :amount="distortion"
-            />
-            <div class="pool" v-if="hasPool">
-              <PoolItem v-if="resources && resources > 0" type="resource" :amount="resources" />
-              <PoolItem v-if="damage && damage > 0" type="damage" :amount="damage" />
+              <div class="pool" v-if="hasPool">
+                <PoolItem v-if="resources && resources > 0" type="resource" :amount="resources" />
+                <PoolItem v-if="damage && damage > 0" type="damage" :amount="damage" />
+              </div>
             </div>
           </div>
           <div class="keys" v-if="keys.length > 0">
@@ -2000,6 +2102,14 @@ async function addChaosToken(face: any){
               <option value="Expert">Expert</option>
             </select>
           </label>
+          <button
+            v-if="debug.active"
+            type="button"
+            class="scenario-debug-toggle"
+            @click="showScenarioDebugOptions = true"
+          >
+            Debug
+          </button>
           <CardsUnderIndicator
             v-if="cardsUnderScenarioReference.length > 0"
             class="scenario-cards-under"
@@ -2035,12 +2145,23 @@ async function addChaosToken(face: any){
         >
         </SkillTest>
 
+        <div v-if="showScenarioNotifierBar" class="scenario-badges" aria-label="Scenario reminders">
+          <div v-for="badge in scenarioBadges" :key="badge.key" class="scenario-badge" :title="badge.detail">
+            <span class="scenario-badge-icon" aria-hidden="true">{{ badge.icon }}</span>
+            <span class="scenario-badge-text">
+              <strong>{{ badge.label }}</strong>
+              <small v-if="badge.detail">{{ badge.detail }}</small>
+            </span>
+          </div>
+        </div>
+
       </div>
 
 
       <div class="location-cards-container" @dblclick.passive="toggleZoom">
-        <Connections :game="game" :playerId="playerId" :enableCosmicEmissaryAnimation="enableCosmicEmissaryAnimation" />
         <div class="location-cards-scroller" ref="scrollerRef">
+        <div class="location-cards-stage">
+        <Connections :game="game" :playerId="playerId" :enableCosmicEmissaryAnimation="enableCosmicEmissaryAnimation" />
         <transition-group name="map" tag="div" ref="locationMap" class="location-cards" :css="props.scenario.id !== 'c10651'" :style="locationStyles" @before-leave="beforeLeave">
           <div
             v-for="location in locations"
@@ -2125,6 +2246,7 @@ async function addChaosToken(face: any){
             </template>
           </template>
         </transition-group>
+        </div>
         <div v-if="playerLocationZones.length > 0" class="player-location-zones">
           <section
             v-for="zone in playerLocationZones"
@@ -2250,6 +2372,15 @@ async function addChaosToken(face: any){
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <ScenarioDebug
+      v-if="debug.active && showScenarioDebugOptions"
+      :game="game"
+      :scenario="scenario"
+      @close="showScenarioDebugOptions = false"
+    />
+  </Teleport>
 </template>
 
 <style scoped>
@@ -2288,7 +2419,11 @@ async function addChaosToken(face: any){
   position: relative;
   width: 100%;
   gap: 10px;
-  z-index: -2;
+  z-index: var(--z-index-neg-2);
+  background: rgba(0, 0, 0, 0.14);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+
   @media (max-width: 800px) and (orientation: portrait) {
     padding-top: 10px;
     padding-bottom: 0;
@@ -2297,10 +2432,15 @@ async function addChaosToken(face: any){
 }
 
 /* A revealed (slid-out) treachery extends down into the board's region; lift the
-   whole scenario-cards layer above the board (normally z-index: -2, behind it) so
+   whole scenario-cards layer above the board (normally z-index: var(--z-index-neg-2), behind it) so
    the revealed card and its buttons stay clickable. */
 .scenario-cards:has(.treachery-group.is-revealed) {
-  z-index: 1;
+  z-index: var(--z-index-1);
+}
+
+.scenario-cards--has-badges {
+  z-index: auto;
+  padding-bottom: 56px;
 }
 
 .clue {
@@ -2321,13 +2461,13 @@ async function addChaosToken(face: any){
     left: 0;
     right: 0;
     margin: auto;
-    z-index: -1;
+    z-index: var(--z-index-neg-1);
   }
 }
 
 .scenario-body {
   background: var(--background);
-  z-index: 1;
+  z-index: var(--z-index-1);
   width: 100%;
   flex: 1;
   inset: 0;
@@ -2335,6 +2475,10 @@ async function addChaosToken(face: any){
 
   display: grid;
   grid-template-rows: auto 1fr;
+
+  &.scenario-body--notifier-overlays {
+    z-index: auto;
+  }
 
   &.split-view {
     grid-template-columns: 1fr 2fr;
@@ -2394,6 +2538,8 @@ async function addChaosToken(face: any){
   touch-action: pan-x pan-y;
   scrollbar-gutter: stable both-edges;
   scroll-padding: 30%;
+  padding: 24px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2441,9 +2587,20 @@ async function addChaosToken(face: any){
   }
 }
 
-.location-cards {
+.location-cards-stage {
+  position: relative;
   display: grid;
   flex-shrink: 0;
+  width: max-content;
+  height: max-content;
+  overflow: hidden;
+}
+
+.location-cards {
+  display: grid;
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 1;
   transition: transform 0.2s ease;
 }
 
@@ -2451,7 +2608,6 @@ async function addChaosToken(face: any){
   display: flex;
   overflow: hidden;
   flex: 1;
-  padding-top: 32px;
   position: relative;
   @media (max-width: 800px) and (orientation: portrait) {
     padding-top: 5px;
@@ -2596,8 +2752,8 @@ async function addChaosToken(face: any){
     span {
       position: absolute;
       right: 100%;
-      z-index: 100000;
-      background: #222;
+      z-index: var(--z-index-100000);
+      background: var(--neutral-extra-dark);
       height: 100%;
       display: flex;
       align-items: center;
@@ -2645,6 +2801,74 @@ async function addChaosToken(face: any){
   isolation: isolate;
 }
 
+.scenario-guide-main {
+  position: relative;
+  width: fit-content;
+}
+
+.scenario-badges {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 10px;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scenario-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 260px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-left: 3px solid rgb(160 185 190 / 55%);
+  border-radius: 6px;
+  background: rgb(18 21 24 / 92%);
+  color: white;
+  padding: 4px 8px 4px 6px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+}
+
+.scenario-badge-icon {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.scenario-badge-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.05;
+}
+
+.scenario-badge-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
+}
+
+.scenario-badge-text small {
+  overflow: hidden;
+  opacity: 0.68;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.58rem;
+}
+
 .scenario-cards-under {
   align-self: center;
   margin-top: 2px;
@@ -2665,28 +2889,28 @@ async function addChaosToken(face: any){
     align-self: end;
     justify-self: end;
     pointer-events: none;
-    z-index: 10;
+    z-index: var(--z-index-10);
   }
 
   .signOfTheGods {
     align-self: end;
     justify-self: end;
     pointer-events: none;
-    z-index: 10;
+    z-index: var(--z-index-10);
   }
 
   .distortion {
     align-self: end;
     justify-self: end;
     pointer-events: none;
-    z-index: 10;
+    z-index: var(--z-index-10);
   }
 
   .pool {
     align-self: end;
     justify-self: end;
     pointer-events: none;
-    z-index: 10;
+    z-index: var(--z-index-10);
   }
 
   .spent-keys {
@@ -2694,7 +2918,7 @@ async function addChaosToken(face: any){
     justify-self: center;
     margin-bottom: 20px;
     pointer-events: none;
-    z-index: 10;
+    z-index: var(--z-index-10);
   }
 }
 
@@ -2760,7 +2984,7 @@ async function addChaosToken(face: any){
   background-position: center;
   background-size: contain;
   position: absolute;
-  z-index: 1000;
+  z-index: var(--z-index-1000);
   margin: auto;
   inset: 0;
   width: fit-content;
@@ -2868,7 +3092,7 @@ async function addChaosToken(face: any){
 
 .location {
   &:hover {
-    z-index: 100;
+    z-index: var(--z-index-100);
   }
 }
 
@@ -2878,8 +3102,8 @@ async function addChaosToken(face: any){
   color: #fff;
   cursor: pointer;
   border-radius: 4px;
-  background-color: #555;
-  z-index: 1000;
+  background-color: var(--button);
+  z-index: var(--z-index-1000);
   width: 100%;
   min-width: max-content;
 }
@@ -2916,6 +3140,21 @@ async function addChaosToken(face: any){
   color: white;
   font-size: 0.75rem;
 }
+
+.scenario-debug-toggle {
+  align-self: center;
+  width: var(--card-width);
+  margin-top: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: var(--button);
+  color: white;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 
 .spent-keys {
   pointer-events: none;
@@ -2986,13 +3225,18 @@ async function addChaosToken(face: any){
 .location-cell {
   /* Grid placement + TransitionGroup FLIP target. The inner .location carries
      the user's drag offset transform, so rotation reshuffles (which FLIP-
-     animate the wrapper) don't wipe that offset. */
+     animate the wrapper) don't wipe that offset.
+
+     The cell's untransformed grid box can overlap a different translated
+     location. Do not let that invisible/original box win hit-testing; only the
+     translated visible wrapper should receive pointer events. */
   display: block;
   position: relative;
+  pointer-events: none;
 }
 
 .location-cell--can-interact {
-  z-index: 20;
+  z-index: var(--z-index-20);
 }
 
 .location-wrapper {
@@ -3015,6 +3259,8 @@ async function addChaosToken(face: any){
 }
 
 .location-cell > .location-wrapper {
+  pointer-events: auto;
+
   /* Animate the offset along with the wrapper's FLIP move during rotation so
      the offset doesn't snap to its rotated value before the wrapper slides
      into place. Same easing/duration as .map-move keeps them in sync. */
@@ -3031,7 +3277,7 @@ async function addChaosToken(face: any){
 
 .location--dragging {
   cursor: grabbing;
-  z-index: 50;
+  z-index: var(--z-index-50);
   transition: none !important;
 }
 
@@ -3138,11 +3384,11 @@ async function addChaosToken(face: any){
   display: flex;
   flex-direction: column;
   img:nth-of-type(1) {
-    z-index: 2;
+    z-index: var(--z-index-2);
   }
 
   img:not(:nth-of-type(1)) {
-    z-index: 1;
+    z-index: var(--z-index-1);
     margin-top: calc((var(--card-width) / (3 / 2)) * -1);
   }
 }
@@ -3176,7 +3422,7 @@ async function addChaosToken(face: any){
 }
 
 .tri-button {
-  background-color: #555;
+  background-color: var(--button);
   color: white;
   padding: 0;
   display: flex;

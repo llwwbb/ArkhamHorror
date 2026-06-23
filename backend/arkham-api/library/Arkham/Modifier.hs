@@ -470,6 +470,9 @@ data ModifierType
   | BecomeHomunculusWhenDefeated
   | BecomeInvestigator InvestigatorId
   | DrawsEachEncounterCard
+  | -- | When drawing encounter cards (e.g. the mythos draw), present this target
+    -- to click instead of the encounter deck. The draw itself is unchanged.
+    DrawEncounterCardsVia TargetMatcher
   deriving stock (Show, Eq, Ord, Data)
 
 data UIModifier
@@ -486,6 +489,9 @@ data UIModifier
 instance IsLabel "combat" (Int -> ModifierType) where
   fromLabel = SkillModifier #combat
 
+instance IsLabel "combat" (Integer -> ModifierType) where
+  fromLabel = SkillModifier #combat . fromIntegral
+
 instance IsLabel "agility" (Int -> ModifierType) where
   fromLabel = SkillModifier #agility
 
@@ -500,6 +506,9 @@ instance IsLabel "willpower" (Int -> ModifierType) where
 
 instance IsLabel "damage" (Int -> ModifierType) where
   fromLabel = DamageDealt
+
+instance IsLabel "damage" (Integer -> ModifierType) where
+  fromLabel = DamageDealt . fromIntegral
 
 instance IsLabel "noAction" ModifierType where
   fromLabel = ActionCostModifier (-1)

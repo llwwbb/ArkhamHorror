@@ -26,6 +26,15 @@ const showOtherHands = computed({
   set: (v: boolean) => emit('update:showOtherPlayersHands', v),
 })
 
+const soundsDisabled = ref(localStorage.getItem('arkhamSoundsDisabled') === 'true')
+
+watch(soundsDisabled, (value) => {
+  localStorage.setItem('arkhamSoundsDisabled', value ? 'true' : 'false')
+  window.dispatchEvent(new CustomEvent('arkham-setting-change', {
+    detail: { key: 'arkhamSoundsDisabled', value: value ? 'true' : 'false' }
+  }))
+})
+
 const canShowOtherHands = computed(() => !props.solo && props.game.playerCount > 1)
 
 const headerStyle = computed(() => {
@@ -175,7 +184,7 @@ onBeforeUnmount(() => {
 
     <div class="settings-body">
       <section class="settings-section">
-        <h3 class="section-title">{{ $t('gameBar.playerSettings') }}</h3>
+        <h3 class="section-title">Investigator Settings</h3>
 
         <div class="toggle-list">
           <div class="toggle-row" :ref="setSettingRef('skipTriggers')" :class="{ 'toggle-row--highlighted': highlightedSetting === 'skipTriggers' }">
@@ -190,7 +199,12 @@ onBeforeUnmount(() => {
               <label for="opt-skipTriggers-off">{{ $t('Off') }}</label>
             </div>
           </div>
+        </div>
+      </section>
 
+      <section class="settings-section">
+        <h3 class="section-title">Your View Settings</h3>
+        <div class="toggle-list">
           <div class="toggle-row" v-if="canShowOtherHands">
             <div class="toggle-text">
               <div class="toggle-name">{{$t('gameBar.viewSettingShowOtherPlayersHandsTitle')}}</div>
@@ -201,6 +215,19 @@ onBeforeUnmount(() => {
               <label for="opt-showHands-on">{{ $t('On') }}</label>
               <input type="radio" id="opt-showHands-off" name="opt-showHands" :checked="!showOtherHands" @change="showOtherHands = false" />
               <label for="opt-showHands-off">{{ $t('Off') }}</label>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-text">
+              <div class="toggle-name">Sounds</div>
+              <div class="toggle-desc">Play sound effects in this browser.</div>
+            </div>
+            <div class="segmented segmented-2 toggle-control">
+              <input type="radio" id="opt-sounds-on" name="opt-sounds" :checked="!soundsDisabled" @change="soundsDisabled = false" />
+              <label for="opt-sounds-on">{{ $t('On') }}</label>
+              <input type="radio" id="opt-sounds-off" name="opt-sounds" :checked="soundsDisabled" @change="soundsDisabled = true" />
+              <label for="opt-sounds-off">{{ $t('Off') }}</label>
             </div>
           </div>
 
@@ -220,12 +247,12 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="settings-section">
-        <h3 class="section-title">Rules Settings</h3>
+        <h3 class="section-title">Shared Game Settings</h3>
         <div class="toggle-list">
           <div class="toggle-row">
             <div class="toggle-text">
               <div class="toggle-name">"As If" Ruling</div>
-              <div class="toggle-desc">Swap between Chapter 1 and Chapter 2 handling for "as if" effects during nested window checks.</div>
+              <div class="toggle-desc">Swap between Chapter 1 and Chapter 2 handling for "as if" effects during nested window checks. This affects everyone in the game.</div>
             </div>
             <div class="segmented segmented-2 toggle-control">
               <input type="radio" id="opt-asIfRuling-chapter1" name="opt-asIfRuling" :checked="asIfRuling === 'chapter1'" @change="asIfRuling = 'chapter1'" />
@@ -234,12 +261,7 @@ onBeforeUnmount(() => {
               <label for="opt-asIfRuling-chapter2">Chapter 2</label>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section v-if="recommendedToggles.length > 0" class="settings-section">
-        <h3 class="section-title">{{ $t('create.recommendedOptions') ?? 'Campaign Options' }}</h3>
-        <div class="toggle-list">
           <div class="toggle-row" v-for="o in recommendedToggles" :key="o.option.tag">
             <div class="toggle-text">
               <div class="toggle-name">
@@ -353,15 +375,15 @@ onBeforeUnmount(() => {
 }
 
 .toggle-row--highlighted {
-  border-color: #FF00FF;
-  box-shadow: 0 0 0 1px #FF00FF, 0 0 12px rgba(255, 0, 255, 0.6);
+  border-color: var(--select);
+  box-shadow: 0 0 0 1px var(--select), 0 0 12px rgba(255, 0, 255, 0.6);
   animation: settingsFocusPulse 1.2s ease-out 2;
 }
 
 @keyframes settingsFocusPulse {
-  0% { box-shadow: 0 0 0 1px #FF00FF, 0 0 4px rgba(255, 0, 255, 0.3); }
-  50% { box-shadow: 0 0 0 1px #FF00FF, 0 0 18px rgba(255, 0, 255, 0.85); }
-  100% { box-shadow: 0 0 0 1px #FF00FF, 0 0 4px rgba(255, 0, 255, 0.3); }
+  0% { box-shadow: 0 0 0 1px var(--select), 0 0 4px rgba(255, 0, 255, 0.3); }
+  50% { box-shadow: 0 0 0 1px var(--select), 0 0 18px rgba(255, 0, 255, 0.85); }
+  100% { box-shadow: 0 0 0 1px var(--select), 0 0 4px rgba(255, 0, 255, 0.3); }
 }
 
 .toggle-text {

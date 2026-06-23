@@ -7,6 +7,7 @@ import Arkham.Agenda.CardDefs.ThePathToCarcosa as X
 import Arkham.Agenda.CardDefs.TheForgottenAge as X
 import Arkham.Agenda.CardDefs.TheCircleUndone as X
 import Arkham.Agenda.CardDefs.TheDreamEaters as X
+import Arkham.Agenda.CardDefs.TheDrownedCity as X
 import Arkham.Agenda.CardDefs.TheInnsmouthConspiracy as X
 import Arkham.Agenda.CardDefs.EdgeOfTheEarth as X
 import Arkham.Agenda.CardDefs.TheScarletKeys as X
@@ -14,6 +15,14 @@ import Arkham.Agenda.CardDefs.TheFeastOfHemlockVale as X
 import Arkham.Agenda.CardDefs.Core2026 as X
 import Arkham.Agenda.CardDefs.ReturnTo as X
 import Arkham.Agenda.CardDefs.Standalone as X
+import Arkham.Agenda.CardDefs.ByTheBook as X
+import Arkham.Agenda.CardDefs.AllOrNothing as X
+import Arkham.Agenda.CardDefs.BadBlood as X
+import Arkham.Agenda.CardDefs.LaidToRest as X
+import Arkham.Agenda.CardDefs.EnthrallingEncore as X
+import Arkham.Agenda.CardDefs.ReadOrDie as X
+import Arkham.Agenda.CardDefs.RedTideRising as X
+import Arkham.Agenda.CardDefs.RelicsOfThePast as X
 
 import Arkham.Card.CardCode
 import Arkham.Card.CardDef
@@ -28,6 +37,8 @@ allAgendaCards =
       , aCreatureOfTheBayou
       , agentsOfTheDark
       , agentsOfTheOuterGods
+      , agonyAndDespairEpicMultiplayer
+      , agonyAndDespair
       , aHarshWindBlows
       , aKillerParty
       , allBetsDown
@@ -41,6 +52,8 @@ allAgendaCards =
       , aTearInRealityV2
       , aTrailOfTwists
       , awakening
+      , awakeningTheLabyrinthsOfLunacyEpicMultiplayer
+      , awakeningTheLabyrinthsOfLunacy
       , backToTheVale
       , barricadedStreets
       , beckoningForPower
@@ -114,10 +127,12 @@ allAgendaCards =
       , icyDepths
       , inEveryShadow
       , intoTheCaves
+      , intoTheVoid
       , intoTheWhite
       , intruders
       , itAwaits
       , jessiesRequest
+      , theMastermind
       , theSummoningOfSilenus
       , theSummoningProgresses
       , theSummoningNearsCompletion
@@ -283,6 +298,7 @@ allAgendaCards =
       , threeFates
       , timeCollapsing
       , timeIsRunningShort
+      , timeMarchesOn
       , torturousDescent
       , unchangingAsTheSea
       , undergroundMuscle
@@ -316,4 +332,43 @@ allAgendaCards =
         theAnomalySpreads
       , theAnomalySwells
       , theAnomalyConsumes
+      , --- By the Book
+        aCovertConspiracy
+      , yourDeadlineNears
+      , --- All or Nothing
+        eyesAllAroundYou
+      , --- Bad Blood
+        hyperboreanBlood
+      , --- Laid to Rest
+        gatheringMists
+      , --- Enthralling Encore
+        theHauntingOfTheWardTheatre
+      , --- Read or Die
+        mortalInquiry
+      , theNewGirl
+      , trailGoesCold
+      , --- Relics of the Past
+        somethingElseStirs
+      , guardianOfTheRelics
+      , --- The Drowned City
+        arkhamNightlife
+      , longNight
+      , floodedPaths
+      , theSunkenRuins
+      , collapsingDome
+      , stirringInTheDark
+      , loathsomeParasites
+      , bowelsOfTheCity
+      , devilInTheMachine
+      , everShiftingWalls
+      , ruinedArchives
+      , floodedArchives
+      , unstableFoundations
+      , otherworldlyStorms
+      , encroachingStorms
+      , beneathTheCity
+      , cthulhuAwakened
+      , theComingStorm
+      , theDoomOfArkham
+      , theFinalSeal
       ]

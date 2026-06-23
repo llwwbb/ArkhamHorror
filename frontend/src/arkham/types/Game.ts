@@ -104,6 +104,7 @@ export type Game = {
   concealed: Record<string, ConcealedCard>;
   phase: Phase;
   phaseStep: PhaseStep | null;
+  inAction: boolean;
   playerOrder: string[];
   playerCount: number;
   question: Record<string, Question>;
@@ -188,6 +189,21 @@ export function choices(game: Game, playerId: string): Message[] {
     const question = game.question[playerId];
     return question ? questionChoices(question) : [];
   });
+}
+
+// True when the player's active question is a fast/action player window (the
+// backend's `PlayerWindowChooseOne`, normalized to `ChooseOne` with `isPlayerWindow`).
+// Used to distinguish a genuine "play this card" choice from an unrelated prompt that
+// merely happens to offer the same card as a target (e.g. a search popup).
+export function activeQuestionIsPlayerWindow(game: Game, playerId: string): boolean {
+  let question: Question | undefined = game.question[playerId];
+
+  while (question) {
+    if (question.tag === 'ChooseOne') return question.isPlayerWindow === true;
+    question = 'question' in question ? question.question : undefined;
+  }
+
+  return false;
 }
 
 // Returns the Source that prompted the player's active question, if any. The
@@ -283,6 +299,7 @@ export const gameDecoder: JsonDecoder.Decoder<Game> = JsonDecoder.object(
     concealed: JsonDecoder.record<ConcealedCard>(concealedCardDecoder, 'Dict<UUID, ConcealedCard>'),
     phase: phaseDecoder,
     phaseStep: JsonDecoder.nullable(phaseStepDecoder),
+    inAction: v2Optional(JsonDecoder.boolean()),
     playerOrder: JsonDecoder.array(JsonDecoder.string(), 'PlayerOrder[]'),
     playerCount: JsonDecoder.number(),
     question: JsonDecoder.record<Question>(questionDecoder, 'Dict<InvestigatorId, Question>'),
@@ -313,10 +330,11 @@ export const gameDecoder: JsonDecoder.Decoder<Game> = JsonDecoder.object(
     turnHistory: v2Optional(JsonDecoder.record<History>(historyDecoder, 'Dict<InvestigatorId, History>')),
   },
   'Game',
-).map(({mode, killedInvestigators, settings, gameSettings, undoActionStep, undoTurnStep, undoPhaseStep, undoRoundStep, roundHistory, phaseHistory, turnHistory, ...game}) => ({
+).map(({mode, killedInvestigators, settings, gameSettings, inAction, undoActionStep, undoTurnStep, undoPhaseStep, undoRoundStep, roundHistory, phaseHistory, turnHistory, ...game}) => ({
   scenario: mode?.That ?? null,
   campaign: mode?.This ?? null,
   killedInvestigators: killedInvestigators ?? {},
+  inAction: inAction ?? false,
   settings: settings ?? gameSettings ?? {
     settingsAbilitiesCannotReactToThemselves: true,
     settingsAsIfRuling: 'chapter1',

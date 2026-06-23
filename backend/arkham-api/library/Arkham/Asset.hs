@@ -1611,4 +1611,61 @@ allAssets =
       , SomeAssetCard petOozeling
       , SomeAssetCard miGoWeapon
       , SomeAssetCard ltWilsonStewart
+      , -- The Labyrinths of Lunacy
+        SomeAssetCard eixodolonsNote
+      , SomeAssetCard keyOfMysteries
+      , SomeAssetCard mysteriousSyringe
+      , SomeAssetCard rotDiagram
+      , SomeAssetCard hungerDiagram
+      , SomeAssetCard decayDiagram
+      , -- Machinations Through Time
+        SomeAssetCard thomasCorriganPast
+      , SomeAssetCard maryZielinskiPast
+      , SomeAssetCard nikolaTesla
+      , SomeAssetCard thomasCorriganPresent
+      , SomeAssetCard maryZielinskiPresent
+      , SomeAssetCard ezraGraves
+      , SomeAssetCard thomasCorriganFuture
+      , SomeAssetCard maryZielinskiFuture
+      , SomeAssetCard dimensionalBeamMachine
+      , SomeAssetCard edwinBennetAstuteAssociate
+      , -- Relics of the Past
+        SomeAssetCard jadeCrocodile
+      , SomeAssetCard obsidianJaguar
+      , SomeAssetCard citrineSnake
+      , SomeAssetCard turquoiseEagle
+      , -- Red Tide Rising
+        SomeAssetCard mysteriousPhoto
+      , SomeAssetCard mysteriousPhotoBack
+      , --- The Drowned City
+        SomeAssetCard rubyStandish
+      , SomeAssetCard andyVanNortwick
+      , SomeAssetCard walkInFaith
+      , SomeAssetCard toeTheLine
+      , SomeAssetCard noPlaceLikeHome
+      , SomeAssetCard goodMoney
+      , SomeAssetCard doNoHarm
+      , SomeAssetCard proveYourWorth
+      , SomeAssetCard dreamsOfDestruction
+      , SomeAssetCard plumbTheDepths
+      , SomeAssetCard noPlaceLikeHomeCompleted
+      , SomeAssetCard walkInFaithCompleted
+      , SomeAssetCard toeTheLineCompleted
+      , SomeAssetCard goodMoneyCompleted
+      , SomeAssetCard proveYourWorthCompleted
+      , SomeAssetCard doNoHarmCompleted
+      , SomeAssetCard dreamsOfDestructionCompleted
+      , SomeAssetCard plumbTheDepthsCompleted
+      , SomeAssetCard obsidianRelic
+      , SomeAssetCard barrierNode
+      , SomeAssetCard mariaRivera
+      , SomeAssetCard ancientRelic
+      , SomeAssetCard grislyMask
+      , SomeAssetCard tidalTablet
+      , SomeAssetCard shardOfYchlecht
+      , SomeAssetCard skyRelic
+      , SomeAssetCard obsidianClaw
+      , SomeAssetCard obsidianClawPower
+      , SomeAssetCard johnRaymondLegrasse
+      , SomeAssetCard horrorInClay
       ]

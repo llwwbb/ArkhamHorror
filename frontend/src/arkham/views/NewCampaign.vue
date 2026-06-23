@@ -12,11 +12,11 @@ import type { GameMode, MultiplayerVariant, CampaignType } from '@/arkham/types/
 import campaignJSON from '@/arkham/data/campaigns'
 import scenarioJSON from '@/arkham/data/scenarios'
 import sideStoriesJSON from '@/arkham/data/side-stories'
+import { filterDisplayable, isDevBuild } from '@/arkham/displayRules'
 
 import ChooseMode from '@/arkham/components/NewCampaign/ChooseMode.vue'
 import GameOptions from '@/arkham/components/NewCampaign/GameOptions.vue'
 
-type Gateable = { alpha?: boolean; beta?: boolean; dev?: boolean }
 type Step = 'ChooseMode' | 'GameOptions'
 
 const store = useUserStore()
@@ -25,17 +25,12 @@ const { currentUser } = storeToRefs(store)
 const route = useRoute()
 const router = useRouter()
 
-const dev = import.meta.env.PROD ? false : true
+const dev = isDevBuild()
 const alpha = ref(false)
 const isBetaUser = computed(() => !!currentUser.value?.beta)
-
-const gate = <T extends Gateable>(items: T[]) =>
-  items.filter((x) => {
-    if (x.dev) return dev && alpha.value
-    if (x.beta) return isBetaUser.value
-    if (x.alpha) return alpha.value
-    return true
-  })
+const displayRuleOptions = computed(() => ({ alpha: alpha.value, beta: isBetaUser.value, dev }))
+const gate = <T extends { alpha?: boolean; beta?: boolean; dev?: boolean }>(items: T[]) =>
+  filterDisplayable(items, displayRuleOptions.value)
 
 const step = ref<Step>('ChooseMode')
 const gameMode = ref<GameMode>('Campaign')
@@ -399,7 +394,7 @@ async function start() {
 #new-campaign button {
   outline: 0;
   padding: 15px;
-  background: #6e8640;
+  background: var(--button-1);
   text-transform: uppercase;
   color: white;
   border: 0;
@@ -437,7 +432,7 @@ async function start() {
 }
 
 h2 {
-  color: #cecece;
+  color: var(--title);
   margin-left: 10px;
   text-transform: uppercase;
   font-family: Teutonic;
@@ -473,7 +468,7 @@ input[type='radio'] + label:hover {
 }
 
 input[type='radio']:checked + label {
-  background: #6e8640;
+  background: var(--button-1);
 }
 
 input[type='image'] {

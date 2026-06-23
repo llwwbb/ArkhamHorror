@@ -8,12 +8,21 @@ import Arkham.Act.CardDefs.ReturnTo as X
 import Arkham.Act.CardDefs.Standalone as X
 import Arkham.Act.CardDefs.TheCircleUndone as X
 import Arkham.Act.CardDefs.TheDreamEaters as X
+import Arkham.Act.CardDefs.TheDrownedCity as X
 import Arkham.Act.CardDefs.TheDunwichLegacy as X
 import Arkham.Act.CardDefs.TheFeastOfHemlockVale as X
 import Arkham.Act.CardDefs.TheForgottenAge as X
 import Arkham.Act.CardDefs.TheInnsmouthConspiracy as X
 import Arkham.Act.CardDefs.ThePathToCarcosa as X
 import Arkham.Act.CardDefs.TheScarletKeys as X
+import Arkham.Act.CardDefs.ByTheBook as X
+import Arkham.Act.CardDefs.AllOrNothing as X
+import Arkham.Act.CardDefs.BadBlood as X
+import Arkham.Act.CardDefs.LaidToRest as X
+import Arkham.Act.CardDefs.EnthrallingEncore as X
+import Arkham.Act.CardDefs.ReadOrDie as X
+import Arkham.Act.CardDefs.RedTideRising as X
+import Arkham.Act.CardDefs.RelicsOfThePast as X
 
 import Arkham.Card.CardCode
 import Arkham.Card.CardDef
@@ -86,6 +95,7 @@ allActCards =
       , discoveringTheTruth
       , discoveryOfALifetime
       , disruptingTheRitual
+      , distortionsInTimeGroupA
       , dormancy
       , enteringTheDreamlands
       , enteringTheUnderworldV1
@@ -98,6 +108,8 @@ allActCards =
       , exploringTheRainforest
       , eyesInTheTower
       , faceToCarapace
+      , sealedInGroupA
+      , seepingDeathGroupB
       , shatteredMemories
       , lostSelf
       , fateOfTheValeV1
@@ -259,6 +271,8 @@ allActCards =
       , theDreamEaters
       , theEndlessStairs
       , theEscape
+      , theEscapeTheLabyrinthsOfLunacyEpicMultiplayer
+      , theEscapeTheLabyrinthsOfLunacy
       , theExit
       , theFinalErr
       , theFinalDescent
@@ -275,6 +289,8 @@ allActCards =
       , theHourOfJudgment
       , theIsleOfOriab
       , theLadyWithTheRedParasol
+      , theLeversGroupCEpicMultiplayer
+      , theLeversGroupC
       , theLighthouse
       , theLongestNight
       , theLostExpedition
@@ -291,6 +307,7 @@ allActCards =
       , thePath
       , thePathIsBarred
       , thePathToTheHill
+      , thePetGroupC
       , thePit
       , theReallyBadOnesV1
       , theReallyBadOnesV2
@@ -332,8 +349,10 @@ allActCards =
       , underAttack
       , unexpectedRescue
       , unrestrictedAccess
+      , walkingThroughTime
       , warmWelcome
       , warOfTheOuterGods
+      , wateryGraveGroupB
       , whatHappened
       , whatHaveYouDone
       , whatMustBeDone
@@ -359,4 +378,46 @@ allActCards =
       , blackwatersBane
       , exposeTheAnomalyEpicMultiplayer
       , blackwatersBaneEpicMultiplayer
+      , --- By the Book
+        captureTheConspirators
+      , --- All or Nothing
+        playingCards
+      , hotOnYourTail
+      , --- Bad Blood
+        aWalkDownMemoryLane
+      , --- Laid to Rest
+        laidToRest
+      , --- Enthralling Encore
+        breakFreeFromThePast
+      , --- Read or Die
+        speedReading
+      , searchingForDad
+      , --- Relics of the Past
+        crumblingRuin
+      , findTheWayOut
+      , --- The Drowned City
+        questioningTheGangsV1
+      , questioningTheGangsV2
+      , theSheldonGang
+      , theOBannionGang
+      , faceTheMusic
+      , descendIntoTheAbyss
+      , ascendTheWall
+      , reactivateTheCore
+      , unsettlingSigns
+      , lostPilgrims
+      , theHiveMind
+      , carefulNavigation
+      , backThroughTheMachine
+      , stepsOfGiants
+      , escapeTheTowerV1
+      , escapeTheTowerV2
+      , searchingTheSpires
+      , toTheAncientDome
+      , scouringTheSpires
+      , deadlySkies
+      , returnToTheShoreline
+      , thePhantomShop
+      , fightBack
+      , banishHim
       ]

@@ -113,6 +113,13 @@ const canSubmit = computed(() => {
   if (importMode.value === 'WithFriends' && investigators.value.length > 1 && !selectedInvestigator.value) return false
   return !loading.value
 })
+
+defineExpose({
+  canSubmit,
+  loading,
+  selectedFile,
+  submit,
+})
 </script>
 
 <template>
@@ -180,16 +187,6 @@ const canSubmit = computed(() => {
 
     <p v-if="error" class="error">{{ error }}</p>
 
-    <div v-if="selectedFile" class="actions">
-      <button
-        @click="submit"
-        :disabled="!canSubmit"
-        class="btn-submit"
-        type="button"
-      >
-        {{ loading ? 'Loading…' : 'Load Game' }}
-      </button>
-    </div>
   </div>
 </template>
 
@@ -390,7 +387,7 @@ const canSubmit = computed(() => {
   }
 
   &:disabled {
-    background: #555;
+    background: var(--button);
     cursor: not-allowed;
   }
 }
