@@ -6808,6 +6808,7 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Arkham.Act.Cards.FalseStepV2Spec
       Arkham.Agenda.Cards.RestrictedAccessSpec
       Arkham.Agenda.Cards.ShadowsDeepenSpec
       Arkham.Agenda.Cards.TheTrueCulpritV10Spec
@@ -6885,6 +6886,7 @@ test-suite spec
       Arkham.Asset.Assets.SegmentOfOnyx1Spec
       Arkham.Asset.Assets.Shotgun4Spec
       Arkham.Asset.Assets.ShrivellingSpec
+      Arkham.Asset.Assets.SignMagick3Spec
       Arkham.Asset.Assets.SolemnVowSpec
       Arkham.Asset.Assets.StrayCatSpec
       Arkham.Asset.Assets.SummonedHound1Spec
@@ -6894,6 +6896,7 @@ test-suite spec
       Arkham.Asset.Assets.TheMuscleUnpracticedSpec
       Arkham.Asset.Assets.TheNecronomiconSpec
       Arkham.Asset.Assets.Tonys38LongColtSpec
+      Arkham.Asset.Assets.TrueMagickReworkingReality5Spec
       Arkham.Asset.Assets.WendysAmuletSpec
       Arkham.Asset.Assets.ZoeysCrossSpec
       Arkham.Campaign.NightOfTheZealot.ScenariosSpec
@@ -6903,6 +6906,7 @@ test-suite spec
       Arkham.Campaign.UsedAbilitiesSpec
       Arkham.DecklistSpec
       Arkham.Enemy.Cards.GuardianOfTheCrystallizerSpec
+      Arkham.Enemy.Cards.JeanDevereuxSeekingClosureSpec
       Arkham.Enemy.Cards.MobEnforcerSpec
       Arkham.Enemy.Cards.SilverTwilightAcolyteSpec
       Arkham.Enemy.Cards.StalkingHybridSpec
@@ -6959,7 +6963,9 @@ test-suite spec
       Arkham.Helpers.InvestigatorSpec
       Arkham.Investigator.Cards.AgnesBakerSpec
       Arkham.Investigator.Cards.AshcanPeteSpec
+      Arkham.Investigator.Cards.CarsonSinclairSpec
       Arkham.Investigator.Cards.DaisyWalkerSpec
+      Arkham.Investigator.Cards.DianaStanleySpec
       Arkham.Investigator.Cards.FatherMateoParallelSpec
       Arkham.Investigator.Cards.JennyBarnesSpec
       Arkham.Investigator.Cards.JimCulverSpec

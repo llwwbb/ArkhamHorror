@@ -1413,7 +1413,22 @@ windowMatches iid rawSource window'@(windowTiming &&& windowType -> (timing', wT
                   Window.PassSkillTest _ _ who _ -> matchWho iid who whoMatcher
                   _ -> noMatch
             isWindowMatch skillTestResultMatcher
+    -- "It is genuinely your turn." Matches only a real DuringTurn window (and the
+    -- fast player window via the actual turn investigator) -- NOT the NonFast
+    -- action-taking window, so "Play during your turn" Fast cards cannot be played
+    -- with a granted "as if it were your turn" action. See #4894.
     Matcher.DuringTurn whoMatcher -> guardTiming #when $ \case
+      Window.DuringTurn who -> matchWho iid who whoMatcher
+      Window.FastPlayerWindow -> do
+        miid <- selectOne Matcher.TurnInvestigator
+        case miid of
+          Nothing -> pure False
+          Just who -> matchWho iid who whoMatcher
+      _ -> noMatch
+    -- "You have an action to take": matches the NonFast action-taking window
+    -- (real turn or granted action), the genuine DuringTurn window, and the fast
+    -- player window. See #4894.
+    Matcher.DuringYourAction whoMatcher -> guardTiming #when $ \case
       Window.NonFast -> matchWho iid iid whoMatcher
       Window.DuringTurn who -> matchWho iid who whoMatcher
       Window.FastPlayerWindow -> do
@@ -1629,7 +1644,7 @@ windowMatches iid rawSource window'@(windowTiming &&& windowType -> (timing', wT
                     else matches enemyId enemyMatcher
             , defeatedByMatches
                 defeatedBy
-                (defeatedByMatcher <> Matcher.BySource (Matcher.SourceOwnedBy $ Matcher.InvestigatorWithId iid))
+                (defeatedByMatcher <> Matcher.BySource (Matcher.SourceUsedBy $ Matcher.InvestigatorWithId iid))
             ]
         Window.EnemyDefeated Nothing defeatedBy enemyId | whoMatcher == Matcher.Anyone -> do
           andM
@@ -1665,7 +1680,7 @@ windowMatches iid rawSource window'@(windowTiming &&& windowType -> (timing', wT
                     else matches enemyId (InPlayEnemy enemyMatcher)
             , defeatedByMatches
                 defeatedBy
-                (defeatedByMatcher <> Matcher.BySource (Matcher.SourceOwnedBy $ Matcher.InvestigatorWithId iid))
+                (defeatedByMatcher <> Matcher.BySource (Matcher.SourceUsedBy $ Matcher.InvestigatorWithId iid))
             ]
         Window.EnemyDefeated Nothing defeatedBy enemyId | whoMatcher == Matcher.Anyone -> do
           andM
@@ -1701,7 +1716,7 @@ windowMatches iid rawSource window'@(windowTiming &&& windowType -> (timing', wT
                     else matches enemyId enemyMatcher
             , defeatedByMatches
                 defeatedBy
-                (defeatedByMatcher <> Matcher.BySource (Matcher.SourceOwnedBy $ Matcher.InvestigatorWithId iid))
+                (defeatedByMatcher <> Matcher.BySource (Matcher.SourceUsedBy $ Matcher.InvestigatorWithId iid))
             ]
         Window.IfEnemyDefeated Nothing defeatedBy enemyId | whoMatcher == Matcher.Anyone -> do
           andM

@@ -15,6 +15,9 @@
   "activeGames": "Active Games",
   "cancel": "Cancel",
   "checkCampaignLog": "Check your Campaign Log.",
+  "key": {
+    "youHaveNoSoul": "You have no soul"
+  },
   "continue": "Continue",
   "debugGame": "Debug Game",
   "elusive": {
@@ -366,6 +369,7 @@
     "skillValue": "Skill Value",
     "doubleSuccess": "Double Success",
     "doubleDifficulty": "Double Difficulty",
+    "automaticallyFailIfSucceedByAtLeast": "Automatically fail if you succeed by {amount} or more",
     "mayIgnoreLocationEffects": "May Ignore Location Effects",
     "skillIconsSubtract": "Skill Icons Subtract",
     "skillTestAutomaticallySucceeds": "Skill test automatically succeeds",

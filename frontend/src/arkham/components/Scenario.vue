@@ -80,9 +80,11 @@ export interface Props {
   game: Game
   scenario: Scenario
   playerId: string
+  realityAcidLightDevoured?: boolean
+  realityAcidLightActive?: boolean
 }
 const props = defineProps<Props>()
-const emit = defineEmits(['choose'])
+const emit = defineEmits(['choose', 'toggleRealityAcidLight'])
 const debug = useDebug()
 const phoneShell = usePhoneShell()
 const { addEntry, removeEntry } = useMenu()
@@ -103,7 +105,10 @@ const forcedShowOutOfPlay = ref(false)
 const forcedShowDiscard = ref(false)
 const forcedShowHollowed = ref(false)
 const encounterDiscardPopoverShown = ref(false)
+const spectralDiscardPopoverShown = ref(false)
 const showScenarioDebugOptions = ref(false)
+const realityAcidLightAnchor = ref<HTMLElement | null>(null)
+const realityAcidLightRect = reactive({ left: 0, top: 0, width: 0, height: 0 })
 const locationMap = ref<Element | null>(null)
 const scrollerRef = ref<HTMLElement | null>(null)
 const viewingDiscard = ref(false)
@@ -118,6 +123,14 @@ let cosmicEmissaryObserver: MutationObserver | null = null
 let cosmicEmissaryResizeObserver: ResizeObserver | null = null
 let cosmicEmissaryCompactRequest: number | null = null
 let cosmicEmissaryCompactForce = false
+
+function updateRealityAcidLightRect() {
+  const rect = (realityAcidLightAnchor.value ?? document.querySelector<HTMLElement>('.reality-acid-light-switch-anchor'))?.getBoundingClientRect()
+  realityAcidLightRect.left = rect?.left ?? 0
+  realityAcidLightRect.top = rect?.top ?? 0
+  realityAcidLightRect.width = rect?.width ?? 0
+  realityAcidLightRect.height = rect?.height ?? 0
+}
 
 function readStyleMapCache(key: string): Record<string, Record<string, string>> {
   try {
@@ -377,9 +390,9 @@ function onLocationPointerDown(event: PointerEvent, location: { id: string }) {
     rotationAtStart: rotationSteps.value,
     moved: false,
   }
-  window.addEventListener('pointermove', onWindowPointerMove)
-  window.addEventListener('pointerup', onWindowPointerUp)
-  window.addEventListener('pointercancel', onWindowPointerUp)
+  window.addEventListener('pointermove', onWindowPointerMove, { passive: true })
+  window.addEventListener('pointerup', onWindowPointerUp, { passive: true })
+  window.addEventListener('pointercancel', onWindowPointerUp, { passive: true })
 }
 
 function onWindowPointerMove(event: PointerEvent) {
@@ -570,7 +583,10 @@ onMounted(() => {
   setGameId(props.game.id)
   window.addEventListener('storage', onCosmicEmissaryStorage)
   window.addEventListener('arkham-setting-change', onCosmicEmissarySettingChange)
+  window.addEventListener('resize', updateRealityAcidLightRect)
+  window.addEventListener('scroll', updateRealityAcidLightRect, true)
   document.addEventListener('click', proxyClippedLocationClick, true)
+  nextTick(updateRealityAcidLightRect)
   updateScrollMargins()
   updateCellDimensions()
   updateLayoutPadding()
@@ -664,6 +680,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('storage', onCosmicEmissaryStorage)
   window.removeEventListener('arkham-setting-change', onCosmicEmissarySettingChange)
+  window.removeEventListener('resize', updateRealityAcidLightRect)
+  window.removeEventListener('scroll', updateRealityAcidLightRect, true)
   document.removeEventListener('click', proxyClippedLocationClick, true)
   legObserver?.disconnect()
   legObserver = null
@@ -677,6 +695,7 @@ onBeforeUnmount(() => {
 })
 
 onUpdated(() => {
+  updateRealityAcidLightRect()
   if(props.scenario.id === "c06333") {
     nextTick(() => rotateImages(needsInit.value))
   }
@@ -859,6 +878,24 @@ const scenarioBadges = computed<ScenarioBadge[]>(() => {
     })
   }
 
+  if (props.scenario.meta?.senseOfTimeActive === true) {
+    badges.push({
+      key: 'senseOfTime',
+      icon: '🚫⏱️',
+      label: 'No timekeeping',
+      detail: 'Until the agenda advances, investigators cannot use time-keeping devices, ask about the time, or trigger abilities on cards with “time,” “watch,” or “chrono” in their title.',
+    })
+  }
+
+  if (props.scenario.meta?.discardPileActive === true) {
+    badges.push({
+      key: 'discardPile',
+      icon: '🗑️🫥',
+      label: 'No discard piles',
+      detail: 'Until the end of the next mythos phase, cards that would be placed in an investigator discard pile are devoured instead.',
+    })
+  }
+
   const voiceActive = props.scenario.meta?.voiceActive
   if (Array.isArray(voiceActive) && voiceActive.length > 0) {
     const names = voiceActive.map((iid) => props.game.investigators[iid]?.name?.title).filter(Boolean)
@@ -873,7 +910,16 @@ const scenarioBadges = computed<ScenarioBadge[]>(() => {
   return badges
 })
 
-const showScenarioNotifierBar = computed(() => scenarioBadges.value.length > 0)
+const showScenarioNotifierBar = computed(() => scenarioBadges.value.length > 0 || props.realityAcidLightDevoured === true)
+
+watch(
+  () => [props.realityAcidLightDevoured, props.realityAcidLightActive, scenarioBadges.value.length],
+  () => {
+    nextTick(updateRealityAcidLightRect)
+    setTimeout(updateRealityAcidLightRect, 50)
+  },
+  { immediate: true, flush: 'post' },
+)
 
 const rotationSteps = ref(0)
 const transpose = <T>(grid: T[][]): T[][] =>
@@ -1109,6 +1155,7 @@ const topOfEncounterDiscard = computed(() => {
 })
 const spectralEncounterDeck = computed(() => props.scenario.encounterDecks['SpectralEncounterDeck']?.[0])
 const spectralDiscard = computed(() => props.scenario.encounterDecks['SpectralEncounterDeck']?.[1])
+const spectralDiscards = computed<Card[]>(() => (spectralDiscard.value ?? []).map(c => ({ tag: 'EncounterCard', contents: c })))
 const topOfSpectralDiscard = computed(() => {
   if (!spectralDiscard.value || !spectralDiscard.value[0]) return null
   return cardCodeImage(spectralDiscard.value[0].cardCode)
@@ -1207,6 +1254,10 @@ const darknessLevel = computed(() => props.scenario.tokens[TokenType.DarknessLev
 const signOfTheGods = computed(() => props.scenario.counts["SignOfTheGods"])
 const strengthOfTheAbyss = computed(() => props.scenario.counts["StrengthOfTheAbyss"])
 const distortion = computed(() => props.scenario.counts["Distortion"])
+// Laid to Rest: horror placed on the scenario reference card represents
+// Spiritual Disturbance (defeats everyone at 4). Render it on the scenario card.
+const spiritualDisturbance = computed(() =>
+  props.scenario.id === 'c90054' ? props.scenario.tokens[TokenType.Horror] : undefined)
 const gameOver = computed(() => props.game.gameState.tag === "IsOver")
 
 // Reactive
@@ -1936,12 +1987,31 @@ async function addChaosToken(face: any){
             v-if="props.scenario.hasEncounterDeck && !hideEncounterDeck"
           />
 
-          <div v-if="topOfSpectralDiscard" class="discard" style="grid-area: spectralDiscard"
-            >
-            <img
-              :src="topOfSpectralDiscard"
-              class="card"
-            />
+          <div v-if="topOfSpectralDiscard" class="discard" style="grid-area: spectralDiscard">
+            <div class="discard-card">
+              <img
+                :src="topOfSpectralDiscard"
+                class="card"
+              />
+              <span class="deck-size">{{ spectralDiscards.length }}</span>
+            </div>
+
+            <div v-if="spectralDiscards.length > 0" class="buttons">
+              <CardsUnderIndicator
+                v-model:shown="spectralDiscardPopoverShown"
+                class="view-discard-button"
+                :cards="spectralDiscards"
+                :game="game"
+                :playerId="playerId"
+                :label="t('scenario.discards')"
+                :isDiscards="true"
+                :fullWidth="true"
+                @choose="choose"
+              />
+              <template v-if="debug.active">
+                <button @click="debug.send(game.id, {tag: 'ShuffleEncounterDiscardBackInByKey', contents: 'SpectralEncounterDeck'})">{{ $t('scenarioComponent.shuffleBackIn') }}</button>
+              </template>
+            </div>
           </div>
 
           <EncounterDeck
@@ -2084,6 +2154,13 @@ async function addChaosToken(face: any){
                 tooltip="Distortion"
                 :amount="distortion"
               />
+              <PoolItem
+                v-if="spiritualDisturbance"
+                class="spiritualDisturbance"
+                type="horror"
+                tooltip="Spiritual Disturbance"
+                :amount="spiritualDisturbance"
+              />
               <div class="pool" v-if="hasPool">
                 <PoolItem v-if="resources && resources > 0" type="resource" :amount="resources" />
                 <PoolItem v-if="damage && damage > 0" type="damage" :amount="damage" />
@@ -2146,13 +2223,55 @@ async function addChaosToken(face: any){
         </SkillTest>
 
         <div v-if="showScenarioNotifierBar" class="scenario-badges" aria-label="Scenario reminders">
-          <div v-for="badge in scenarioBadges" :key="badge.key" class="scenario-badge" :title="badge.detail">
+          <div
+            v-for="badge in scenarioBadges"
+            :key="badge.key"
+            class="scenario-badge"
+            v-tooltip="badge.detail"
+            :aria-label="badge.detail ? `${badge.label}: ${badge.detail}` : badge.label"
+          >
             <span class="scenario-badge-icon" aria-hidden="true">{{ badge.icon }}</span>
             <span class="scenario-badge-text">
               <strong>{{ badge.label }}</strong>
               <small v-if="badge.detail">{{ badge.detail }}</small>
             </span>
           </div>
+          <span
+            v-if="realityAcidLightDevoured"
+            ref="realityAcidLightAnchor"
+            class="scenario-badge reality-acid-light-switch-anchor"
+            aria-hidden="true"
+          >
+            <span class="reality-acid-light-switch-track">
+              <span class="reality-acid-light-switch-knob"></span>
+            </span>
+            <span class="scenario-badge-text reality-acid-light-switch-label">
+              <strong>{{ realityAcidLightActive ? 'Lights off' : 'Lights on' }}</strong>
+            </span>
+          </span>
+          <Teleport to="body">
+            <button
+              v-if="realityAcidLightDevoured"
+              type="button"
+              class="scenario-badge reality-acid-light-switch reality-acid-light-switch--floating"
+              :class="{ 'reality-acid-light-switch--on': realityAcidLightActive }"
+              :style="{
+                left: `${realityAcidLightRect.left}px`,
+                top: `${realityAcidLightRect.top}px`,
+                width: `${realityAcidLightRect.width}px`,
+                height: `${realityAcidLightRect.height}px`,
+              }"
+              :title="realityAcidLightActive ? 'Turn the lights back on' : 'Turn the lights off'"
+              @click="$emit('toggleRealityAcidLight')"
+            >
+              <span class="reality-acid-light-switch-track" aria-hidden="true">
+                <span class="reality-acid-light-switch-knob"></span>
+              </span>
+              <span class="scenario-badge-text reality-acid-light-switch-label">
+                <strong>{{ realityAcidLightActive ? 'Lights off' : 'Lights on' }}</strong>
+              </span>
+            </button>
+          </Teleport>
         </div>
 
       </div>
@@ -2439,8 +2558,8 @@ async function addChaosToken(face: any){
 }
 
 .scenario-cards--has-badges {
-  z-index: auto;
-  padding-bottom: 56px;
+  z-index: calc(var(--z-index-9999) + 2);
+  padding-top: 56px;
 }
 
 .clue {
@@ -2808,23 +2927,26 @@ async function addChaosToken(face: any){
 
 .scenario-badges {
   position: absolute;
+  top: 0;
   right: 0;
-  bottom: 0;
   left: 0;
+  z-index: calc(var(--z-index-9999) + 2);
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
   min-height: 34px;
   padding: 5px 10px;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
   background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .scenario-badge {
+  position: relative;
   display: inline-flex;
+  pointer-events: auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -2837,6 +2959,7 @@ async function addChaosToken(face: any){
   padding: 4px 8px 4px 6px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
 }
+
 
 .scenario-badge-icon {
   flex: 0 0 auto;
@@ -2867,6 +2990,82 @@ async function addChaosToken(face: any){
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.58rem;
+}
+
+.reality-acid-light-switch-anchor {
+  min-width: 136px;
+  visibility: hidden;
+}
+
+.reality-acid-light-switch {
+  z-index: calc(var(--z-index-9999) + 3);
+  isolation: isolate;
+  pointer-events: auto;
+  cursor: pointer;
+  border-color: rgb(255 255 255 / 36%);
+  border-left-color: rgb(255 225 105 / 95%);
+  background: rgb(32 36 42 / 98%);
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 90%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 65%);
+}
+
+.reality-acid-light-switch--on {
+  box-shadow:
+    inset 0 0 12px rgb(255 225 105 / 18%),
+    0 0 0 1px rgb(255 225 105 / 16%),
+    0 0 20px rgb(255 225 105 / 42%),
+    0 2px 8px rgb(0 0 0 / 65%);
+}
+
+.reality-acid-light-switch--floating {
+  position: fixed;
+  z-index: 2147483647;
+  max-width: none;
+}
+
+.reality-acid-light-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: #d6c36a;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 35%);
+}
+
+.reality-acid-light-switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 18px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 50%);
+  transition: left 120ms ease;
+}
+
+.reality-acid-light-switch--on .reality-acid-light-switch-track {
+  background: #263241;
+}
+
+.reality-acid-light-switch--on .reality-acid-light-switch-knob {
+  left: 4px;
+}
+
+.reality-acid-light-switch .scenario-badge-text strong {
+  color: #fff;
+  font-size: 0.74rem;
+}
+
+.reality-acid-light-switch .scenario-badge-text small {
+  color: #ffe078;
+  opacity: 1;
+}
+
+.reality-acid-light-switch-label {
+  text-align: left;
 }
 
 .scenario-cards-under {
@@ -2900,6 +3099,13 @@ async function addChaosToken(face: any){
   }
 
   .distortion {
+    align-self: end;
+    justify-self: end;
+    pointer-events: none;
+    z-index: var(--z-index-10);
+  }
+
+  .spiritualDisturbance {
     align-self: end;
     justify-self: end;
     pointer-events: none;
