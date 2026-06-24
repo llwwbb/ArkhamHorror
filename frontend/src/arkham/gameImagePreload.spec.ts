@@ -59,16 +59,20 @@ describe('loadAllGameImages', () => {
     expect(FakeImage.created).toHaveLength(1)
   })
 
-  it('onerror 也标记为已加载（不无限重试），且 promise reject', async () => {
+  it('onerror 也标记为已加载（不无限重试），且 promise 仍 resolve（不 reject）', async () => {
     class ErrorImage extends FakeImage {
       set src(value: string) {
         queueMicrotask(() => this.onerror?.())
       }
     }
     vi.stubGlobal('Image', ErrorImage)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // 预加载失败不应让 promise reject（否则会阻塞/报错），只 console.warn
     await expect(
       loadAllGameImages(fakeGame({ a: { cardCode: 'c01001', isFlipped: false } })),
-    ).rejects.toMatch('Could not load')
+    ).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Could not preload'))
+    warn.mockRestore()
     FakeImage.created = []
     vi.stubGlobal('Image', FakeImage)
     await loadAllGameImages(fakeGame({ a: { cardCode: 'c01001', isFlipped: false } }))

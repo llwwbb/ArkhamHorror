@@ -7,7 +7,7 @@ import * as Arkham from '@/arkham/types/Game'
 import * as ArkhamGame from '@/arkham/types/Game'
 import * as Message from '@/arkham/types/Message'
 import type { Question } from '@/arkham/types/Question'
-import { loadAllGameImages, preloadGameImages } from '@/arkham/gameImagePreload'
+import { preloadGameImages } from '@/arkham/gameImagePreload'
 import type { GameModals } from './useGameModals'
 
 // TODO: contents should not be string
@@ -332,11 +332,8 @@ export function useGameSocket(opts: UseGameSocketOptions) {
       if (newV === oldV) return
       await fetchGame(opts.gameId(), opts.spectate).then(
         async ({ game: newGame, playerId: newPlayerId, multiplayerMode }) => {
-          try {
-            await loadAllGameImages(newGame)
-          } catch (e) {
-            console.error(e)
-          }
+          // 非阻塞预加载：不再 await，避免 spectate/切换游戏时被图片加载卡住
+          preloadGameImages(newGame)
           ;(window as Window & { g?: Arkham.Game }).g = newGame
           game.value = newGame
           solo.value = multiplayerMode === 'Solo'
@@ -413,6 +410,15 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     }
   }
 
+  async function scenarioSpecificAnswer(key: string, value: unknown): Promise<void> {
+    if (game.value && !opts.spectate) {
+      oldQuestion.value = game.value.question
+      setGameQuestion({})
+      processing.value = true
+      send(JSON.stringify({ tag: 'ScenarioSpecificAnswer', contents: [key, value] }))
+    }
+  }
+
   return {
     game,
     gameLog,
@@ -432,6 +438,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     chooseDeckList,
     choosePaymentAmounts,
     chooseAmounts,
+    scenarioSpecificAnswer,
     skipAllTriggers,
     skipAllAvailable,
     switchInvestigator,

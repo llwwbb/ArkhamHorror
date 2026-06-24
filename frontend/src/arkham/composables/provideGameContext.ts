@@ -50,6 +50,7 @@ export function provideGameContext(socket: GameSocket, showOtherPlayersHands: Re
   provide('send', socket.send)
   provide('choosePaymentAmounts', socket.choosePaymentAmounts)
   provide('chooseAmounts', socket.chooseAmounts)
+  provide('scenarioSpecificAnswer', socket.scenarioSpecificAnswer)
   provide('switchInvestigator', socket.switchInvestigator)
   provide('solo', socket.solo)
   provide('skipAllTriggers', socket.skipAllTriggers)
