@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -52,6 +52,10 @@ const store = useCardStore()
 const { addEntry, menuItems } = useMenu()
 const flashlightX = ref(0)
 const flashlightY = ref(0)
+const focusLightX = ref(-1000)
+const focusLightY = ref(-1000)
+let focusLightObserver: MutationObserver | null = null
+let focusLightAnimationFrame: number | null = null
 
 store.fetchCards()
 
@@ -201,9 +205,47 @@ function fileBugFromError() {
   openBugReport(description)
 }
 
+function updateFocusLight() {
+  const highlighted = [...document.querySelectorAll<HTMLElement>(
+    '.source-highlight, .ability-target, .card-frame-inner.highlighted, .cards-under-indicator--highlighted',
+  )].find((el) => {
+    if (el.closest('.scenario-cards')) return false
+    const rect = el.getBoundingClientRect()
+    return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.right >= 0
+      && rect.top <= window.innerHeight && rect.left <= window.innerWidth
+  })
+
+  if (!highlighted) {
+    focusLightX.value = -1000
+    focusLightY.value = -1000
+    return
+  }
+
+  const rect = highlighted.getBoundingClientRect()
+  focusLightX.value = rect.left + rect.width / 2
+  focusLightY.value = rect.top + rect.height / 2
+}
+
+function scheduleFocusLightUpdate() {
+  if (focusLightAnimationFrame !== null) return
+  focusLightAnimationFrame = requestAnimationFrame(() => {
+    focusLightAnimationFrame = null
+    updateFocusLight()
+  })
+}
+
+watch(
+  () => game.value?.question,
+  async () => {
+    await nextTick()
+    updateFocusLight()
+  },
+)
+
 const onMove = (event: MouseEvent) => {
   flashlightX.value = event.clientX
   flashlightY.value = event.clientY
+  scheduleFocusLightUpdate()
 }
 
 // callbacks
@@ -226,11 +268,17 @@ onMounted(() => {
   ;(window as any).undo = undo
   ;(window as any).debugChoose = choose
   document.addEventListener('mousemove', onMove, { passive: true })
+  focusLightObserver = new MutationObserver(scheduleFocusLightUpdate)
+  focusLightObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true })
+  scheduleFocusLightUpdate()
 })
 
 onBeforeRouteLeave(() => close())
 onUnmounted(() => {
   document.removeEventListener('mousemove', onMove)
+  focusLightObserver?.disconnect()
+  focusLightObserver = null
+  if (focusLightAnimationFrame !== null) cancelAnimationFrame(focusLightAnimationFrame)
   delete (window as any).sendDebug
   delete (window as any).undo
   delete (window as any).debugChoose
@@ -281,6 +329,12 @@ onUnmounted(() => {
       v-if="realityAcidLightActive"
       class="reality-acid-flashlight"
       :style="{ '--flashlight-x': `${flashlightX}px`, '--flashlight-y': `${flashlightY}px` }"
+      aria-hidden="true"
+    ></div>
+    <div
+      v-if="realityAcidLightActive"
+      class="reality-acid-focus-light"
+      :style="{ '--focus-light-x': `${focusLightX}px`, '--focus-light-y': `${focusLightY}px` }"
       aria-hidden="true"
     ></div>
     <ShortcutsModal v-if="showShortcuts" @close="showShortcuts = false" />
@@ -451,12 +505,28 @@ onUnmounted(() => {
   z-index: 9998;
   pointer-events: none;
   background: radial-gradient(
-    circle 190px at var(--flashlight-x) var(--flashlight-y),
-    rgba(0, 0, 0, 0) 0 42%,
-    rgba(0, 0, 0, 0.45) 58%,
-    rgba(0, 0, 0, 0.9) 100%
+    circle 330px at var(--flashlight-x) var(--flashlight-y),
+    rgba(0, 0, 0, 0) 0 52%,
+    rgba(0, 0, 0, 0.12) 68%,
+    rgba(0, 0, 0, 0.82) 100%
   );
-  mix-blend-mode: multiply;
+}
+
+.reality-acid-focus-light {
+  --focus-light-x: -1000px;
+  --focus-light-y: -1000px;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: radial-gradient(
+    circle 205px at var(--focus-light-x) var(--focus-light-y),
+    rgba(255, 248, 190, 0.72) 0 18%,
+    rgba(255, 230, 128, 0.42) 46%,
+    rgba(255, 226, 120, 0) 76%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.95;
 }
 
 .action {
