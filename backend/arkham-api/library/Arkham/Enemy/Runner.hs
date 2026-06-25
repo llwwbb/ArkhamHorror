@@ -2057,7 +2057,14 @@ instance RunMessage EnemyAttrs where
         getForcedSpawnAt (ForceSpawnLocation m : _) = Just $ SpawnAt m
         getForcedSpawnAt (ForceSpawn m : _) = Just m
         getForcedSpawnAt (_ : xs) = getForcedSpawnAt xs
-      case getForcedSpawnAt mods of
+        getOverwrittenSpawnAt [] = Nothing
+        getOverwrittenSpawnAt (OverwrittenSpawn m : _) = Just m
+        getOverwrittenSpawnAt (_ : xs) = getOverwrittenSpawnAt xs
+      -- ForceSpawn (On the Hunt, Kicking the Hornet's Nest) always wins; an
+      -- OverwrittenSpawn (a scenario rule replacing an enemy's normal spawn,
+      -- e.g. Dead Heat forcing Ghoul/Risen enemies to a random location) only
+      -- applies when no ForceSpawn is present.
+      case getForcedSpawnAt mods <|> getOverwrittenSpawnAt mods of
         Just matcher -> spawnAt enemyId (Just iid) (replaceYouMatcher iid matcher)
         Nothing -> do
           gatherConcealedCards a.id >>= \case
@@ -2185,6 +2192,9 @@ instance RunMessage EnemyAttrs where
     MoveTokens s source _ tType n | isSource a source -> liftRunMessage (RemoveTokens s (toTarget a) tType n) a
     MoveTokens _s (InvestigatorSource _) target Clue _ | isTarget a target -> pure a
     MoveTokens s _ target tType n | isTarget a target -> liftRunMessage (PlaceTokens s (toTarget a) tType n) a
+    MoveTokensNoDefeated s source _ tType n | isSource a source -> liftRunMessage (RemoveTokens s (toTarget a) tType n) a
+    MoveTokensNoDefeated _s _ target tType n | isTarget a target -> do
+      pure $ a & tokensL %~ addTokens tType n
     PlaceTokens source target token n | isTarget a target -> do
       if token == #doom
         then do

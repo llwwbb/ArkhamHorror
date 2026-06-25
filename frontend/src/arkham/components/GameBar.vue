@@ -1,5 +1,4 @@
 <script lang="ts" setup>
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MenuItem } from '@headlessui/vue'
 import {
@@ -37,6 +36,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   toggleShortcuts: []
+  toggleLog: []
   undo: []
   undoAction: []
   undoTurn: []
@@ -47,7 +47,6 @@ const emit = defineEmits<{
   toggleSidebar: []
 }>()
 
-const router = useRouter()
 const userStore = useUserStore()
 const debug = useDebug()
 const { menuItems } = useMenu()
@@ -82,7 +81,7 @@ function debugExport(exportType: ExportType) {
   <div class="game-bar">
     <div class="game-bar-item">
       <div>
-        <button @click="router.push({ name: 'CampaignLog', params: { gameId } })">
+        <button @click="emit('toggleLog')">
           <DocumentTextIcon aria-hidden="true" />
           {{ showLog ? $t('gameBar.closeLog') : $t('gameBar.viewLog') }}
         </button>

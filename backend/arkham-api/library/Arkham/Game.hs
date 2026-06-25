@@ -6589,7 +6589,15 @@ preloadModifiers g = case gameMode g of
           traverse_ getModifiersFor $ gameInHandEntities g
           traverse_ getModifiersFor $ gameInDiscardEntities g
           for_ (modeScenario (gameMode g)) getModifiersFor
-          for_ (modeCampaign (gameMode g)) getModifiersFor
+          for_ (modeCampaign (gameMode g)) \c -> do
+            getModifiersFor c
+            let forAll = campaignModifiersForAll (toAttrs c)
+            unless (null forAll) do
+              iids <- select Anyone
+              -- Active during setup too, so e.g. CannotPutIntoPlay keeps a card
+              -- out of play when investigators are set up.
+              mods <- map setActiveDuringSetup <$> toModifiers CampaignSource forAll
+              for_ iids \iid -> tell $ MonoidalMap.singleton (toTarget iid) mods
     allModifiers <- traverse (foldMapM expandForEach . foldMap handleMoving) rawModifiers
     let offsetModifiers =
           Map.fromList
