@@ -3,6 +3,8 @@
 module Arkham.Game.Runner where
 
 import Arkham.Ability
+import Arkham.Ai.Helpers (overAiPlayers, overAiSeat)
+import Arkham.Ai.State (AiPlayerState (..))
 import Arkham.Act
 import Arkham.Act.Types (Field (..))
 import Arkham.Action qualified as Action
@@ -175,6 +177,12 @@ runGameMessage msg g = case msg of
     when (any (\w -> Window.windowType w == Window.FastPlayerWindow) currentWindows) do
       push $ Do (CheckWindows currentWindows)
     pure $ g {gameSettings = g.gameSettings {settingsAsIfRuling = ruling}}
+  RegisterAiPlayer pid st -> pure $ overAiPlayers (Map.insert pid st) g
+  SetAiFocusOverride pid mFocus -> pure $ overAiSeat pid (\s -> s {aiFocusOverride = mFocus}) g
+  AddAiPriority pid target -> pure $ overAiSeat pid (\s -> s {aiPriorities = s.aiPriorities <> [target]}) g
+  RemoveAiPriority pid target -> pure $ overAiSeat pid (\s -> s {aiPriorities = filter (/= target) s.aiPriorities}) g
+  SetAiEnabled pid b -> pure $ overAiSeat pid (\s -> s {aiEnabled = b}) g
+  SetAiResponseDelay pid n -> pure $ overAiSeat pid (\s -> s {aiResponseDelayMs = n}) g
   ResetLocationOffsets -> pure $ g & locationOffsetsL .~ mempty
   SetGameRunWindows b -> pure $ g & runWindowsL .~ b
   SetGameState s -> pure $ g & gameStateL .~ s
@@ -510,6 +518,7 @@ runGameMessage msg g = case msg of
       & (cardUsesL .~ mempty)
       & (windowStackL .~ mempty)
       & (windowDepthL .~ 0)
+      & (windowTickStackL .~ [])
       & (phaseHistoryL .~ mempty)
       & (turnHistoryL .~ mempty)
       & (roundHistoryL .~ mempty)
@@ -884,21 +893,22 @@ runGameMessage msg g = case msg of
         Nothing -> id
         Just location ->
           let la = toAttrs location
-          in overAttrs \a ->
+           in overAttrs \a ->
                 a
-                  { enemyLocationBase = (enemyLocationBase a)
-                      { locationId = locationId la
-                      , locationCardId = locationCardId la
-                      , locationTokens = locationTokens la
-                      , locationWithoutClues = Token.countTokens Token.Clue (locationTokens la) == 0
-                      , locationLabel = locationLabel la
-                      , locationPosition = locationPosition la
-                      , locationPlacement = locationPlacement la
-                      , locationConnectedMatchers = locationConnectedMatchers la
-                      , locationConnectsTo = locationConnectsTo la
-                      , locationDirections = locationDirections la
-                      , locationRevealedConnectedMatchers = locationRevealedConnectedMatchers la
-                      }
+                  { enemyLocationBase =
+                      (enemyLocationBase a)
+                        { locationId = locationId la
+                        , locationCardId = locationCardId la
+                        , locationTokens = locationTokens la
+                        , locationWithoutClues = Token.countTokens Token.Clue (locationTokens la) == 0
+                        , locationLabel = locationLabel la
+                        , locationPosition = locationPosition la
+                        , locationPlacement = locationPlacement la
+                        , locationConnectedMatchers = locationConnectedMatchers la
+                        , locationConnectsTo = locationConnectsTo la
+                        , locationDirections = locationDirections la
+                        , locationRevealedConnectedMatchers = locationRevealedConnectedMatchers la
+                        }
                   }
       el = inheritLocationData $ lookupEnemyLocation (flippedCardCode $ toCardCode card) lid (toCardId card)
 
@@ -928,7 +938,7 @@ runGameMessage msg g = case msg of
         Nothing -> id
         Just el ->
           let la = enemyLocationBase (toAttrs el)
-          in overAttrs \a ->
+           in overAttrs \a ->
                 a
                   { locationId = locationId la
                   , locationCardId = locationCardId la
@@ -3703,20 +3713,20 @@ preloadEntities g = do
 -- too late.
 instance RunMessage Game where
   runMessage msg g =
-      ( (modeL . here) (runMessage msg) g
-          >>= (modeL . there) (runMessage msg)
-          >>= entitiesL (runMessage msg)
-          >>= actionRemovedEntitiesL (runMessage msg)
-          >>= itraverseOf (inHandEntitiesL . itraversed) (\i -> runMessage (InHand i msg))
-          >>= itraverseOf (inDiscardEntitiesL . itraversed) (\i -> runMessage (InDiscard i msg))
-          >>= (inDiscardEntitiesL . itraversed) (runMessage msg)
-          >>= encounterDiscardEntitiesL (runMessage msg)
-          >>= inSearchEntitiesL (runMessage (InSearch msg))
-          >>= (skillTestL . traverse) (runMessage msg)
-          >>= (activeCostL . traverse) (runMessage msg)
-          >>= runGameMessage msg
-        )
-        <&> handleActionDiff g
+    ( (modeL . here) (runMessage msg) g
+        >>= (modeL . there) (runMessage msg)
+        >>= entitiesL (runMessage msg)
+        >>= actionRemovedEntitiesL (runMessage msg)
+        >>= itraverseOf (inHandEntitiesL . itraversed) (\i -> runMessage (InHand i msg))
+        >>= itraverseOf (inDiscardEntitiesL . itraversed) (\i -> runMessage (InDiscard i msg))
+        >>= (inDiscardEntitiesL . itraversed) (runMessage msg)
+        >>= encounterDiscardEntitiesL (runMessage msg)
+        >>= inSearchEntitiesL (runMessage (InSearch msg))
+        >>= (skillTestL . traverse) (runMessage msg)
+        >>= (activeCostL . traverse) (runMessage msg)
+        >>= runGameMessage msg
+    )
+      <&> handleActionDiff g
 
 runPreGameMessage :: Runner Game
 runPreGameMessage msg g = case msg of
@@ -3737,7 +3747,14 @@ runPreGameMessage msg g = case msg of
     if isJust $ modeScenario $ g ^. modeL
       then do
         pushAll [Do (CheckWindows ws), EndCheckWindow]
-        pure $ g & windowDepthL +~ 1 & (windowStackL %~ Just . maybe [ws] (ws :))
+        let tick' = gameWindowTick g + 1
+        pure
+          $ g
+          & windowDepthL
+          +~ 1
+          & (windowStackL %~ Just . maybe [ws] (ws :))
+          & (windowTickL .~ tick')
+          & (windowTickStackL %~ (tick' :))
       else pure g
   EndCheckWindow -> do
     let
@@ -3749,7 +3766,7 @@ runPreGameMessage msg g = case msg of
             [] -> Nothing
             _ -> Just xs
           Just (x : xs) -> Just (x : xs)
-    pure $ g & windowDepthL -~ 1 & windowStackL .~ windowStack
+    pure $ g & windowDepthL -~ 1 & windowStackL .~ windowStack & (windowTickStackL %~ drop 1)
   ScenarioResolution _ -> do
     pure
       $ g
@@ -3757,6 +3774,7 @@ runPreGameMessage msg g = case msg of
       & (skillTestResultsL .~ Nothing)
       & (windowStackL .~ mempty)
       & (windowDepthL .~ 0)
+      & (windowTickStackL .~ [])
   ResetInvestigators -> do
     -- if we reset and there is no player order, set it to the current investigator keys
     pure
@@ -3776,6 +3794,23 @@ runPreGameMessage msg g = case msg of
       & (undoRoundStepL .~ Nothing)
   EndSetup -> pure $ g & inSetupL .~ False
   BeginRound -> pure $ g & undoRoundStepL ?~ (gameScenarioSteps g + 1)
+  -- Entry-tick capture: record the window-tick at which each card entered play
+  -- so a card that enters during an open window cannot respond to a triggering
+  -- condition that already occurred (see Arkham.Helpers.Action). These run
+  -- before the entity's own handler mutates its placement.
+  CardEnteredPlay _ card ->
+    pure $ g & entryTicksL %~ insertMap card.id (gameWindowTick g)
+  PlaceTreachery tid placement -> do
+    old <- field TreacheryPlacement tid
+    let entersPlay = not (isInPlayPlacement old) && isInPlayPlacement placement
+    if entersPlay
+      then do
+        card <- field TreacheryCard tid
+        pure $ g & entryTicksL %~ insertMap card.id (gameWindowTick g)
+      else pure g
+  EnemySpawn details -> do
+    card <- field EnemyCard details.enemy
+    pure $ g & entryTicksL %~ insertMap card.id (gameWindowTick g)
   _ -> pure g
 
 {- | Maintain the revert information for the in-flight action.

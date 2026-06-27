@@ -3,9 +3,11 @@ import { useWebSocket } from '@vueuse/core'
 import confetti from '@/effects/confetti'
 import { fetchGame } from '@/arkham/api'
 import { useUserStore } from '@/stores/user'
+import { useEventStore } from '@/arkham/stores/event'
 import * as Arkham from '@/arkham/types/Game'
 import * as ArkhamGame from '@/arkham/types/Game'
 import * as Message from '@/arkham/types/Message'
+import type { SharedEventState } from '@/arkham/types/EpicEvent'
 import type { Question } from '@/arkham/types/Question'
 import { preloadGameImages } from '@/arkham/gameImagePreload'
 import type { GameModals } from './useGameModals'
@@ -21,6 +23,8 @@ export type ServerResult =
   | { tag: 'GameShowDiscard'; contents: string }
   | { tag: 'GameShowUnder'; contents: string }
   | { tag: 'GameUI'; contents: string }
+  | { tag: 'GameAudio'; contents: string }
+  | { tag: 'SharedStateUpdate'; contents: SharedEventState }
 
 export interface GameEmitter {
   emit(event: string, payload?: unknown): void
@@ -38,6 +42,7 @@ const baseURL = `${window.location.protocol}//${window.location.hostname}${windo
 export function useGameSocket(opts: UseGameSocketOptions) {
   const { modals, emitter } = opts
   const userStore = useUserStore()
+  const eventStore = useEventStore()
 
   const game = shallowRef<Arkham.Game | null>(null)
   const gameLog = shallowRef<readonly string[]>(Object.freeze([]))
@@ -241,6 +246,14 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     sendSkipFor(first.playerId, first.choiceIdx)
   }
 
+  function playAudioFile(fileName: string) {
+    if (localStorage.getItem('arkhamSoundsDisabled') === 'true') return
+    if (!/^[a-zA-Z0-9_.-]+\.(ogg|mp3|wav)$/i.test(fileName)) return
+
+    const audio = new Audio(`/audio/${fileName}`)
+    audio.play().catch((error) => console.warn(`Unable to play audio file: ${fileName}`, error))
+  }
+
   const handleResult = (result: ServerResult) => {
     processing.value = false
     switch (result.tag) {
@@ -261,6 +274,9 @@ export function useGameSocket(opts: UseGameSocketOptions) {
         return
       case 'GameShowUnder':
         emitter.emit('showUnder', result.contents)
+        return
+      case 'GameAudio':
+        playAudioFile(result.contents)
         return
       case 'GameUI':
         if (result.contents.startsWith('theSilence:')) {
@@ -327,6 +343,9 @@ export function useGameSocket(opts: UseGameSocketOptions) {
         }
         modals.showGameCardOnly(result, (player) => solo.value === true || player === playerId.value)
         return
+      case 'SharedStateUpdate':
+        eventStore.applySharedState(result.contents)
+        return
       case 'GameUpdate':
         if (modals.uiLock.value) {
           qPush(result)
@@ -378,10 +397,11 @@ export function useGameSocket(opts: UseGameSocketOptions) {
   })
 
   watch(
-    () => opts.gameId(),
-    async (newV, oldV) => {
-      if (!newV) return
-      if (newV === oldV) return
+    () => [opts.gameId(), opts.spectate] as const,
+    async (newVals, oldVals) => {
+      const [newGameId] = newVals
+      if (!newGameId) return
+      if (oldVals && newGameId === oldVals[0] && newVals[1] === oldVals[1]) return
       await fetchGame(opts.gameId(), opts.spectate).then(
         async ({ game: newGame, playerId: newPlayerId, multiplayerMode }) => {
           // 非阻塞预加载：不再 await，避免 spectate/切换游戏时被图片加载卡住

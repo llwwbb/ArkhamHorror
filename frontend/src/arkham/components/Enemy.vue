@@ -3,14 +3,16 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { handleEmbeddedI18n } from '@/arkham/i18n'
 import { useDebug } from '@/arkham/debug'
+import { useAi } from '@/arkham/ai'
 import { Game } from '@/arkham/types/Game'
 import { keyToId } from '@/arkham/types/Key'
 import { TokenType } from '@/arkham/types/Token'
 import { imgsrc } from '@/arkham/helpers'
 import { cardArt, cardImage, sourceCardCode } from '@/arkham/cardImages'
-import { useGameChoices, useGameChoicesSource, useGameChoicesTooltip } from '@/arkham/composables/useGameChoices'
+import { useGameChoices, useStickyChoicesSource, useGameChoicesTooltip } from '@/arkham/composables/useGameChoices'
 import { AbilityLabel, AbilityMessage, Message, MessageType } from '@/arkham/types/Message'
 import AbilitiesMenu from '@/arkham/components/AbilitiesMenu.vue'
+import AiTargetMenu from '@/arkham/components/AiTargetMenu.vue'
 import DebugEnemy from '@/arkham/components/debug/Enemy.vue'
 import PoolItem from '@/arkham/components/PoolItem.vue'
 import TokenPool from '@/arkham/components/TokenPool.vue'
@@ -59,11 +61,12 @@ const image = computed(() => cardImage(props.enemy.cardCode, props.enemy.flipped
 
 const id = computed(() => props.enemy.id)
 
-const choicesSource = useGameChoicesSource(() => props.game, () => props.playerId)
+const choicesSource = useStickyChoicesSource(() => props.game, () => props.playerId)
 const isHighlighted = computed(() => {
   const source = choicesSource.value
   return source !== null && 'contents' in source && source.contents === props.enemy.id
 })
+const isAttacking = computed(() => props.game.enemyAttackTargets.some((e) => e.enemy === props.enemy.id))
 const { t } = useI18n()
 const choicesTooltip = useGameChoicesTooltip(() => props.game, () => props.playerId)
 const sourceTooltip = computed<string | false>(() => {
@@ -252,9 +255,17 @@ const addedKeywords = computed(() => {
 
 const choose = (index: number) => emits('choose', index)
 
+const ai = useAi()
+const aiMenuOpen = ref(false)
+const aiTarget = computed(() => ({ tag: 'EnemyTarget', contents: id.value }))
+
 const showAbilities = ref<boolean>(false)
 
 async function clicked() {
+  if (ai.targeting) {
+    aiMenuOpen.value = true
+    return
+  }
   if(cardAction.value !== -1) {
     emits('choose', cardAction.value)
     showAbilities.value = false
@@ -322,7 +333,7 @@ function onDrop(event: DragEvent) {
             <img v-if="isTrueForm" :src="image"
               class="card enemy"
               v-tooltip="sourceTooltip"
-              :class="{ dragging, 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted }"
+              :class="{ dragging, 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted || isAttacking, 'ai-target-hover': ai.targeting }"
               :data-id="id"
               :data-card-code="enemy.cardCode"
               :data-game-id="game.id"
@@ -344,7 +355,7 @@ function onDrop(event: DragEvent) {
               :src="isSwarm ? imgsrc('player_back.jpg') : image"
               class="card enemy"
               v-tooltip="sourceTooltip"
-              :class="{ 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted }"
+              :class="{ 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted || isAttacking, 'ai-target-hover': ai.targeting }"
               :data-id="id"
               :data-card-code="enemy.cardCode"
               :data-game-id="game.id"
@@ -384,6 +395,16 @@ function onDrop(event: DragEvent) {
             :position="atLocation ? 'right' : (inVoid || global) ? 'left' : 'top'"
             :game="game"
             @choose="chooseAbility"
+            />
+
+          <AiTargetMenu
+            v-model="aiMenuOpen"
+            :frame="frame"
+            kind="enemy"
+            :target="aiTarget"
+            :seat="ai.selectedSeat"
+            :game-id="game.id"
+            :position="atLocation ? 'right' : (inVoid || global) ? 'left' : 'top'"
             />
         </div>
 
@@ -451,16 +472,17 @@ function onDrop(event: DragEvent) {
       </template>
     </div>
 
-    <div class="swarm" v-if="swarmEnemies.length > 0">
+    <div class="swarm" v-if="swarmEnemies.length > 0" :style="{ '--swarm-count': swarmEnemies.length }">
       <Enemy
-        v-for="enemy in swarmEnemies"
-        :key="enemy.id"
-        :enemy="enemy"
+        v-for="(swarmEnemy, index) in swarmEnemies"
+        :key="swarmEnemy.id"
+        :enemy="swarmEnemy"
         :game="game"
         :playerId="playerId"
         :atLocation="atLocation"
         @choose="$emit('choose', $event)"
         class="enemy--swarming"
+        :style="{ '--swarm-index': index }"
       />
     </div>
     <DebugEnemy v-if="debugging" :game="game" :enemy="enemy" :playerId="playerId" @close="debugging = false" />
@@ -487,6 +509,20 @@ function onDrop(event: DragEvent) {
   border: 2px solid var(--select);
   border-radius: 5px;
   cursor: pointer;
+}
+
+/* Dev-only "AI targeting mode": class is only bound while targeting is on, so
+   normal play is untouched. Green border + pale green wash on hover. */
+.ai-target-hover {
+  cursor: pointer;
+  transition: box-shadow 120ms ease, filter 120ms ease;
+}
+
+.ai-target-hover:hover {
+  border: 2px solid var(--ai-target);
+  border-radius: 5px;
+  box-shadow: 0 0 0 2px var(--ai-target), 0 0 12px 3px rgba(74, 222, 128, 0.55);
+  filter: brightness(1.05) sepia(0.35) hue-rotate(55deg) saturate(1.3);
 }
 
 .enemy--can-interact-cursor {
@@ -521,12 +557,12 @@ img.card.source-highlight {
   align-items: flex-end;
   z-index: var(--z-index-15);
   :deep(img) {
-    width: 20px;
+    width: var(--card-token-width);
     height: auto;
   }
 
   :deep(.token-container) {
-    width: 20px;
+    width: var(--card-token-width);
   }
 
   &:not(:has(.key--can-interact)) {
@@ -605,32 +641,64 @@ img.card.source-highlight {
   }
 }
 
+/*
+ * Swarm fan.
+ *
+ * Collapsed, the swarm cards hide behind the host card (below its z-index), tucked
+ * left so only their right edges fan out — the host clearly owns the swarm and the
+ * count stays readable. Hovering the host enemy (or the swarm) slides them out from
+ * behind it and fans them to the right.
+ *
+ * Every offset is a `transform`, which never affects layout, so the host and
+ * everything around it stay put whether collapsed or fanned (requirement a). The
+ * fan stays overlapping (no holes), so the whole group is one contiguous hover
+ * surface and sweeping between cards can't drop into a gap and collapse it
+ * (requirement b).
+ */
 .swarm {
-  display: flex;
-  flex-direction: row-reverse;
-  width: fit-content;
-  justify-content: space-evenly;
-  :has(.exhausted) {
-    gap: 10px;
-    margin-left: 5px;
-  }
-  &:hover {
-    flex-wrap: wrap;
+  /* how far (in card widths) the stack hides behind the host while collapsed */
+  --swarm-tuck: 0.78;
+  /* fraction of a card poking out from behind the host per stacked card */
+  --swarm-peek: 0.22;
+  /* fraction of a card revealed per card once fanned out */
+  --swarm-reveal: 0.62;
+  --swarm-count: 1;
+  position: relative;
+  /*
+   * A single-cell grid: every swarm card lives in the same cell (grid-area 1/1)
+   * and is offset purely with `transform`, immune to flex-shrink quirks. The width
+   * reserves only the sliver that pokes out from behind the host; the fan overflows
+   * this box on hover (transform only), so neighbours never shift either way.
+   */
+  display: grid;
+  grid-template-columns: var(--card-width);
+  justify-content: start;
+  width: calc(var(--card-width) * ((1 - var(--swarm-tuck)) + (var(--swarm-count) - 1) * var(--swarm-peek)));
+  flex: 0 0 auto;
+  align-self: center;
+}
 
-    .enemy--swarming {
-      margin-left: 5px;
-    }
-  }
+.swarm .enemy--swarming {
+  --swarm-index: 0;
+  grid-area: 1 / 1;
+  /* Behind the host (host card is var(--z-index-5)); lead card on top of the rest. */
+  z-index: calc(var(--swarm-count) - var(--swarm-index));
+  transform: translateX(calc(var(--card-width) * (var(--swarm-peek) * var(--swarm-index) - var(--swarm-tuck))));
+  transition: transform 0.18s ease;
+}
 
-  &:has(.enemy--swarming.showAbilities) {
-    .enemy--swarming {
-      margin-left: 5px;
-    }
-  }
+/* Hovering the swarm (its peeking edges) fans the cards out from behind the host to
+   the right; likewise while a swarm card's abilities menu is open. */
+.swarm:hover .enemy--swarming,
+.swarm:has(.enemy--swarming.showAbilities) .enemy--swarming {
+  transform: translateX(calc(var(--card-width) * var(--swarm-reveal) * var(--swarm-index)));
+}
 
-  .enemy--swarming {
-    margin-left: calc((var(--card-width) / 1.5) * -1);
-  }
+/* Lift the whole group above sibling enemies while revealed. */
+.enemy--outer:has(.swarm:hover),
+.enemy--outer:has(.enemy--swarming.showAbilities) {
+  position: relative;
+  z-index: var(--z-index-30);
 }
 
 

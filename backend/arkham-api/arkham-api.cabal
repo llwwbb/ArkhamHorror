@@ -22,12 +22,14 @@ flag library-only
 
 library
   exposed-modules:
+      Api.Arkham.Epic
       Api.Arkham.Export
       Api.Arkham.Helpers
       Api.Arkham.Types.MultiplayerVariant
       Api.Handler.Arkham.Admin.Metrics
       Api.Handler.Arkham.Cards
       Api.Handler.Arkham.Decks
+      Api.Handler.Arkham.Events
       Api.Handler.Arkham.Game.Bug
       Api.Handler.Arkham.Game.Debug
       Api.Handler.Arkham.Games
@@ -811,6 +813,13 @@ library
       Arkham.Agenda.Runner
       Arkham.Agenda.Sequence
       Arkham.Agenda.Types
+      Arkham.Ai.Decision
+      Arkham.Ai.Decks
+      Arkham.Ai.Focus
+      Arkham.Ai.Helpers
+      Arkham.Ai.Orphans
+      Arkham.Ai.State
+      Arkham.Ai.Tags
       Arkham.Aspect
       Arkham.Aspect.Types
       Arkham.Asset
@@ -2950,6 +2959,7 @@ library
       Arkham.EnemyLocation.Runner
       Arkham.EnemyLocation.Types
       Arkham.Entities
+      Arkham.Epic.Types
       Arkham.Evade
       Arkham.Evade.Types
       Arkham.Event
@@ -6569,6 +6579,7 @@ library
       Entity.Answer
       Entity.Arkham.ArkhamDBDecklist
       Entity.Arkham.Deck
+      Entity.Arkham.Epic
       Entity.Arkham.Game
       Entity.Arkham.GameRaw
       Entity.Arkham.LogEntry
@@ -6808,6 +6819,7 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Arkham.Act.Cards.AFamiliarPatternSpec
       Arkham.Act.Cards.FalseStepV2Spec
       Arkham.Agenda.Cards.RestrictedAccessSpec
       Arkham.Agenda.Cards.ShadowsDeepenSpec
@@ -6835,6 +6847,7 @@ test-suite spec
       Arkham.Asset.Assets.DigDeep2Spec
       Arkham.Asset.Assets.DigDeepSpec
       Arkham.Asset.Assets.DiscOfItzamna2Spec
+      Arkham.Asset.Assets.DrHenryArmitage_SpreadingFlamesSpec
       Arkham.Asset.Assets.DrMilanChristopherSpec
       Arkham.Asset.Assets.DukeSpec
       Arkham.Asset.Assets.ElderSignAmulet3Spec
@@ -6912,9 +6925,11 @@ test-suite spec
       Arkham.Enemy.Cards.SilverTwilightAcolyteSpec
       Arkham.Enemy.Cards.StalkingHybridSpec
       Arkham.Enemy.Cards.StubbornDetectiveSpec
+      Arkham.Enemy.Cards.Subject8L08EpicMultiplayerSpec
       Arkham.Enemy.Cards.TheMaskedHunterSpec
       Arkham.Enemy.Cards.TonysQuarrySpec
       Arkham.Enemy.Cards.WatcherFromAnotherDimensionSpec
+      Arkham.Epic.EpicMultiplayerSpec
       Arkham.Event.Events.AstoundingRevelationSpec
       Arkham.Event.Events.AtACrossroads1Spec
       Arkham.Event.Events.BackstabSpec
@@ -6957,6 +6972,7 @@ test-suite spec
       Arkham.Event.Events.SureGamble3Spec
       Arkham.Event.Events.ToeToToeSpec
       Arkham.Event.Events.Transfiguration2Spec
+      Arkham.Event.Events.TrapLimitSpec
       Arkham.Event.Events.WardOfProtectionSpec
       Arkham.Event.Events.WillToSurvive3Spec
       Arkham.Event.Events.WorkingAHunchSpec
@@ -7012,6 +7028,7 @@ test-suite spec
       Arkham.Treachery.Cards.DreamlandsEclipseSpec
       Arkham.Treachery.Cards.FinalRhapsodySpec
       Arkham.Treachery.Cards.HauntedSpec
+      Arkham.Treachery.Cards.HemophobiaSpec
       Arkham.Treachery.Cards.HospitalDebtsSpec
       Arkham.Treachery.Cards.HypochondriaSpec
       Arkham.Treachery.Cards.LegInjurySpec

@@ -1,0 +1,38 @@
+{
+  "event": {
+    "events": "Epic Multiplayer Events",
+    "epicMultiplayer": "Epic Multiplayer",
+    "organizerDashboard": "Organizer Dashboard",
+    "scenario": "Scenario",
+    "countermeasures": "Countermeasures",
+    "totalInvestigators": "Total Investigators",
+    "investigators": "Investigators",
+    "seats": "{count} / {total} seats",
+    "openSeats": "Open seats",
+    "joinable": "Joinable",
+    "full": "Full",
+    "open": "Open",
+    "copyInviteLink": "Copy invite link",
+    "inviteLinkCopied": "Link copied!",
+    "joinThisGroup": "Join this group",
+    "notStarted": "Not started",
+    "inProgress": "In progress",
+    "decrement": "Decrease countermeasures",
+    "increment": "Increase countermeasures",
+    "loading": "Loading event…",
+    "disconnected": "Reconnecting…",
+    "deleteEvent": "Delete event",
+    "confirmDelete": "Delete this event and all of its group games? This cannot be undone.",
+    "playMySeat": "Play my seat",
+    "returnToOrganizerView": "Return to organizer view",
+    "playing": "Playing",
+    "players": "Players",
+    "choosing": "Choosing…",
+    "noPlayersYet": "No players yet",
+    "group": "Group {ordinal}",
+    "role": {
+      "organizer": "Organizer",
+      "player": "Player"
+    }
+  }
+}

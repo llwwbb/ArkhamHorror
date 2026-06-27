@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AdjustmentsHorizontalIcon,
@@ -10,6 +10,7 @@ import {
 import { LottieAnimation } from 'lottie-web-vue'
 import processingJSON from '@/assets/processing.json'
 import { useCardStore } from '@/stores/cards'
+import { useEventStore } from '@/arkham/stores/event'
 import { useMenu } from '@/composable/menu'
 import useEmitter from '@/composable/useEmitter'
 import { useDebug } from '@/arkham/debug'
@@ -31,6 +32,7 @@ import MultiplayerLobby from '@/arkham/components/MultiplayerLobby.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import HistoryPanel from '@/arkham/components/HistoryPanel.vue'
 import Settings from '@/arkham/components/Settings.vue'
+import OrganizerBar from '@/arkham/components/OrganizerBar.vue'
 import Draggable from '@/components/Draggable.vue'
 import GameBar from '@/arkham/components/GameBar.vue'
 import BugReportForm from '@/arkham/components/BugReportForm.vue'
@@ -48,7 +50,9 @@ const props = withDefaults(defineProps<Props>(), { spectate: false })
 
 const debug = useDebug()
 const emitter = useEmitter()
+const route = useRoute()
 const store = useCardStore()
+const eventStore = useEventStore()
 const { addEntry, menuItems } = useMenu()
 const flashlightX = ref(0)
 const flashlightY = ref(0)
@@ -121,6 +125,28 @@ addEntry({
 })
 
 const { choicesByPlayer } = provideGameContext(socket, showOtherPlayersHands)
+
+const eventQueryId = computed(() => {
+  const q = route.query.event
+  return typeof q === 'string' && q !== '' ? q : null
+})
+
+const organizerEventId = computed(() => {
+  const eid = eventQueryId.value
+  if (!eid) return null
+  const ev = eventStore.event
+  return ev && ev.id === eid && ev.role === 'organizer' ? eid : null
+})
+
+watch(
+  eventQueryId,
+  (eid) => {
+    if (!eid) return
+    if (eventStore.event?.id === eid) return
+    eventStore.load(eid).catch((e) => console.error(e))
+  },
+  { immediate: true },
+)
 
 const undoApi = useGameUndo({
   gameId: () => props.gameId,
@@ -379,6 +405,12 @@ onUnmounted(() => {
       @undo-scenario="undoScenarioDialog?.showModal()"
       @file-bug="openBugReport()"
       @toggle-sidebar="toggleSidebar"
+    />
+    <OrganizerBar
+      v-if="organizerEventId"
+      :event-id="organizerEventId"
+      :current-game-id="gameId"
+      :spectate="spectate"
     />
     <MultiplayerLobby
       v-if="game.gameState.tag === 'IsPending'"
