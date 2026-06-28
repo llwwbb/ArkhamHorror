@@ -3,7 +3,6 @@ import { useWebSocket } from '@vueuse/core'
 import confetti from '@/effects/confetti'
 import { fetchGame } from '@/arkham/api'
 import { useUserStore } from '@/stores/user'
-import { useEventStore } from '@/arkham/stores/event'
 import * as Arkham from '@/arkham/types/Game'
 import * as ArkhamGame from '@/arkham/types/Game'
 import * as Message from '@/arkham/types/Message'
@@ -35,6 +34,7 @@ export interface UseGameSocketOptions {
   spectate: boolean
   modals: GameModals
   emitter: GameEmitter
+  onSharedStateUpdate?: (state: SharedEventState) => void
 }
 
 const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? `:${window.location.port}` : ''}`
@@ -42,7 +42,6 @@ const baseURL = `${window.location.protocol}//${window.location.hostname}${windo
 export function useGameSocket(opts: UseGameSocketOptions) {
   const { modals, emitter } = opts
   const userStore = useUserStore()
-  const eventStore = useEventStore()
 
   const game = shallowRef<Arkham.Game | null>(null)
   const gameLog = shallowRef<readonly string[]>(Object.freeze([]))
@@ -117,10 +116,11 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     Arkham.gameDecoder
       .decodePromise(payload)
       .then((updatedGame) => {
-        game.value = updatedGame
+        const locked = modals.uiLock.value
+        game.value = locked ? { ...updatedGame, question: {} } : updatedGame
         updateGameLog(updatedGame.log)
         preloadGameImages(updatedGame)
-        if (solo.value === true) {
+        if (!locked && solo.value === true) {
           if (Object.keys(game.value.question).length == 1) {
             playerId.value = Object.keys(game.value.question)[0]
           } else if (game.value.activePlayerId !== playerId.value) {
@@ -133,7 +133,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
             playerId.value = Object.keys(game.value.question)[0]
           }
         }
-        continueSkipAll()
+        if (!locked) continueSkipAll()
       })
       .finally(() => {
         decoding = false
@@ -344,15 +344,11 @@ export function useGameSocket(opts: UseGameSocketOptions) {
         modals.showGameCardOnly(result, (player) => solo.value === true || player === playerId.value)
         return
       case 'SharedStateUpdate':
-        eventStore.applySharedState(result.contents)
+        opts.onSharedStateUpdate?.(result.contents)
         return
       case 'GameUpdate':
-        if (modals.uiLock.value) {
-          qPush(result)
-          if (game.value) setGameQuestion({})
-        } else {
-          scheduleApplyUpdate(result.contents)
-        }
+        if (modals.uiLock.value) qPush(result)
+        scheduleApplyUpdate(result.contents)
         return
     }
   }

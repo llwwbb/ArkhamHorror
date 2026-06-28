@@ -10,6 +10,7 @@ import {
 import { LottieAnimation } from 'lottie-web-vue'
 import processingJSON from '@/assets/processing.json'
 import { useCardStore } from '@/stores/cards'
+import { useSettings } from '@/stores/settings'
 import { useEventStore } from '@/arkham/stores/event'
 import { useMenu } from '@/composable/menu'
 import useEmitter from '@/composable/useEmitter'
@@ -22,6 +23,7 @@ import { useGameUndo } from '@/arkham/composables/useGameUndo'
 import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
 import { useBugReport } from '@/arkham/composables/useBugReport'
 import { useTurnNotification } from '@/arkham/composables/useTurnNotification'
+import { useAiDriver } from '@/arkham/composables/useAiDriver'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
@@ -33,6 +35,7 @@ import GameLog from '@/arkham/components/GameLog.vue'
 import HistoryPanel from '@/arkham/components/HistoryPanel.vue'
 import Settings from '@/arkham/components/Settings.vue'
 import OrganizerBar from '@/arkham/components/OrganizerBar.vue'
+import AiControlPanel from '@/arkham/components/AiControlPanel.vue'
 import Draggable from '@/components/Draggable.vue'
 import GameBar from '@/arkham/components/GameBar.vue'
 import BugReportForm from '@/arkham/components/BugReportForm.vue'
@@ -52,8 +55,10 @@ const debug = useDebug()
 const emitter = useEmitter()
 const route = useRoute()
 const store = useCardStore()
+const settings = useSettings()
 const eventStore = useEventStore()
 const { addEntry, menuItems } = useMenu()
+const aiDevEnabled = computed(() => settings.aiInvestigatorsEnabled)
 const flashlightX = ref(0)
 const flashlightY = ref(0)
 const focusLightX = ref(-1000)
@@ -69,6 +74,7 @@ const socket = useGameSocket({
   spectate: props.spectate,
   modals,
   emitter,
+  onSharedStateUpdate: (state) => eventStore.applySharedState(state),
 })
 // send/choose* 等其余字段经 provideGameContext 注入给子组件，这里只解构 Game.vue 自用的
 const {
@@ -125,6 +131,12 @@ addEntry({
 })
 
 const { choicesByPlayer } = provideGameContext(socket, showOtherPlayersHands)
+const { aiSeatIds, aiStuckSeats } = useAiDriver({
+  game,
+  spectate: () => props.spectate,
+  aiDevEnabled,
+  send: socket.send,
+})
 
 const eventQueryId = computed(() => {
   const q = route.query.event
@@ -323,6 +335,11 @@ onUnmounted(() => {
     </div>
   </div>
   <div id="game" v-else-if="ready && game && playerId">
+    <AiControlPanel
+      v-if="aiDevEnabled && aiSeatIds.length > 0"
+      :game="game"
+      :stuck-seats="aiStuckSeats"
+    />
     <dialog v-if="error" class="error-dialog">
       <h2>{{ $t('error') }}</h2>
       <p class="error-message">{{ error }}</p>

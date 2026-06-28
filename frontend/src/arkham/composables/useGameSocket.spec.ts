@@ -119,20 +119,24 @@ describe('useGameSocket', () => {
     expect(showSpy).toHaveBeenCalledOnce()
   })
 
-  it('uiLock 锁住时 GameUpdate 入队并清空 question', async () => {
+  it('uiLock 锁住时 GameUpdate 刷新棋盘但隐藏 question，解锁后恢复 question', async () => {
     const { socket, modals } = makeSocket()
     await flush()
     modals.uiLock.value = true
     await nextTick() // 让 watcher 先观察到锁定，否则同 tick 内 true→false 不触发
+    const updated = { log: [], question: { p1: {} }, activePlayerId: 'p1' } as any
     const decodeSpy = vi
       .spyOn(Arkham.gameDecoder, 'decodePromise')
-      .mockResolvedValue({ log: [], question: {}, activePlayerId: 'p1' } as any)
+      .mockResolvedValue(updated)
     pushMessage({ tag: 'GameUpdate', contents: '{}' })
-    expect(decodeSpy).not.toHaveBeenCalled()
+    await flush()
+    expect(decodeSpy).toHaveBeenCalledOnce()
     expect(socket.game.value?.question).toEqual({})
     modals.uiLock.value = false
     await nextTick()
-    expect(decodeSpy).toHaveBeenCalledOnce()
+    await flush()
+    expect(decodeSpy).toHaveBeenCalledTimes(2)
+    expect(socket.game.value?.question).toEqual({ p1: {} })
     decodeSpy.mockRestore()
   })
 
@@ -147,17 +151,19 @@ describe('useGameSocket', () => {
       .mockResolvedValue({ log: [], question: { p1: {} }, activePlayerId: 'p1' } as any)
     pushMessage({ tag: 'GameCard', title: 'A', card: {} })
     pushMessage({ tag: 'GameUpdate', contents: '{}' })
+    await flush()
     expect(showSpy).not.toHaveBeenCalled()
+    expect(decodeSpy).toHaveBeenCalledOnce()
     modals.uiLock.value = false
     await nextTick()
     // GameCard 重放，真实 showGameCard 同步重新上锁 → drain break，GameUpdate 仍排队
     expect(showSpy).toHaveBeenCalledOnce()
     expect(modals.uiLock.value).toBe(true)
-    expect(decodeSpy).not.toHaveBeenCalled()
+    expect(decodeSpy).toHaveBeenCalledOnce()
     // 关掉弹窗解锁后，剩余的 GameUpdate 才被排空
     modals.continueUI()
     await flush()
-    expect(decodeSpy).toHaveBeenCalledOnce()
+    expect(decodeSpy).toHaveBeenCalledTimes(2)
     decodeSpy.mockRestore()
   })
 
