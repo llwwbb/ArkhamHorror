@@ -8,7 +8,9 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/vue/20/solid'
 import { LottieAnimation } from 'lottie-web-vue'
+import { useResizeObserver } from '@vueuse/core'
 import processingJSON from '@/assets/processing.json'
+import { eventTimeUp, markEventReady } from '@/arkham/api'
 import { useCardStore } from '@/stores/cards'
 import { useSettings } from '@/stores/settings'
 import { useEventStore } from '@/arkham/stores/event'
@@ -24,6 +26,7 @@ import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
 import { useBugReport } from '@/arkham/composables/useBugReport'
 import { useTurnNotification } from '@/arkham/composables/useTurnNotification'
 import { useAiDriver } from '@/arkham/composables/useAiDriver'
+import { useEventTimer } from '@/arkham/composables/useEventTimer'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
@@ -35,6 +38,8 @@ import GameLog from '@/arkham/components/GameLog.vue'
 import HistoryPanel from '@/arkham/components/HistoryPanel.vue'
 import Settings from '@/arkham/components/Settings.vue'
 import OrganizerBar from '@/arkham/components/OrganizerBar.vue'
+import PlayerEventBar from '@/arkham/components/PlayerEventBar.vue'
+import EventStartBarrier from '@/arkham/components/EventStartBarrier.vue'
 import AiControlPanel from '@/arkham/components/AiControlPanel.vue'
 import Draggable from '@/components/Draggable.vue'
 import GameBar from '@/arkham/components/GameBar.vue'
@@ -81,6 +86,7 @@ const {
   game,
   gameLog,
   playerId,
+  eventId: gamePayloadEventId,
   ready,
   solo,
   error,
@@ -143,15 +149,25 @@ const eventQueryId = computed(() => {
   return typeof q === 'string' && q !== '' ? q : null
 })
 
+const resolvedEventId = computed(() => eventQueryId.value ?? gamePayloadEventId.value)
+
 const organizerEventId = computed(() => {
-  const eid = eventQueryId.value
+  const eid = resolvedEventId.value
   if (!eid) return null
   const ev = eventStore.event
   return ev && ev.id === eid && ev.role === 'organizer' ? eid : null
 })
 
+const playerEventId = computed(() => {
+  const eid = resolvedEventId.value
+  if (!eid) return null
+  const ev = eventStore.event
+  if (!ev || ev.id !== eid || ev.role === 'organizer') return null
+  return ev.groups.some((g) => g.gameId === props.gameId) ? eid : null
+})
+
 watch(
-  eventQueryId,
+  resolvedEventId,
   (eid) => {
     if (!eid) return
     if (eventStore.event?.id === eid) return
@@ -159,6 +175,28 @@ watch(
   },
   { immediate: true },
 )
+
+const timerEventId = computed(() => {
+  if (props.spectate) return null
+  const eid = resolvedEventId.value
+  if (!eid) return null
+  const ev = eventStore.event
+  if (!ev || ev.id !== eid) return null
+  return ev.groups.some((g) => g.gameId === props.gameId) ? eid : null
+})
+
+const { hasTimeLimit, barrierPending, timerStartedAt, timeUp } = useEventTimer()
+const hasEventBar = computed(() => !!organizerEventId.value || !!playerEventId.value)
+const epicBarRef = ref<HTMLElement | null>(null)
+const epicBarHeight = ref(0)
+
+useResizeObserver(epicBarRef, () => {
+  epicBarHeight.value = epicBarRef.value?.offsetHeight ?? 0
+})
+
+watch(hasEventBar, (present) => {
+  if (!present) epicBarHeight.value = 0
+})
 
 const undoApi = useGameUndo({
   gameId: () => props.gameId,
@@ -191,6 +229,49 @@ const currentActStage = computed<number | null>(() => {
   const acts = game.value ? Object.values(game.value.acts) : []
   return acts.length > 0 ? acts[0].sequence.number : null
 })
+
+const reachedInvestigation = computed(() => {
+  const g = game.value
+  return (
+    !!g &&
+    g.gameState.tag === 'IsActive' &&
+    !!g.scenario?.started &&
+    g.phase === 'InvestigationPhase'
+  )
+})
+
+const showStartBarrier = computed(
+  () => !!timerEventId.value && barrierPending.value && reachedInvestigation.value,
+)
+
+let markedReady = false
+watch(
+  [timerEventId, reachedInvestigation, barrierPending],
+  () => {
+    if (markedReady) return
+    const eid = timerEventId.value
+    if (!eid) return
+    if (!hasTimeLimit.value) return
+    if (timerStartedAt.value !== 0) return
+    if (!reachedInvestigation.value) return
+    markedReady = true
+    markEventReady(eid).catch((e) => console.error(e))
+  },
+  { immediate: true },
+)
+
+let timeUpFired = false
+watch(
+  timeUp,
+  (up) => {
+    if (!up || timeUpFired) return
+    const eid = resolvedEventId.value
+    if (!eid || !hasTimeLimit.value) return
+    timeUpFired = true
+    eventTimeUp(eid).catch((e) => console.error(e))
+  },
+  { immediate: true },
+)
 
 const undoScenarioDialog = useTemplateRef<HTMLDialogElement>('undoScenarioDialog')
 
@@ -339,7 +420,7 @@ onUnmounted(() => {
       </section>
     </div>
   </div>
-  <div id="game" v-else-if="ready && game && playerId">
+  <div id="game" v-else-if="ready && game && playerId" :style="{ '--epic-bar-height': `${epicBarHeight}px` }">
     <AiControlPanel
       v-if="aiDevEnabled && aiSeatIds.length > 0"
       :game="game"
@@ -428,13 +509,23 @@ onUnmounted(() => {
       @file-bug="openBugReport()"
       @toggle-sidebar="toggleSidebar"
     />
-    <OrganizerBar
-      v-if="organizerEventId"
-      :event-id="organizerEventId"
-      :current-game-id="gameId"
-      :spectate="spectate"
-      :current-act-stage="currentActStage"
-    />
+    <div v-if="hasEventBar" ref="epicBarRef" class="epic-bar-slot">
+      <OrganizerBar
+        v-if="organizerEventId"
+        :event-id="organizerEventId"
+        :current-game-id="gameId"
+        :spectate="spectate"
+        :current-act-stage="currentActStage"
+      />
+      <PlayerEventBar
+        v-else-if="playerEventId"
+        :event-id="playerEventId"
+        :current-game-id="gameId"
+        :spectate="spectate"
+        :current-act-stage="currentActStage"
+      />
+    </div>
+    <EventStartBarrier v-if="showStartBarrier" />
     <MultiplayerLobby
       v-if="game.gameState.tag === 'IsPending'"
       :game-id="gameId"
@@ -602,9 +693,13 @@ onUnmounted(() => {
 
 .game-main {
   width: 100vw;
-  height: calc(100vh - 80px);
+  height: calc(100vh - 80px - var(--epic-bar-height, 0px));
   display: flex;
   flex: 1;
+}
+
+.epic-bar-slot {
+  flex: 0 0 auto;
 }
 
 .socketWarning {

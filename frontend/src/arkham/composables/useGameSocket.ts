@@ -46,6 +46,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
   const game = shallowRef<Arkham.Game | null>(null)
   const gameLog = shallowRef<readonly string[]>(Object.freeze([]))
   const playerId = ref<string | null>(null)
+  const eventId = ref<string | null>(null)
   const ready = ref(false)
   const solo = ref(false)
   const error = ref<string | null>(null)
@@ -399,7 +400,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
       if (!newGameId) return
       if (oldVals && newGameId === oldVals[0] && newVals[1] === oldVals[1]) return
       await fetchGame(opts.gameId(), opts.spectate).then(
-        async ({ game: newGame, playerId: newPlayerId, multiplayerMode }) => {
+        async ({ game: newGame, playerId: newPlayerId, multiplayerMode, eventId: newEventId }) => {
           // 非阻塞预加载：不再 await，避免 spectate/切换游戏时被图片加载卡住
           preloadGameImages(newGame)
           ;(window as Window & { g?: Arkham.Game }).g = newGame
@@ -407,6 +408,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
           solo.value = multiplayerMode === 'Solo'
           updateGameLog(newGame.log)
           playerId.value = newPlayerId
+          eventId.value = newEventId
           ready.value = true
         },
       )
@@ -491,6 +493,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     game,
     gameLog,
     playerId,
+    eventId,
     ready,
     solo,
     error,
