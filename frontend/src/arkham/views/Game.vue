@@ -187,6 +187,11 @@ const realityAcidLightActive = computed(() => {
   return scenario?.id === 'c85001' && scenario.meta?.lightActive === true
 })
 
+const currentActStage = computed<number | null>(() => {
+  const acts = game.value ? Object.values(game.value.acts) : []
+  return acts.length > 0 ? acts[0].sequence.number : null
+})
+
 const undoScenarioDialog = useTemplateRef<HTMLDialogElement>('undoScenarioDialog')
 
 const actionMap = computed<Map<string, () => void>>(() => {
@@ -428,6 +433,7 @@ onUnmounted(() => {
       :event-id="organizerEventId"
       :current-game-id="gameId"
       :spectate="spectate"
+      :current-act-stage="currentActStage"
     />
     <MultiplayerLobby
       v-if="game.gameState.tag === 'IsPending'"

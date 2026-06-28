@@ -4,13 +4,17 @@
 
 module Api.Handler.Arkham.Games.Shared where
 
-import Api.Arkham.Epic (applyEpicDeltasLocked, lookupGameEvent, mkEpicEnv)
+import Api.Arkham.Epic (applyEpicDeltasLocked, lookupGameEvent, mkEpicEnv, modifySharedStateLocked)
 import Api.Arkham.Helpers
 import Api.Arkham.Types.MultiplayerVariant
+import Arkham.Act.Sequence qualified as AS
+import Arkham.Act.Types (actSequence)
 import Arkham.Ai.Decision (decideAi, decideAiAssist, isAssistCommitWindow)
 import Arkham.Ai.Helpers (lookupAiPlayer)
 import Arkham.Ai.State (aiEnabled)
-import Arkham.Epic.Types (SharedEventState, epicEnvDeltaRef, epicEnvSharedRef, sharedCounters, sharedTotalInvestigators)
+import Arkham.Classes.Entity (attr)
+import Arkham.Entities (entitiesActs)
+import Arkham.Epic.Types (SharedEventState, SharedKey (PendingActAdvance, SharedActProgress), actProgressStages, epicEnvDeltaRef, epicEnvSharedRef, setSharedCounter, sharedCounter, sharedCounters, sharedTotalInvestigators, totalInvestigatorsKey)
 import Arkham.ScenarioLogKey (ScenarioCountKey (EpicShared))
 import Arkham.Campaign.Types (CampaignAttrs)
 import Arkham.Campaigns.TheDreamEaters.Meta qualified as TheDreamEaters
@@ -176,6 +180,10 @@ data GetGameJson = GetGameJson
   { playerId :: Maybe PlayerId
   , multiplayerMode :: MultiplayerVariant
   , game :: PublicGame ArkhamGameId
+  , eventId :: Maybe ArkhamEpicEventId
+  -- ^ the Epic Multiplayer event this game is a group of, if any. Lets the client
+  -- engage the event (shared state, start barrier, time limit) regardless of how
+  -- the player reached the game (so it doesn't depend on a @?event@ URL query).
   }
   deriving stock (Show, Generic)
 
@@ -331,15 +339,9 @@ updateGame response gameId mRoom = do
         -- scenario state (as EpicShared counts) before the action runs, so the
         -- scenario/enemy read up-to-date shared values purely. Refreshed every
         -- action (pull), keyed by sharedKeyText, plus the frozen total.
-        epicSyncMessages <- case mEpicEnv of
+        syncMsgs <- case mEpicEnv of
           Nothing -> pure []
-          Just epic -> do
-            shared <- liftIO $ readIORef (epicEnvSharedRef epic)
-            pure
-              $ [ ScenarioCountSet (EpicShared k) v
-                | (k, v) <- Map.toList (sharedCounters shared)
-                ]
-              <> [ScenarioCountSet (EpicShared "total-investigators") (sharedTotalInvestigators shared)]
+          Just epic -> epicSyncMessages <$> liftIO (readIORef (epicEnvSharedRef epic))
 
         let
           messages =
@@ -347,7 +349,7 @@ updateGame response gameId mRoom = do
               <> answerMessages
               <> [SetActivePlayer activePlayer | activePlayer /= playerId]
         gameRef <- newIORef gameJson
-        queueRef <- newQueue ((ClearUI : epicSyncMessages <> messages) <> currentQueue)
+        queueRef <- newQueue ((ClearUI : syncMsgs <> messages) <> currentQueue)
         genRef <- newIORef $ mkStdGen gameSeed
 
         -- Circuit breaker: cap runMessages at runMessagesTimeoutMicros so a
@@ -428,11 +430,16 @@ updateGame response gameId mRoom = do
       publishLog
       arkhamGameCurrentData
 
-  -- Epic Multiplayer: a shared-counter change in one group is broadcast to the
-  -- whole event (dashboard feed + every group's stream) so all connected clients
-  -- reflect the new shared counters live. (Each group's board entities still
-  -- re-sync from the counters on that group's next action.)
-  for_ mSharedUpdate \(eid, s) -> broadcastSharedToEvent eid s
+  -- Epic Multiplayer: propagate a shared-counter change across the event — update
+  -- every client's shared store AND sync the other groups' game-state boards to
+  -- it (so countermeasures / blob health change live in every group, not just on
+  -- that group's next action). The acting group is skipped (already reflected).
+  for_ mSharedUpdate \(eid, s) -> propagateShared eid (Just gameId) s
+
+  -- Epic Multiplayer: cross-group act-clue advance. Evaluated POST-COMMIT, after
+  -- the placing group's game lock has been released (so the coordinator can take
+  -- the OTHER groups' game locks + the event lock without a game->game deadlock).
+  for_ mSharedUpdate \(eid, s) -> coordinateEpicActAdvance eid s
 
 -- | Read the cached log entries IF the cache is consistent with the locked
 -- game's current step. Returns Nothing on a mismatch (so the caller refetches
@@ -524,17 +531,185 @@ publishToEventRoom eid a = do
     WebSocketBroker ->
       lookupEventRoom eid >>= traverse_ (`broadcastToRoom` encode a)
 
+-- | The (non-null) game ids of every group in an event.
+getEventGroupGameIds :: ArkhamEpicEventId -> Handler [ArkhamGameId]
+getEventGroupGameIds eid = do
+  rows <- runDB $ select do
+    grp <- from $ table @ArkhamEpicGroup
+    where_ $ grp.arkhamEpicEventId ==. val eid
+    pure grp.arkhamGameId
+  pure $ mapMaybe (\(Value m) -> m) rows
+
 -- | Broadcast a shared-state update to the event's dashboard feed AND to every
 -- group's own game stream, so all connected clients (organizer dashboard,
 -- organizer bars, shared displays) reflect the new shared counters live.
 broadcastSharedToEvent :: ArkhamEpicEventId -> SharedEventState -> Handler ()
 broadcastSharedToEvent eid s = do
   publishToEventRoom eid (SharedStateUpdate s)
-  gameIds <- runDB $ select do
+  gameIds <- getEventGroupGameIds eid
+  for_ gameIds \gid -> publishToRoom gid (SharedStateUpdate s)
+
+-- | The ScenarioCountSet messages that mirror the authoritative shared counters
+-- into a group's scenario state (as EpicShared counts), keyed by sharedKeyText,
+-- plus the frozen total. The scenario/enemy reconcile their local board
+-- representations (Resource tokens, Subject 8L-08 health) from these.
+epicSyncMessages :: SharedEventState -> [Message]
+epicSyncMessages shared =
+  -- total-investigators FIRST: entities that derive a value from it (e.g. Subject
+  -- 8L-08's max health = 15 * total) must see it before their own counter syncs.
+  ScenarioCountSet (EpicShared totalInvestigatorsKey) (sharedTotalInvestigators shared)
+    : [ScenarioCountSet (EpicShared k) v | (k, v) <- Map.toList (sharedCounters shared)]
+
+-- | Server-initiated run of @msgs@ inside one group's game, under the same
+-- FOR UPDATE lock / GameApp machinery a normal action uses. Runs only when the
+-- game is still actively playing AND @p@ holds for its current state; the
+-- predicate is evaluated INSIDE the lock so concurrent callers serialize on it
+-- (e.g. the Epic time-up forcing checks the agenda stage here so duplicate
+-- countdown-expiry calls can't double-advance). Persists a new step whose pending
+-- queue is the queue produced by the run (e.g. the continuation of a question the
+-- run parked) followed by the group's previously-pending queue, then broadcasts
+-- the GameUpdate. Games that are not active, or fail @p@, are left untouched.
+-- appEvent = Nothing: these server-initiated runs must not themselves emit shared
+-- deltas (they reconcile board state directly), so there is no feedback loop.
+runMessagesInGroupWhen :: (Game -> Bool) -> [Message] -> ArkhamGameId -> Handler ()
+runMessagesInGroupWhen p msgs gid = do
+  tracer <- getTracer
+  now <- liftIO getCurrentTime
+  mUpdate <- runDB $ atomicallyWithGame gid \ArkhamGame {..} ->
+    case gameGameState arkhamGameCurrentData of
+      IsActive | p arkhamGameCurrentData -> do
+        mLastStep <- getBy (UniqueStep gid arkhamGameStep)
+        let currentQueue = maybe [] (choiceMessages . arkhamStepChoice . entityVal) mLastStep
+        gameRef <- liftIO $ newIORef arkhamGameCurrentData
+        queueRef <- liftIO $ newQueue msgs
+        genRef <- liftIO $ newIORef (mkStdGen (gameSeed arkhamGameCurrentData))
+        liftIO
+          $ runGameApp (GameApp gameRef queueRef genRef (pure . const ()) tracer Nothing)
+          $ runMessages (gameIdToText gid) Nothing
+        updatedGame <- liftIO $ readIORef gameRef
+        -- The queue left after the run: empty for a pure board sync (it drains to
+        -- empty), or the continuation of a question the run parked (e.g. the
+        -- lead-player confirm of a forced agenda advance). Persist it AHEAD of the
+        -- group's previously-pending queue so a forced advance resolves to
+        -- completion while an undisturbed sync simply preserves the in-flight
+        -- queue (producedQueue is [] there).
+        producedQueue <- liftIO $ readIORef (queueToRef queueRef)
+        let
+          game' =
+            ArkhamGame
+              arkhamGameName
+              updatedGame
+              (arkhamGameStep + 1)
+              arkhamGameMultiplayerVariant
+              arkhamGameCreatedAt
+              now
+        replace gid game'
+        insert_
+          $ ArkhamStep
+            gid
+            (Choice mempty (producedQueue <> currentQueue))
+            (arkhamGameStep + 1)
+            (ActionDiff $ view actionDiffL updatedGame)
+        pure (Just game')
+      _ -> pure Nothing
+  for_ mUpdate \g' ->
+    publishToRoom gid
+      $ GameUpdate
+      $ PublicGame gid (arkhamGameName g') [] (arkhamGameCurrentData g')
+
+-- | 'runMessagesInGroupWhen' with no extra guard beyond the game being active.
+runMessagesInGroup :: [Message] -> ArkhamGameId -> Handler ()
+runMessagesInGroup = runMessagesInGroupWhen (const True)
+
+-- | Server-initiated sync of one (other) group's game state to the current
+-- shared counters, so its BOARD (countermeasures, blob health) reflects the
+-- change live without that group having to take an action. Runs only the sync
+-- messages (the group's own pending queue/question is preserved), persists a new
+-- step, and broadcasts the resulting GameUpdate. Skips games that aren't active.
+syncOneGroup :: SharedEventState -> ArkhamGameId -> Handler ()
+syncOneGroup shared = runMessagesInGroup (epicSyncMessages shared)
+
+-- | Propagate a shared-state change across an event: update every client's
+-- shared store (organizer dashboard/bars) AND sync each group's game-state board
+-- to it. @mOrigin@ (the acting group) is skipped — its own action already
+-- reflected the change locally.
+propagateShared :: ArkhamEpicEventId -> Maybe ArkhamGameId -> SharedEventState -> Handler ()
+propagateShared eid mOrigin shared = do
+  broadcastSharedToEvent eid shared
+  gameIds <- getEventGroupGameIds eid
+  for_ gameIds \gid ->
+    when (Just gid /= mOrigin)
+      $ syncOneGroup shared gid
+        `catch` \(e :: SomeException) ->
+          $(logWarn) $ "Epic syncOneGroup failed for " <> tshow gid <> ": " <> tshow e
+
+-- | The total clues on the act(s) at @stage@ in a group's game (0 if none). Acts
+-- in play is normally a singleton; this sums defensively.
+stageActClues :: Int -> Game -> Int
+stageActClues stage game =
+  sum
+    [ attr (.clues) act
+    | act <- toList (entitiesActs (gameEntities game))
+    , AS.unActStep (AS.actStep (attr actSequence act)) == stage
+    ]
+
+-- | For each group in an event (in ordinal order) that has a game, the clues
+-- currently on its stage-@stage@ act, paired with its game id and ordinal. Shared
+-- by 'coordinateEpicActAdvance' and the organizer's allocation endpoint so they
+-- size the per-group spend the same way.
+getEventGroupActClues :: ArkhamEpicEventId -> Int -> Handler [(Int, ArkhamGameId, Int)]
+getEventGroupActClues eid stage = do
+  rows <- runDB $ select do
     grp <- from $ table @ArkhamEpicGroup
     where_ $ grp.arkhamEpicEventId ==. val eid
-    pure grp.arkhamGameId
-  for_ gameIds \(Value mGid) -> for_ mGid \gid -> publishToRoom gid (SharedStateUpdate s)
+    orderBy [asc grp.ordinal]
+    pure (grp.ordinal, grp.arkhamGameId)
+  fmap catMaybes $ traverse resolveRow rows
+ where
+  resolveRow (Value ordinal, Value mGid) = case mGid of
+    Nothing -> pure Nothing
+    Just gid -> do
+      mGame <- runDB $ selectOne do
+        g <- from $ table @ArkhamGame
+        where_ $ g.id ==. val gid
+        pure g
+      pure $ (\ent -> (ordinal, gid, stageActClues stage (arkhamGameCurrentData (entityVal ent)))) <$> mGame
+
+{- | Epic Multiplayer cross-group coordinator for the shared act-clue advance
+(The Blob). Runs POST-COMMIT, after the placing group's game lock has been
+released (co-located with 'propagateShared' in 'updateGame'), NOT inside the
+group's runMessages — so it can take the OTHER groups' game locks and the event
+lock without a game->game lock-order deadlock.
+
+Given the just-committed shared state @s@, it evaluates each @act-progress:N@
+pool against THRESHOLD = 2 * sharedTotalInvestigators. For a stage that has
+reached threshold and is not already awaiting organizer allocation
+('PendingActAdvance' unset):
+
+  * EXACT (pool == threshold): each group spends exactly its own stage-N act's
+    clues. Push 'ResolveEpicActAdvance' to every group, then reset the pool to 0
+    (a single direct-set; the server owns the pool, the per-group handler must
+    not touch it). The reset means the next check won't re-fire.
+  * EXCESS (pool > threshold): flag 'PendingActAdvance' and wait for the
+    organizer's allocation (@postApiV1ArkhamEventResolveAdvanceR@). Do NOT
+    resolve. The flag guards against re-firing on subsequent placements.
+-}
+coordinateEpicActAdvance :: ArkhamEpicEventId -> SharedEventState -> Handler ()
+coordinateEpicActAdvance eid s = do
+  let threshold = 2 * sharedTotalInvestigators s
+  when (threshold > 0) $ for_ (actProgressStages s) \stage -> do
+    let pool = sharedCounter (SharedActProgress stage) s
+    when (pool >= threshold && sharedCounter (PendingActAdvance stage) s == 0) do
+      if pool == threshold
+        then do
+          groupClues <- getEventGroupActClues eid stage
+          for_ groupClues \(_ord, gid, clues) ->
+            runMessagesInGroup [ResolveEpicActAdvance stage clues] gid
+          newState <- runDB $ modifySharedStateLocked eid (setSharedCounter (SharedActProgress stage) 0)
+          broadcastSharedToEvent eid newState
+        else do
+          newState <- runDB $ modifySharedStateLocked eid (setSharedCounter (PendingActAdvance stage) 1)
+          broadcastSharedToEvent eid newState
 
 toGameDetailsEntry :: Entity ArkhamGameRaw -> Int -> GameDetailsEntry
 toGameDetailsEntry (Entity gameId game) playerCount =

@@ -93,3 +93,6 @@ spectate-mobile.png
 phase4-*.png
 AGENTS.md
 tmp/
+.agents/
+.windsurf/
+skills-lock.json
