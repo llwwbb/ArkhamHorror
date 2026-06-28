@@ -2406,6 +2406,7 @@ async function addChaosToken(face: any){
         :open="!!phoneShell?.playersOpen.value"
         keep-mounted
         side="bottom"
+        :dock-target="phoneShell?.bottomDockTarget"
         @close="phoneShell && (phoneShell.playersOpen.value = false)"
       >
       <div id="player-zone">

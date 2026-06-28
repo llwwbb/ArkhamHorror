@@ -793,6 +793,51 @@ ul, :deep(ul) {
   }
 }
 
+@media (max-width: 700px) {
+  .intro-text {
+    div, :deep(div) {
+      &:has(.note-green) {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        margin: 12px 0;
+        padding: 24px 16px;
+
+        &::before {
+          inset: 6px;
+          border-image-width: 24px;
+        }
+
+        &::after {
+          margin: 8px;
+        }
+      }
+    }
+  }
+
+  .note-green, :deep(.note-green) {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+
+    h1 {
+      width: 100%;
+      max-width: 100%;
+      justify-self: stretch;
+      overflow-wrap: anywhere;
+      line-height: 1.25;
+    }
+
+    p {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow-wrap: break-word;
+      line-height: 1.45;
+    }
+  }
+}
+
 :deep(h3) {
   font-family: "Teutonic";
   font-weight: 800;

@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 // 手机 shell（spec §4）：全屏地图为底，顶部 阶段条+撤销+汉堡，底部导航，统一浮层。
 // 逻辑（socket/undo/modals）全在 Game.vue，这里只做 chrome 与编排。
-import { computed, inject, nextTick, reactive, ref, watch } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -31,6 +31,7 @@ import OverlayDrawer from '@/components/OverlayDrawer.vue'
 import PlayerHandCards from '@/arkham/components/PlayerHandCards.vue'
 import PoolItem from '@/arkham/components/PoolItem.vue'
 import Draw from '@/arkham/components/Draw.vue'
+import { isScenarioBoardActive, quickActionsBottomOffset } from '@/arkham/mobileShellLayout'
 
 const props = defineProps<{
   game: Game
@@ -68,7 +69,16 @@ const menuOpen = ref(false)
 const logOpen = ref(false)
 const handOpen = ref(false)
 const playersOpen = ref(false)
-providePhoneShell({ handOpen, playersOpen })
+const bottomDockTarget = '#mobile-bottom-drawer-dock'
+providePhoneShell({ handOpen, playersOpen, bottomDockTarget })
+const bottomDockEl = ref<HTMLElement | null>(null)
+const bottomDockHeight = ref(0)
+let bottomDockResizeObserver: ResizeObserver | null = null
+const quickActionsBottom = computed(() => quickActionsBottomOffset(bottomDockHeight.value))
+
+function updateBottomDockHeight() {
+  bottomDockHeight.value = bottomDockEl.value?.getBoundingClientRect().height ?? 0
+}
 
 type DrawerName = 'log' | 'hand' | 'players'
 const drawers: Record<DrawerName, typeof logOpen> = {
@@ -127,7 +137,7 @@ const endTurnIdx = computed(() => {
 const skipAllTriggers = inject<() => void>('skipAllTriggers')
 const skipAllAvailable = inject<Ref<boolean>>('skipAllAvailable')
 
-// 技能检定开始自动展开手牌便于投入；结束自动收起。
+// 技能检定开始自动展开手牌便于投入；展开后保持，交给玩家手动收起。
 // 经 toggleDrawer 同款互斥逻辑，避免与其他抽屉叠层。
 watch(
   () => props.game.skillTest,
@@ -136,22 +146,22 @@ watch(
       for (const d of Object.values(drawers)) d.value = false
       autoOpened.value = null
       handOpen.value = true
-    } else if (!st && prev) {
-      handOpen.value = false
     }
   },
 )
 
-// 抽屉自动联动：可操作元素只在单一区域时自动打开对应抽屉，离开时自动收起。
+// 抽屉自动联动：可操作元素只在单一区域时自动打开对应抽屉；打开后保持，交给玩家手动收起。
 // DOM 探测（与 touchTapIntercept 的类约定一致）：keep-mounted 抽屉关闭时内容仍挂载
 // （v-show），querySelector 可达，无需解析 Question 模型。
 const ACTIONABLE = '[class*="--can-interact"], [class*="--can-progress"], .can-interact'
 
 // autoOpened: 当前由自动逻辑打开的抽屉名，null 表示未自动打开任何抽屉。
 const autoOpened = ref<'hand' | 'players' | null>(null)
-// scenario UI（玩家区）是否挂载：幕间故事等整页态由 StoryQuestion 内联呈现，
-// 桌面此时不挂 Player/ChoiceModal——停靠版同样要按这个信号门控，否则双重渲染。
-const scenarioUiActive = ref(false)
+// 与 GameMain/Campaign/StandaloneScenario 的分支保持一致：只有真正渲染战局 Scenario 时，
+// 手机 shell 才补上停靠版 ChoiceModal；幕间/战役剧情由 StoryQuestion 自己渲染。
+const scenarioBoardActive = computed(() => {
+  return isScenarioBoardActive(props.game)
+})
 // attention: 各 tab 的红点——区内有可操作元素但对应抽屉未开。
 const attention = reactive({ hand: false, players: false })
 
@@ -167,10 +177,8 @@ watch(
   () => [props.game, hasQuestion.value] as const,
   async () => {
     await nextTick()
-    // 技能检定期间：仍然扫描并刷新红点；但 hand 抽屉的自动开/收由 skillTest watch 专管，
-    // 此处跳过对 hand 的自动开/收（players 的自动开/收照常）。
+    // 技能检定期间：仍然扫描并刷新红点；但 hand 抽屉的自动打开由 skillTest watch 专管。
     const inSkillTest = !!props.game.skillTest
-    scenarioUiActive.value = !!document.querySelector('#player-zone')
     const zones = scanActionableZones()
 
     // 刷新红点（抽屉已开时不亮）
@@ -178,42 +186,25 @@ watch(
     attention.hand = zones.hand && !handOpen.value
 
     if (!hasQuestion.value || zones.elsewhere) {
-      // 早退路径：若曾自动打开 hand 且 inSkillTest，跳过自动收（由 skillTest watch 负责）
-      if (autoOpened.value === 'hand' && inSkillTest) return
-      // 原有逻辑：条件消失时自动收起已自动打开的抽屉
-      if (autoOpened.value) {
-        drawers[autoOpened.value].value = false
-        autoOpened.value = null
-      }
       return
     }
 
     // 恰好一个抽屉区有可操作元素 → 自动打开
     const onlyPlayers = zones.players && !zones.hand
     const onlyHand = zones.hand && !zones.players
+    const anyDrawerOpen = logOpen.value || handOpen.value || playersOpen.value
 
-    if (onlyPlayers && !playersOpen.value) {
+    if (onlyPlayers && !playersOpen.value && !anyDrawerOpen) {
       for (const d of Object.values(drawers)) d.value = false
       playersOpen.value = true
       autoOpened.value = 'players'
       attention.players = false
-    } else if (onlyHand && !handOpen.value && !inSkillTest) {
+    } else if (onlyHand && !handOpen.value && !inSkillTest && !anyDrawerOpen) {
       // 技能检定期间不自动弹手牌抽屉（skillTest watch 专管）
       for (const d of Object.values(drawers)) d.value = false
       handOpen.value = true
       autoOpened.value = 'hand'
       attention.hand = false
-    } else if (autoOpened.value) {
-      // 条件不再满足（两区同时有、或对应区消失、或 question 消失）→ 自动收起
-      const wasOpen = autoOpened.value
-      // 技能检定期间不自动收 hand（skillTest watch 负责收）
-      if (wasOpen === 'hand' && inSkillTest) return
-      const stillActive =
-        (wasOpen === 'players' && zones.players) || (wasOpen === 'hand' && zones.hand)
-      if (!stillActive) {
-        drawers[wasOpen].value = false
-        autoOpened.value = null
-      }
     }
   },
   // immediate：刷新页面落在待选状态时，首个状态也要触发联动（不等下一次推送）
@@ -229,6 +220,24 @@ watch(playersOpen, (open) => {
 watch(handOpen, (open) => {
   if (!open && autoOpened.value === 'hand') autoOpened.value = null
   attention.hand = !open && scanActionableZones().hand
+})
+
+watch([handOpen, playersOpen], async () => {
+  await nextTick()
+  updateBottomDockHeight()
+})
+
+onMounted(() => {
+  updateBottomDockHeight()
+  if (bottomDockEl.value) {
+    bottomDockResizeObserver = new ResizeObserver(updateBottomDockHeight)
+    bottomDockResizeObserver.observe(bottomDockEl.value)
+  }
+})
+
+onUnmounted(() => {
+  bottomDockResizeObserver?.disconnect()
+  bottomDockResizeObserver = null
 })
 
 function runMenuItem(action: () => void) {
@@ -268,6 +277,8 @@ function runMenuItem(action: () => void) {
         <Bars3Icon aria-hidden="true" />
       </button>
     </header>
+
+    <div id="mobile-bottom-drawer-dock" ref="bottomDockEl" class="mobile-bottom-drawer-dock"></div>
 
     <main class="mobile-main">
       <ActiveGameModals :game="game" :playerId="playerId" :modals="modals" />
@@ -311,7 +322,7 @@ function runMenuItem(action: () => void) {
          ChoiceModal 同理），且战役间章（CampaignPhase）不渲染（桌面此时 Player 未挂载，
          问题由 StoryQuestion/Campaign UI 呈现，停靠版会重复）。 -->
     <ChoiceModal
-      v-if="ownInvestigator && game.phase !== 'CampaignPhase' && scenarioUiActive"
+      v-if="ownInvestigator && scenarioBoardActive"
       docked
       :game="game"
       :playerId="playerId"
@@ -323,6 +334,7 @@ function runMenuItem(action: () => void) {
       :open="handOpen"
       keep-mounted
       side="bottom"
+      :dock-target="bottomDockTarget"
       @close="handOpen = false"
     >
       <div class="mobile-hand">
@@ -352,7 +364,11 @@ function runMenuItem(action: () => void) {
     <!-- 快捷操作条：把藏在角色抽屉里的高频文字选项（跳过/结束回合）提到 shell 层（文字按钮一步直达原则）。
          choice-dock(z-index:5000) 与本条(5001)同时出现时快捷条在上仍可点击；两者同时出现的
          概率极低（dock 出现时通常无 skip 选项），接受极小重叠风险。 -->
-    <div v-if="skipIdx !== -1 || endTurnIdx !== -1" class="quick-actions">
+    <div
+      v-if="skipIdx !== -1 || endTurnIdx !== -1"
+      class="quick-actions"
+      :style="{ bottom: quickActionsBottom }"
+    >
       <button v-if="skipIdx !== -1" type="button" @click="emit('choose', skipIdx)">{{ $t('skip') }}</button>
       <button
         v-if="skipIdx !== -1 && skipAllAvailable"
@@ -438,6 +454,7 @@ function runMenuItem(action: () => void) {
 }
 
 .mobile-top-bar {
+  order: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -483,6 +500,7 @@ function runMenuItem(action: () => void) {
 }
 
 .mobile-main {
+  order: 1;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -492,7 +510,14 @@ function runMenuItem(action: () => void) {
   overflow-x: hidden;
 }
 
+.mobile-bottom-drawer-dock {
+  order: 2;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
 .mobile-nav {
+  order: 3;
   display: flex;
   height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);

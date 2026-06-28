@@ -6,6 +6,7 @@ import { inject, provide, type InjectionKey, type Ref } from 'vue'
 export interface PhoneShellControls {
   handOpen: Ref<boolean>
   playersOpen: Ref<boolean>
+  bottomDockTarget: string
 }
 
 export const phoneShellKey: InjectionKey<PhoneShellControls> = Symbol('phoneShell')

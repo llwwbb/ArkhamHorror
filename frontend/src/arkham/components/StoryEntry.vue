@@ -417,6 +417,27 @@ const flippableCard = (cardCode: string) => {
 
 }
 
+@media (max-width: 700px) {
+  .intro-text {
+    box-sizing: border-box;
+    padding: 12px;
+    padding-bottom: calc(var(--mobile-nav-height, 56px) + env(safe-area-inset-bottom, 0px) + 20px);
+    margin-bottom: 0;
+    font-size: 1.2em;
+  }
+
+  .entry {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 14px;
+  }
+
+  .entry-body {
+    min-width: 0;
+  }
+}
+
 p {
   font-family: "ArkhamFlavor";
   :deep(i) {
@@ -606,12 +627,16 @@ a.button {
   margin-block: 20px;
   gap: 10px;
   justify-content: center;
+  align-items: flex-start;
 
   img, .card-container {
     transition: filter 0.1s ease-in-out, transform 0.1s ease-in-out;
     border-radius: 4%;
-    flex: 1;
+    flex: 1 1 220px;
+    min-width: 0;
     max-width: min(500px, 30vw);
+    height: auto;
+    object-fit: contain;
   }
 
   img:hover, .card-container:hover {
@@ -620,14 +645,19 @@ a.button {
   }
 
   .card-container {
-    width: clamp(200px, 25vw, 400px);
-    max-width: fit-content;
+    width: auto;
+    margin: 0;
+
+    :deep(img.card) {
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+    }
   }
 }
 
 .pick, :deep(.pick) {
   cursor: pointer;
-  flex-basis: 20%;
 }
 
 .focused-tokens {
