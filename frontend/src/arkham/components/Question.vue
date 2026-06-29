@@ -179,7 +179,7 @@ const focusedCardGroups = computed<SearchedCardGroup[]>(() => {
 
   const grouped = new Map<string, ArkhamCard[]>()
   for (const card of focusedCards.value) {
-    const label = focusedCardSourceLabel(toCardContents(card).id) ?? t('cards')
+    const label = focusedCardSourceLabel(toCardContents(card).id) ?? t('choice.cards')
     grouped.set(label, [...(grouped.get(label) ?? []), card])
   }
 

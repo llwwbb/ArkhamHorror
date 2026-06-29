@@ -194,14 +194,12 @@ const title = computed(() => {
   margin: 0;
 }
 
-/* 手机 shell：停靠在底部导航上方，不遮地图（spec §4）。
-   --mobile-nav-height 由 MobilePlayLayout 提供（停靠版渲染在其子树内）。 */
+/* 手机 shell：入流停靠在底部抽屉之上（MobilePlayLayout 的 .mobile-choice-dock 槽内，spec §4）。
+   不再 position:fixed，避免浮在手牌/角色抽屉之上把它们盖住；高度上限 + 自身滚动，
+   空间紧张时由父级槽收缩。 */
 .choice-dock {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--mobile-nav-height, 56px) + env(safe-area-inset-bottom, 0px));
-  z-index: 5000;
+  width: 100%;
+  box-sizing: border-box;
   max-height: 45dvh;
   overflow-y: auto;
   overscroll-behavior: contain;

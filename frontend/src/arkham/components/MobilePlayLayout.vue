@@ -72,12 +72,18 @@ const playersOpen = ref(false)
 const bottomDockTarget = '#mobile-bottom-drawer-dock'
 providePhoneShell({ handOpen, playersOpen, bottomDockTarget })
 const bottomDockEl = ref<HTMLElement | null>(null)
+const choiceDockEl = ref<HTMLElement | null>(null)
 const bottomDockHeight = ref(0)
-let bottomDockResizeObserver: ResizeObserver | null = null
-const quickActionsBottom = computed(() => quickActionsBottomOffset(bottomDockHeight.value))
+const choiceDockHeight = ref(0)
+let dockResizeObserver: ResizeObserver | null = null
+// 跳过/结束回合快捷条浮在底部整叠（选择浮窗 + 抽屉）之上：偏移取两者高度之和
+const quickActionsBottom = computed(() =>
+  quickActionsBottomOffset(bottomDockHeight.value + choiceDockHeight.value),
+)
 
-function updateBottomDockHeight() {
+function updateDockHeights() {
   bottomDockHeight.value = bottomDockEl.value?.getBoundingClientRect().height ?? 0
+  choiceDockHeight.value = choiceDockEl.value?.getBoundingClientRect().height ?? 0
 }
 
 type DrawerName = 'log' | 'hand' | 'players'
@@ -224,20 +230,19 @@ watch(handOpen, (open) => {
 
 watch([handOpen, playersOpen], async () => {
   await nextTick()
-  updateBottomDockHeight()
+  updateDockHeights()
 })
 
 onMounted(() => {
-  updateBottomDockHeight()
-  if (bottomDockEl.value) {
-    bottomDockResizeObserver = new ResizeObserver(updateBottomDockHeight)
-    bottomDockResizeObserver.observe(bottomDockEl.value)
-  }
+  updateDockHeights()
+  dockResizeObserver = new ResizeObserver(updateDockHeights)
+  if (bottomDockEl.value) dockResizeObserver.observe(bottomDockEl.value)
+  if (choiceDockEl.value) dockResizeObserver.observe(choiceDockEl.value)
 })
 
 onUnmounted(() => {
-  bottomDockResizeObserver?.disconnect()
-  bottomDockResizeObserver = null
+  dockResizeObserver?.disconnect()
+  dockResizeObserver = null
 })
 
 function runMenuItem(action: () => void) {
@@ -247,7 +252,7 @@ function runMenuItem(action: () => void) {
 </script>
 
 <template>
-  <!-- mobile-play--question：有待选 Question 时的样式钩子，当前无消费者（停靠版 ChoiceModal 自带 fixed 定位） -->
+  <!-- mobile-play--question：有待选 Question 时的样式钩子，当前无消费者（停靠版 ChoiceModal 入流停靠，不占浮层） -->
   <div class="mobile-play" :class="{ 'mobile-play--question': hasQuestion }">
     <header class="mobile-top-bar">
       <MobilePhaseBar v-if="inPlay" :game="game" class="top-bar-phases" />
@@ -292,6 +297,19 @@ function runMenuItem(action: () => void) {
       />
     </main>
 
+    <!-- 停靠版 Question：入流停靠在底部抽屉之上（不再 fixed 浮层，避免遮住手牌/角色抽屉，spec §4）。
+         镜像桌面挂载语义——只为本玩家渲染（旁观者无，桌面 Player 内 ChoiceModal 同理），且战役
+         间章（CampaignPhase）不渲染（桌面此时 Player 未挂载，问题由 StoryQuestion/Campaign UI 呈现）。 -->
+    <div ref="choiceDockEl" class="mobile-choice-dock">
+      <ChoiceModal
+        v-if="ownInvestigator && scenarioBoardActive"
+        docked
+        :game="game"
+        :playerId="playerId"
+        @choose="emit('choose', $event)"
+      />
+    </div>
+
     <nav class="mobile-nav">
       <button
         type="button"
@@ -317,17 +335,6 @@ function runMenuItem(action: () => void) {
         <DocumentTextIcon aria-hidden="true" />{{ $t('mobileShell.log') }}
       </button>
     </nav>
-
-    <!-- 停靠版 Question：镜像桌面的挂载语义——只为本玩家渲染（旁观者无，桌面 Player 内
-         ChoiceModal 同理），且战役间章（CampaignPhase）不渲染（桌面此时 Player 未挂载，
-         问题由 StoryQuestion/Campaign UI 呈现，停靠版会重复）。 -->
-    <ChoiceModal
-      v-if="ownInvestigator && scenarioBoardActive"
-      docked
-      :game="game"
-      :playerId="playerId"
-      @choose="emit('choose', $event)"
-    />
 
     <OverlayDrawer
       v-if="ownInvestigator"
@@ -362,8 +369,7 @@ function runMenuItem(action: () => void) {
     </OverlayDrawer>
 
     <!-- 快捷操作条：把藏在角色抽屉里的高频文字选项（跳过/结束回合）提到 shell 层（文字按钮一步直达原则）。
-         choice-dock(z-index:5000) 与本条(5001)同时出现时快捷条在上仍可点击；两者同时出现的
-         概率极低（dock 出现时通常无 skip 选项），接受极小重叠风险。 -->
+         bottom 偏移 = 选择浮窗高度 + 抽屉高度，浮在底部整叠之上，不与入流的 choice-dock/抽屉重叠。 -->
     <div
       v-if="skipIdx !== -1 || endTurnIdx !== -1"
       class="quick-actions"
@@ -455,6 +461,7 @@ function runMenuItem(action: () => void) {
 
 .mobile-top-bar {
   order: 0;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -510,14 +517,25 @@ function runMenuItem(action: () => void) {
   overflow-x: hidden;
 }
 
-.mobile-bottom-drawer-dock {
+/* 选择浮窗入流停靠：排在底部抽屉之上、地图之下。空间紧张时先于抽屉收缩（自身滚动），
+   保证 nav/header 不被挤出。空（无待选）时高度为 0，不占位。 */
+.mobile-choice-dock {
   order: 2;
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-bottom-drawer-dock {
+  order: 3;
   flex: 0 0 auto;
   min-height: 0;
 }
 
 .mobile-nav {
-  order: 3;
+  order: 4;
+  flex-shrink: 0;
   display: flex;
   height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -630,7 +648,7 @@ function runMenuItem(action: () => void) {
   left: 0;
   right: 0;
   bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
-  z-index: 5001; /* choice-dock(5000) 之上、抽屉(10000) 之下 */
+  z-index: 5001; /* 入流的 choice-dock/抽屉之上、body 浮层抽屉(10000) 之下 */
   display: flex;
   gap: 8px;
   padding: 6px 10px;
