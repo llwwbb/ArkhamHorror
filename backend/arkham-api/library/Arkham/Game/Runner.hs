@@ -108,7 +108,7 @@ import Arkham.Matcher hiding (
 import Arkham.Message qualified as Msg
 import Arkham.Message.Lifted (removeLocation)
 import Arkham.Message.Lifted qualified as Lifted
-import Arkham.Modifier (Modifier (Modifier, modifierSource, modifierType), ModifierType (AsIfInHandFor))
+import Arkham.Modifier (Modifier (Modifier, modifierSource, modifierType))
 import Arkham.Movement
 import Arkham.Name
 import Arkham.Phase
