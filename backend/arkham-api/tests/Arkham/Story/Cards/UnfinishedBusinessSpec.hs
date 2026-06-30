@@ -4,10 +4,30 @@ import Arkham.Enemy.Cards qualified as Enemies
 import Arkham.Matcher
 import Arkham.Placement
 import Arkham.Story.Cards qualified as Stories
+import TestImport qualified as TI
 import TestImport.New
 
 spec :: Spec
 spec = describe "Unfinished Business" $ do
+  it "uses printed extended-letter art for its threat-area side" do
+    map (.otherSide)
+      [ Stories.unfinishedBusiness_B
+      , Stories.unfinishedBusiness_D
+      , Stories.unfinishedBusiness_F
+      , Stories.unfinishedBusiness_H
+      , Stories.unfinishedBusiness_J
+      , Stories.unfinishedBusiness_L
+      ]
+      `TI.shouldBe` map
+        Just
+        [ "05178b"
+        , "05178d"
+        , "05178f"
+        , "05178h"
+        , "05178j"
+        , "05178l"
+        ]
+
   -- Errata (FAQ v1.6): "Keep this card in your threat area (this side faceup).
   -- If you are eliminated, flip it over." The card must flip back to its Heretic
   -- side rather than leaving play with the eliminated investigator.
