@@ -24,19 +24,17 @@ module Api.Handler.Arkham.Events (
 import Api.Arkham.Epic (applyEpicDeltasLocked, modifySharedStateLocked)
 import Api.Arkham.Helpers
 import Api.Arkham.Types.MultiplayerVariant (MultiplayerVariant (WithFriends))
-import Api.Handler.Arkham.Games.Shared (broadcastSharedToEvent, deleteEventRoom, deleteRoom, getEventGroupActClues, getEventGroupGameIds, propagateShared, runMessagesInGroup, runMessagesInGroupWhen, streamRoom)
-import Arkham.Act.Sequence qualified as AS
-import Arkham.Act.Types (actSequence)
+import Api.Handler.Arkham.Games.Shared (broadcastSharedToEvent, deleteEventRoom, deleteRoom, getEventGroupContributions, getEventGroupGameIds, propagateShared, runMessagesInGroupWhen, settleOrganizerAdvance, streamRoom)
 import Arkham.Agenda.Cards qualified as Agendas
 import Arkham.Agenda.Sequence qualified as Agenda
 import Arkham.Agenda.Types (agendaSequence)
 import Arkham.Card.CardCode (CardCode (..))
 import Arkham.Difficulty (Difficulty)
-import Arkham.Entities (entitiesActs, entitiesAgendas)
+import Arkham.Entities (entitiesAgendas)
 import Arkham.Epic.Types
 import Arkham.Classes.Entity (attr)
 import Arkham.Game (Game, gameEntities, gameGameState, newScenario, setInitialScenarioMeta)
-import Arkham.Message (Message (AdvanceToAgenda, ResolveEpicActAdvance))
+import Arkham.Message (Message (AdvanceToAgenda))
 import Arkham.Source (Source (GameSource))
 import Arkham.Game.State (GameState)
 import Arkham.Game.Utils (gameInvestigators)
@@ -51,7 +49,7 @@ import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Traversable (for)
 import Data.UUID qualified as UUID
 import Data.UUID.V4 (nextRandom)
-import Database.Esqueleto.Experimental hiding (update, (=.))
+import Database.Esqueleto.Experimental hiding (isNothing, update, (=.))
 import Database.Persist qualified as P
 import Entity.Arkham.Step (ActionDiff (..), ArkhamStep (..), Choice (..))
 import Import hiding (on, (==.))
@@ -87,7 +85,7 @@ data CounterPost = CounterPost
   deriving stock (Show, Generic)
   deriving anyclass FromJSON
 
--- | One group's spend in an organizer-resolved act-clue advance.
+-- | One group's organizer-allocated spend toward a stage advance.
 data AllocationEntry = AllocationEntry
   { ordinal :: Int
   , spend :: Int
@@ -95,7 +93,8 @@ data AllocationEntry = AllocationEntry
   deriving stock (Show, Generic)
   deriving anyclass FromJSON
 
--- | The organizer's full allocation for a stage's shared act-clue advance.
+-- | Body of @POST events/{id}/resolve-advance@: the organizer's per-group spend
+-- allocation for a stage awaiting resolution.
 data ResolveAdvancePost = ResolveAdvancePost
   { stage :: Int
   , allocation :: [AllocationEntry]
@@ -127,11 +126,6 @@ data GroupDigest = GroupDigest
   -- also plays can drop into it).
   , players :: [GroupPlayerInfo]
   -- ^ seated players (username + chosen investigator) for the dashboard.
-  , actStage :: Maybe Int
-  -- ^ the group's current act stage (the act deck's stage), so the organizer UI
-  -- can build the shared act-clue advance allocation. Nothing before setup.
-  , actClues :: Maybe Int
-  -- ^ clues currently on that act.
   }
   deriving stock (Show, Generic)
   deriving anyclass ToJSON
@@ -366,16 +360,18 @@ postApiV1ArkhamEventReadyR eid = do
           else s'
     broadcastSharedToEvent eid newState
 
-{- | The organizer resolves an EXCESS shared act-clue advance (set by the
-coordinator when a stage's shared pool overshot 2 * sharedTotalInvestigators):
-they choose how many clues each group spends toward the threshold; the remainder
-on each act is distributed to that group's investigators.
+{- | Organizer-mediated excess-clue distribution on a shared act advance. The
+coordinator has gated the stage with @AwaitingOrganizer stage == 1@; the organizer
+allocates how many of each group's contributed clues are spent toward the
+threshold. 200 with empty body — the result is pushed over the websocket.
 
-Validates that the spends sum to exactly the threshold and that no group spends
-more than the clues on its own stage-@stage@ act (nor a negative amount). Pushes
-'ResolveEpicActAdvance' to each allocated group, then directly resets the shared
-pool to 0 AND clears the pending flag (a single direct-set — the server owns the
-pool; the per-group handler must not touch it), and broadcasts the new state.
+Validation is server-side from the current shared state: every @spend@ in
+@[0, that group's contribution]@ and @sum spend == 2 * sharedTotalInvestigators@.
+The authoritative consume (write per-group 'ActSpend', reset the pool, bump the
+generation, clear the gate) + the replica mirror + the global undo floor + the
+overlay-lifting broadcast all happen in 'settleOrganizerAdvance', which is atomic
+and idempotent against a double-submit. NO gameplay message is injected into any
+group; the parked act reads its own 'ActSpend' from its mirrored replica.
 -}
 postApiV1ArkhamEventResolveAdvanceR :: ArkhamEpicEventId -> Handler ()
 postApiV1ArkhamEventResolveAdvanceR eid = do
@@ -386,28 +382,23 @@ postApiV1ArkhamEventResolveAdvanceR eid = do
   case mEvent of
     Nothing -> notFound
     Just event -> do
-      let threshold = 2 * sharedTotalInvestigators (arkhamEpicEventSharedState event)
-      groupClues <- getEventGroupActClues eid stage
       let
-        cluesByOrdinal = Map.fromList [(ordinal, clues) | (ordinal, _gid, clues) <- groupClues]
-        gameByOrdinal = Map.fromList [(ordinal, gid) | (ordinal, gid, _clues) <- groupClues]
-        totalSpend = sum [entry.spend | entry <- allocation]
-        invalidEntry entry =
-          entry.spend < 0
-            || entry.spend > Map.findWithDefault 0 entry.ordinal cluesByOrdinal
+        shared0 = arkhamEpicEventSharedState event
+        threshold = 2 * sharedTotalInvestigators shared0
+      when (sharedCounter (AwaitingOrganizer stage) shared0 /= 1)
+        $ invalidArgs ["No advance awaiting organizer for this stage"]
+      contributions <- getEventGroupContributions eid stage
+      let
+        contribMap = Map.fromList contributions
+        -- Aggregate by ordinal so duplicate entries can't defeat a per-group cap.
+        spendByOrdinal = Map.fromListWith (+) [(entry.ordinal, entry.spend) | entry <- allocation]
+        totalSpend = sum (Map.elems spendByOrdinal)
+        invalidGroup (ordinal, spend) = spend < 0 || spend > Map.findWithDefault 0 ordinal contribMap
       when (totalSpend /= threshold)
         $ invalidArgs ["Allocation must spend exactly " <> tshow threshold <> " clues"]
-      when (any invalidEntry allocation)
-        $ invalidArgs ["A group's spend is negative or exceeds the clues on its act"]
-      for_ allocation \entry ->
-        for_ (Map.lookup entry.ordinal gameByOrdinal) \gid ->
-          runMessagesInGroup [ResolveEpicActAdvance stage entry.spend] gid
-      newState <-
-        runDB
-          $ modifySharedStateLocked
-            eid
-            (setSharedCounter (SharedActProgress stage) 0 . setSharedCounter (PendingActAdvance stage) 0)
-      broadcastSharedToEvent eid newState
+      when (any invalidGroup (Map.toList spendByOrdinal))
+        $ invalidArgs ["A group's spend is negative or exceeds its contribution"]
+      settleOrganizerAdvance eid stage spendByOrdinal
 
 -- | Whether any agenda currently in play in the group's game is at or past
 -- @stage@. Used as the in-lock idempotency guard for the time-up forcing: a group
@@ -418,15 +409,6 @@ agendaAtOrPastStage stage game =
   any
     (\ag -> Agenda.agendaSequenceStep (attr agendaSequence ag) >= stage)
     (toList (entitiesAgendas (gameEntities game)))
-
--- | The current act's (stage, clues) in a group's game, for the dashboard /
--- organizer allocation UI. Acts in play is normally a singleton; takes the first.
-currentActStageClues :: Game -> Maybe (Int, Int)
-currentActStageClues game =
-  case toList (entitiesActs (gameEntities game)) of
-    [] -> Nothing
-    (act : _) ->
-      Just (AS.unActStep (AS.actStep (attr actSequence act)), attr (.clues) act)
 
 -- Helpers ---------------------------------------------------------------------
 
@@ -486,8 +468,6 @@ mkGroupDigest userId (Entity _ grp) = case arkhamEpicGroupArkhamGameId grp of
         , seatCount = seats
         , youAreSeated = False
         , players = []
-        , actStage = Nothing
-        , actClues = Nothing
         }
   Just gid -> do
     mGame <- runDB $ P.get gid
@@ -509,7 +489,6 @@ mkGroupDigest userId (Entity _ grp) = case arkhamEpicGroupArkhamGameId grp of
         [ GroupPlayerInfo {username = un, investigatorId = Map.lookup (PlayerId (coerce pid)) invByPlayer}
         | (Value pid, Value un) <- playerRows
         ]
-      mActInfo = currentActStageClues . arkhamGameCurrentData =<< mGame
     pure
       GroupDigest
         { ordinal = ordx
@@ -520,8 +499,6 @@ mkGroupDigest userId (Entity _ grp) = case arkhamEpicGroupArkhamGameId grp of
         , seatCount = seats
         , youAreSeated = seated
         , players = players
-        , actStage = fst <$> mActInfo
-        , actClues = snd <$> mActInfo
         }
  where
   ordx = arkhamEpicGroupOrdinal grp

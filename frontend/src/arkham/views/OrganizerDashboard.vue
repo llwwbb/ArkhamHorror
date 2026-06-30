@@ -11,7 +11,8 @@ import { imgsrc, buildShareableUrl } from '@/arkham/helpers'
 import { useEpicHelpers } from '@/arkham/composables/useEpicHelpers'
 import { useEventTimer } from '@/arkham/composables/useEventTimer'
 import {
-  activePendingAdvanceStage,
+  actContribution,
+  activeAwaitingStage,
   counterValue,
   TOTAL_INVESTIGATORS,
   type GroupDigest,
@@ -54,57 +55,78 @@ const isOrganizer = computed(() => event.value?.role === 'organizer')
 const committed = computed(() => groupDigests.value.some((g) => g.youAreSeated))
 
 // --- Shared act-advance allocation ------------------------------------------
-// When the shared clue pool EXCEEDS the threshold the backend sets
-// `pending-act-advance:<stage>` and waits for the organizer to choose which groups
-// spend. We detect the stage by scanning the shared counters (no need to know it
-// up front), and require the chosen spends to total exactly `2 * total-investigators`.
-const pendingStage = computed(() => activePendingAdvanceStage(sharedState.value))
+// When the pooled clues EXCEED the threshold the backend sets
+// `awaiting-organizer:<stage>` and waits for the organizer to choose which groups
+// spend. We detect the stage by scanning the shared counters, and require the
+// chosen spends to total exactly `2 * total-investigators`, each within that
+// group's contribution (`act-contribution:<stage>:<ordinal>`).
+const awaitingStage = computed(() => activeAwaitingStage(sharedState.value))
 
 const totalInvestigators = computed(
   () => counterValue(sharedState.value, TOTAL_INVESTIGATORS) || sharedState.value.sharedTotalInvestigators,
 )
 const advanceThreshold = computed(() => 2 * totalInvestigators.value)
 
-// Per-group spend, keyed by ordinal. The clamp/cap helper keeps reads safe.
-const spendByOrdinal = ref<Record<number, number>>({})
+// Each group's cap = its contribution to the pending stage's pool. Read straight
+// from the shared counters (no GroupDigest field needed).
 function groupCap(group: GroupDigest): number {
-  return Math.max(0, group.actClues ?? 0)
+  const stage = awaitingStage.value
+  if (stage === null) return 0
+  return Math.max(0, actContribution(sharedState.value, stage, group.ordinal))
 }
+
+// Per-group spend, keyed by ordinal.
+const spendByOrdinal = ref<Record<number, number>>({})
 function spendFor(group: GroupDigest): number {
   return spendByOrdinal.value[group.ordinal] ?? 0
 }
-
-// When a pending advance appears, greedily pre-fill a valid starting allocation
-// (fill each group up to its clues until the threshold is met) the organizer can
-// then tweak. Keyed ONLY on the stage transition so live clue updates over the ws
-// don't clobber the organizer's in-progress edits. Cleared when nothing is pending.
-watch(
-  pendingStage,
-  (stage) => {
-    if (stage === null) {
-      spendByOrdinal.value = {}
-      return
-    }
-    let remaining = advanceThreshold.value
-    const next: Record<number, number> = {}
-    for (const g of groupDigests.value) {
-      const take = Math.min(groupCap(g), Math.max(0, remaining))
-      next[g.ordinal] = take
-      remaining -= take
-    }
-    spendByOrdinal.value = next
-  },
-  { immediate: true },
-)
 
 const totalSpend = computed(() =>
   groupDigests.value.reduce((sum, g) => sum + (Number(spendByOrdinal.value[g.ordinal]) || 0), 0),
 )
 
-// Valid when every group's spend is a whole number within [0, its clues] and the
-// total equals the threshold exactly.
+// Sum of every group's contribution cap for the pending stage. Drives both the
+// initial seed and a re-seed if contributions land in a later shared-state tick.
+const capsTotal = computed(() =>
+  awaitingStage.value === null ? 0 : groupDigests.value.reduce((sum, g) => sum + groupCap(g), 0),
+)
+
+// Greedily fill each group up to its contribution until the threshold is met.
+function prefillAllocation() {
+  let remaining = advanceThreshold.value
+  const next: Record<number, number> = {}
+  for (const g of groupDigests.value) {
+    const take = Math.min(groupCap(g), Math.max(0, remaining))
+    next[g.ordinal] = take
+    remaining -= take
+  }
+  spendByOrdinal.value = next
+}
+
+// Seed a valid starting allocation the organizer can tweak. Keyed on the stage AND
+// the caps total, with `immediate`, so it fills:
+//   * on mount even when the dashboard is opened AFTER the gate was already set
+//     (no stage transition fires otherwise), and
+//   * again if a group's contribution arrives in a later shared-state tick.
+// It only (re)seeds while nothing has been entered yet (totalSpend === 0), so live
+// updates can never clobber the organizer's in-progress edits. Cleared when nothing
+// is pending.
+watch(
+  [awaitingStage, capsTotal],
+  () => {
+    if (awaitingStage.value === null) {
+      spendByOrdinal.value = {}
+      return
+    }
+    if (totalSpend.value === 0 && capsTotal.value > 0) prefillAllocation()
+  },
+  { immediate: true },
+)
+
+// Valid when every group's spend is a whole number within [0, its contribution] and
+// the total equals the threshold exactly.
 const allocationValid = computed(() => {
-  if (pendingStage.value === null || advanceThreshold.value <= 0) return false
+  if (awaitingStage.value === null || advanceThreshold.value <= 0) return false
   if (totalSpend.value !== advanceThreshold.value) return false
   return groupDigests.value.every((g) => {
     const v = Number(spendByOrdinal.value[g.ordinal] ?? 0)
@@ -114,14 +136,14 @@ const allocationValid = computed(() => {
 
 const submittingAllocation = ref(false)
 async function submitAllocation() {
-  const stage = pendingStage.value
+  const stage = awaitingStage.value
   if (stage === null || !allocationValid.value || submittingAllocation.value) return
   submittingAllocation.value = true
   const allocation = groupDigests.value.map((g) => ({ ordinal: g.ordinal, spend: spendFor(g) }))
   try {
     await resolveEventAdvance(props.id, stage, allocation)
-    // Backend resets the pool + clears the flag; the event ws pushes the update,
-    // which flips pendingStage to null and tears down the panel.
+    // Backend clears the gate + resets the pool; the event ws pushes the update,
+    // which flips awaitingStage to null and tears down the panel.
   } catch (e) {
     console.error(e)
   } finally {
@@ -251,9 +273,9 @@ onUnmounted(() => {
     <template v-else>
       <p v-if="socketError" class="socket-error">{{ $t('event.disconnected') }}</p>
 
-      <section v-if="isOrganizer && pendingStage !== null" class="advance-panel">
+      <section v-if="isOrganizer && awaitingStage !== null" class="advance-panel">
         <header class="advance-header">
-          <h3>{{ $t('event.allocateAdvance', { stage: pendingStage }) }}</h3>
+          <h3>{{ $t('event.allocateAdvance', { stage: awaitingStage }) }}</h3>
           <p class="advance-hint">{{ $t('event.allocateAdvanceHint', { threshold: advanceThreshold }) }}</p>
         </header>
 
@@ -275,7 +297,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <footer class="advance-footer">
+        <div class="advance-footer">
           <span class="advance-total" :class="{ invalid: totalSpend !== advanceThreshold }">
             {{ $t('event.allocateTotal', { total: totalSpend, threshold: advanceThreshold }) }}
           </span>
@@ -287,7 +309,7 @@ onUnmounted(() => {
           >
             {{ $t('event.confirmAdvance') }}
           </button>
-        </footer>
+        </div>
       </section>
 
       <section class="groups">

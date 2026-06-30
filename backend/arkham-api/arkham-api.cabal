@@ -817,6 +817,7 @@ library
       Arkham.Ai.Decks
       Arkham.Ai.Focus
       Arkham.Ai.Helpers
+      Arkham.Ai.Model
       Arkham.Ai.Orphans
       Arkham.Ai.Questions
       Arkham.Ai.State
@@ -6584,6 +6585,7 @@ library
       Entity.Arkham.Game
       Entity.Arkham.GameRaw
       Entity.Arkham.LogEntry
+      Entity.Arkham.MlDecision
       Entity.Arkham.Player
       Entity.Arkham.Step
       Entity.Notification
@@ -6770,6 +6772,110 @@ executable arkham-api
   if flag(library-only)
     buildable: False
 
+executable arkham-extract
+  main-is: Main.hs
+  other-modules:
+      Paths_arkham_api
+  hs-source-dirs:
+      app-extract
+  default-extensions:
+      AllowAmbiguousTypes
+      BlockArguments
+      DataKinds
+      DeriveAnyClass
+      DerivingStrategies
+      DerivingVia
+      ExtendedDefaultRules
+      FunctionalDependencies
+      GADTs
+      LambdaCase
+      MultiWayIf
+      NoImplicitPrelude
+      NoMonomorphismRestriction
+      OverloadedLabels
+      OverloadedRecordDot
+      OverloadedStrings
+      PatternSynonyms
+      RecordWildCards
+      StrictData
+      TypeFamilies
+      TypeFamilyDependencies
+      TypeOperators
+      UndecidableInstances
+      ViewPatterns
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-tool-depends:
+      cards-discover:cards-discover
+  build-depends:
+      MonadRandom
+    , aeson
+    , aeson-diff
+    , arkham-api
+    , base
+    , bytestring
+    , containers
+    , deepseq
+    , hs-opentelemetry-sdk
+    , monad-logger
+    , persistent
+    , persistent-postgresql
+    , text
+    , transformers
+    , unliftio
+    , vector
+  default-language: GHC2021
+  if flag(library-only)
+    buildable: False
+
+executable arkham-ml-export
+  main-is: Main.hs
+  other-modules:
+      Paths_arkham_api
+  hs-source-dirs:
+      app-ml-export
+  default-extensions:
+      AllowAmbiguousTypes
+      BlockArguments
+      DataKinds
+      DeriveAnyClass
+      DerivingStrategies
+      DerivingVia
+      ExtendedDefaultRules
+      FunctionalDependencies
+      GADTs
+      LambdaCase
+      MultiWayIf
+      NoImplicitPrelude
+      NoMonomorphismRestriction
+      OverloadedLabels
+      OverloadedRecordDot
+      OverloadedStrings
+      PatternSynonyms
+      RecordWildCards
+      StrictData
+      TypeFamilies
+      TypeFamilyDependencies
+      TypeOperators
+      UndecidableInstances
+      ViewPatterns
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-tool-depends:
+      cards-discover:cards-discover
+  build-depends:
+      aeson
+    , arkham-api
+    , base
+    , bytestring
+    , containers
+    , monad-logger
+    , persistent
+    , persistent-postgresql
+    , text
+    , vector
+  default-language: GHC2021
+  if flag(library-only)
+    buildable: False
+
 executable arkham-replay
   main-is: Main.hs
   other-modules:
@@ -6812,6 +6918,51 @@ executable arkham-replay
     , bytestring
     , hs-opentelemetry-sdk
     , text
+  default-language: GHC2021
+  if flag(library-only)
+    buildable: False
+
+executable arkham-self-play
+  main-is: Main.hs
+  other-modules:
+      Paths_arkham_api
+  hs-source-dirs:
+      app-self-play
+  default-extensions:
+      AllowAmbiguousTypes
+      BlockArguments
+      DataKinds
+      DeriveAnyClass
+      DerivingStrategies
+      DerivingVia
+      ExtendedDefaultRules
+      FunctionalDependencies
+      GADTs
+      LambdaCase
+      MultiWayIf
+      NoImplicitPrelude
+      NoMonomorphismRestriction
+      OverloadedLabels
+      OverloadedRecordDot
+      OverloadedStrings
+      PatternSynonyms
+      RecordWildCards
+      StrictData
+      TypeFamilies
+      TypeFamilyDependencies
+      TypeOperators
+      UndecidableInstances
+      ViewPatterns
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-tool-depends:
+      cards-discover:cards-discover
+  build-depends:
+      MonadRandom
+    , arkham-api
+    , base
+    , containers
+    , hs-opentelemetry-sdk
+    , uuid
   default-language: GHC2021
   if flag(library-only)
     buildable: False
@@ -6922,9 +7073,11 @@ test-suite spec
       Arkham.Campaign.ThePathToCarcosa.ScenariosSpec
       Arkham.Campaign.UsedAbilitiesSpec
       Arkham.DecklistSpec
+      Arkham.Enemy.Cards.DagonsBroodSpec
       Arkham.Enemy.Cards.GuardianOfTheCrystallizerSpec
       Arkham.Enemy.Cards.JeanDevereuxSeekingClosureSpec
       Arkham.Enemy.Cards.MobEnforcerSpec
+      Arkham.Enemy.Cards.MoonBeastSpec
       Arkham.Enemy.Cards.SilverTwilightAcolyteSpec
       Arkham.Enemy.Cards.StalkingHybridSpec
       Arkham.Enemy.Cards.StubbornDetectiveSpec
@@ -6969,6 +7122,7 @@ test-suite spec
       Arkham.Event.Events.OopsSpec
       Arkham.Event.Events.PredatorOrPreySpec
       Arkham.Event.Events.RefineSpec
+      Arkham.Event.Events.RightUnderTheirNosesSpec
       Arkham.Event.Events.SearchForTheTruthSpec
       Arkham.Event.Events.SeekingAnswersSpec
       Arkham.Event.Events.SneakAttackSpec

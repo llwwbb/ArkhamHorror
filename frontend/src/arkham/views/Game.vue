@@ -14,6 +14,7 @@ import { eventTimeUp, markEventReady } from '@/arkham/api'
 import { useCardStore } from '@/stores/cards'
 import { useSettings } from '@/stores/settings'
 import { useEventStore } from '@/arkham/stores/event'
+import { awaitingOrganizer } from '@/arkham/types/EpicEvent'
 import { useMenu } from '@/composable/menu'
 import useEmitter from '@/composable/useEmitter'
 import { useDebug } from '@/arkham/debug'
@@ -40,6 +41,8 @@ import Settings from '@/arkham/components/Settings.vue'
 import OrganizerBar from '@/arkham/components/OrganizerBar.vue'
 import PlayerEventBar from '@/arkham/components/PlayerEventBar.vue'
 import EventStartBarrier from '@/arkham/components/EventStartBarrier.vue'
+import EventActAdvanceBarrier from '@/arkham/components/EventActAdvanceBarrier.vue'
+import StandaloneScenario from '@/arkham/components/StandaloneScenario.vue'
 import AiControlPanel from '@/arkham/components/AiControlPanel.vue'
 import Draggable from '@/components/Draggable.vue'
 import GameBar from '@/arkham/components/GameBar.vue'
@@ -229,6 +232,13 @@ const currentActStage = computed<number | null>(() => {
   const acts = game.value ? Object.values(game.value.acts) : []
   return acts.length > 0 ? acts[0].sequence.number : null
 })
+
+const showActAdvanceWait = computed(
+  () =>
+    !!timerEventId.value &&
+    currentActStage.value !== null &&
+    awaitingOrganizer(eventStore.sharedState, currentActStage.value) > 0,
+)
 
 const reachedInvestigation = computed(() => {
   const g = game.value
@@ -526,6 +536,7 @@ onUnmounted(() => {
       />
     </div>
     <EventStartBarrier v-if="showStartBarrier" />
+    <EventActAdvanceBarrier v-if="showActAdvanceWait" :organizer-event-id="organizerEventId" />
     <MultiplayerLobby
       v-if="game.gameState.tag === 'IsPending'"
       :game-id="gameId"
