@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import UpgradeDeck from '@/arkham/components/UpgradeDeck.vue';
-import { EyeIcon, QuestionMarkCircleIcon, ViewColumnsIcon, ArchiveBoxXMarkIcon, ArrowPathIcon, LockClosedIcon, LockOpenIcon, ArrowUturnLeftIcon } from '@heroicons/vue/20/solid'
+import { EyeIcon, QuestionMarkCircleIcon, ViewColumnsIcon, ArchiveBoxXMarkIcon, ArrowPathIcon, LockClosedIcon, LockOpenIcon, ArrowUturnLeftIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/vue/20/solid'
 import {
   watchEffect,
   watch,
@@ -12,6 +12,7 @@ import {
   ref,
   ComputedRef,
   reactive,
+  provide
 } from 'vue';
 import { type Game } from '@/arkham/types/Game';
 import { type Scenario } from '@/arkham/types/Scenario';
@@ -19,7 +20,7 @@ import { type Enemy } from '@/arkham/types/Enemy';
 import { type ConcealedCard } from '@/arkham/types/ConcealedCard';
 import ConcealedCardView from '@/arkham/components/ConcealedCard.vue';
 import { type Position } from '@/arkham/types/Placement';
-import { type Card, cardId } from '@/arkham/types/Card';
+import { type Card, cardId, cardImage } from '@/arkham/types/Card';
 import { TarotCard, tarotCardImage } from '@/arkham/types/TarotCard';
 import { TokenType } from '@/arkham/types/Token';
 import { ModifierType, Hollow } from '@/arkham/types/Modifier';
@@ -38,7 +39,6 @@ import AbilityButton from '@/arkham/components/AbilityButton.vue'
 import Act from '@/arkham/components/Act.vue';
 import CardView from '@/arkham/components/Card.vue';
 import Draggable from '@/components/Draggable.vue';
-import OverlayDrawer from '@/components/OverlayDrawer.vue';
 import ChaosBag from '@/arkham/components/ChaosBag.vue';
 import Agenda from '@/arkham/components/Agenda.vue';
 import Investigator from '@/arkham/components/Investigator.vue';
@@ -64,8 +64,6 @@ import { useDebug, scenarioHasDebugOptions } from '@/arkham/debug'
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { IsMobile } from '@/arkham/isMobile';
-import { usePinchZoom } from '@/arkham/composables/usePinchZoom'
-import { usePhoneShell } from '@/arkham/composables/phoneShell'
 const { t } = useI18n();
 
 // types
@@ -86,7 +84,6 @@ export interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits(['choose', 'toggleRealityAcidLight'])
 const debug = useDebug()
-const phoneShell = usePhoneShell()
 const { addEntry, removeEntry } = useMenu()
 
 const upgradeDeck = computed(() => Object.values(props.game.question).some((q) => q.tag === 'ChooseUpgradeDeck'))
@@ -110,7 +107,10 @@ const showScenarioDebugOptions = ref(false)
 const realityAcidLightAnchor = ref<HTMLElement | null>(null)
 const realityAcidLightRect = reactive({ left: 0, top: 0, width: 0, height: 0 })
 const locationMap = ref<Element | null>(null)
+const locationCardsContainer = ref<HTMLElement | null>(null)
 const scrollerRef = ref<HTMLElement | null>(null)
+const hiddenLocationActionEdges = ref({ top: false, right: false, bottom: false, left: false })
+const hasHiddenLocationActionEdge = computed(() => Object.values(hiddenLocationActionEdges.value).some(Boolean))
 const viewingDiscard = ref(false)
 const revealingCards = ref(false)
 const cardRowTitle = ref("")
@@ -121,6 +121,11 @@ const legsSet = ref(["legs1", "legs2", "legs3", "legs4"])
 let legObserver: MutationObserver | null = null
 let cosmicEmissaryObserver: MutationObserver | null = null
 let cosmicEmissaryResizeObserver: ResizeObserver | null = null
+let hiddenLocationActionObserver: MutationObserver | null = null
+let hiddenLocationActionResizeObserver: ResizeObserver | null = null
+let hiddenLocationActionRaf: number | null = null
+let stagePan: { pointerId: number, startX: number, startY: number, scrollLeft: number, scrollTop: number, moved: boolean } | null = null
+let suppressNextStageClick = false
 let cosmicEmissaryCompactRequest: number | null = null
 let cosmicEmissaryCompactForce = false
 
@@ -196,6 +201,12 @@ function decreaseZoom() {
 }
 
 const locationsUnlocked = ref(false)
+const locationsFullscreen = ref(false)
+function onFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && locationsFullscreen.value) {
+    locationsFullscreen.value = false
+  }
+}
 const draggingLocationId = ref<string | null>(null)
 // Optimistic offsets after a drop, kept until the server echoes them back.
 // Stored in canonical (rotationSteps=0) coordinates, same as the backend.
@@ -526,7 +537,6 @@ function requestCosmicEmissaryCompact(force = false) {
 }
 
 const { isMobile } = IsMobile();
-usePinchZoom(scrollerRef, locationsZoom)
 
 function updateCosmicEmissaryAnimationSetting(value: string | null) {
   enableCosmicEmissaryAnimation.value = value !== 'false'
@@ -578,6 +588,115 @@ function proxyClippedLocationClick(event: MouseEvent) {
   }))
 }
 
+function onStagePointerDown(event: PointerEvent) {
+  if (event.button !== 0) return
+  const scroller = scrollerRef.value
+  if (!scroller) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest([
+    'button',
+    'a',
+    'input',
+    'select',
+    'textarea',
+    '[role="button"]',
+    '.card',
+    '.card-frame',
+    '.enemy',
+    '.enemy--outer',
+    '.swarm-button-wrap',
+    '.v-popper__popper',
+  ].join(', '))) return
+  if (scroller.scrollWidth <= scroller.clientWidth && scroller.scrollHeight <= scroller.clientHeight) return
+
+  stagePan = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    scrollLeft: scroller.scrollLeft,
+    scrollTop: scroller.scrollTop,
+    moved: false,
+  }
+  scroller.setPointerCapture(event.pointerId)
+}
+
+function onStagePointerMove(event: PointerEvent) {
+  if (!stagePan || stagePan.pointerId !== event.pointerId) return
+  const scroller = scrollerRef.value
+  if (!scroller) return
+  const dx = event.clientX - stagePan.startX
+  const dy = event.clientY - stagePan.startY
+  if (!stagePan.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) stagePan.moved = true
+  if (!stagePan.moved) return
+  event.preventDefault()
+  scroller.scrollLeft = stagePan.scrollLeft - dx
+  scroller.scrollTop = stagePan.scrollTop - dy
+}
+
+function onStagePointerUp(event: PointerEvent) {
+  if (!stagePan || stagePan.pointerId !== event.pointerId) return
+  const scroller = scrollerRef.value
+  if (scroller?.hasPointerCapture(event.pointerId)) scroller.releasePointerCapture(event.pointerId)
+  suppressNextStageClick = stagePan.moved
+  stagePan = null
+}
+
+function onStageClick(event: MouseEvent) {
+  if (!suppressNextStageClick) return
+  suppressNextStageClick = false
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function updateHiddenLocationActionEdges() {
+  const container = locationCardsContainer.value
+  if (!container) return
+
+  const bounds = container.getBoundingClientRect()
+  const next = { top: false, right: false, bottom: false, left: false }
+  const actionEls = Array.from(
+    container.querySelectorAll<HTMLElement>('.location-cell--can-interact, .can-interact, [class*="--can-interact"]')
+  )
+
+  for (const el of actionEls) {
+    const rect = el.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) continue
+
+    const style = getComputedStyle(el)
+    if (style.visibility === 'hidden' || style.display === 'none') continue
+
+    const isPartiallyVisible =
+      rect.right > bounds.left &&
+      rect.left < bounds.right &&
+      rect.bottom > bounds.top &&
+      rect.top < bounds.bottom
+    if (isPartiallyVisible) continue
+
+    if (rect.right <= bounds.left) next.left = true
+    if (rect.left >= bounds.right) next.right = true
+    if (rect.bottom <= bounds.top) next.top = true
+    if (rect.top >= bounds.bottom) next.bottom = true
+  }
+
+  const current = hiddenLocationActionEdges.value
+  if (
+    current.top !== next.top ||
+    current.right !== next.right ||
+    current.bottom !== next.bottom ||
+    current.left !== next.left
+  ) {
+    hiddenLocationActionEdges.value = next
+  }
+}
+
+function scheduleHiddenLocationActionEdgesUpdate() {
+  if (hiddenLocationActionRaf !== null) cancelAnimationFrame(hiddenLocationActionRaf)
+  hiddenLocationActionRaf = requestAnimationFrame(() => {
+    hiddenLocationActionRaf = null
+    updateHiddenLocationActionEdges()
+  })
+}
+
 // callbacks
 onMounted(() => {
   setGameId(props.game.id)
@@ -585,11 +704,27 @@ onMounted(() => {
   window.addEventListener('arkham-setting-change', onCosmicEmissarySettingChange)
   window.addEventListener('resize', updateRealityAcidLightRect)
   window.addEventListener('scroll', updateRealityAcidLightRect, true)
+  window.addEventListener('resize', scheduleHiddenLocationActionEdgesUpdate)
+  window.addEventListener('scroll', scheduleHiddenLocationActionEdgesUpdate, true)
   document.addEventListener('click', proxyClippedLocationClick, true)
+  window.addEventListener('keydown', onFullscreenKeydown)
   nextTick(updateRealityAcidLightRect)
   updateScrollMargins()
   updateCellDimensions()
   updateLayoutPadding()
+  nextTick(scheduleHiddenLocationActionEdgesUpdate)
+  if (locationCardsContainer.value) {
+    hiddenLocationActionObserver = new MutationObserver(scheduleHiddenLocationActionEdgesUpdate)
+    hiddenLocationActionObserver.observe(locationCardsContainer.value, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+      childList: true,
+      subtree: true,
+    })
+
+    hiddenLocationActionResizeObserver = new ResizeObserver(scheduleHiddenLocationActionEdgesUpdate)
+    hiddenLocationActionResizeObserver.observe(locationCardsContainer.value)
+  }
   if(props.scenario.id === "c10651") {
     nextTick(requestCosmicEmissaryCompact)
     setTimeout(requestCosmicEmissaryCompact, 100)
@@ -682,13 +817,24 @@ onBeforeUnmount(() => {
   window.removeEventListener('arkham-setting-change', onCosmicEmissarySettingChange)
   window.removeEventListener('resize', updateRealityAcidLightRect)
   window.removeEventListener('scroll', updateRealityAcidLightRect, true)
+  window.removeEventListener('resize', scheduleHiddenLocationActionEdgesUpdate)
+  window.removeEventListener('scroll', scheduleHiddenLocationActionEdgesUpdate, true)
   document.removeEventListener('click', proxyClippedLocationClick, true)
+  window.removeEventListener('keydown', onFullscreenKeydown)
   legObserver?.disconnect()
   legObserver = null
   cosmicEmissaryObserver?.disconnect()
   cosmicEmissaryObserver = null
   cosmicEmissaryResizeObserver?.disconnect()
   cosmicEmissaryResizeObserver = null
+  hiddenLocationActionObserver?.disconnect()
+  hiddenLocationActionObserver = null
+  hiddenLocationActionResizeObserver?.disconnect()
+  hiddenLocationActionResizeObserver = null
+  if (hiddenLocationActionRaf !== null) cancelAnimationFrame(hiddenLocationActionRaf)
+  hiddenLocationActionRaf = null
+  stagePan = null
+  suppressNextStageClick = false
   if (cosmicEmissaryCompactRequest !== null) cancelAnimationFrame(cosmicEmissaryCompactRequest)
   cosmicEmissaryCompactRequest = null
   cancelActiveDrag()
@@ -1205,6 +1351,7 @@ const unusedLabels = computed(() => {
   return locationLayout.flatMap((row) => row.split(' ')).filter((x) => !usedLabels.value.includes(x) && x !== '.')
 })
 const choices = useGameChoices(() => props.game, () => props.playerId)
+watch([choices, locations, locationsZoom], () => nextTick(scheduleHiddenLocationActionEdgesUpdate), { flush: 'post' })
 
 type LocationLike = { id: string, label: string }
 
@@ -1269,14 +1416,6 @@ const doShowCards = (cards: ComputedRef<Card[]>, title: string, isDiscards: bool
   revealingCards.value = revealed
 }
 const showRemovedFromPlay = () => doShowCards(removedFromPlay, t('scenario.removedFromPlay'), true)
-const showHollowed = () => doShowCards(hollowed, t('scenario.hollowed'), true)
-const handleHollowedChoose = (idx: number) => {
-  if (hollowed.value.length > 1) {
-    showHollowed()
-  } else {
-    choose(idx)
-  }
-}
 const showDiscards = () => doShowCards(discards, t('scenario.discards'), true)
 const hideCards = () => {
   showCards.ref = noCards
@@ -1718,6 +1857,14 @@ const tarotCardAbility = (card: TarotCard) => {
 }
 
 const victoryDisplay = computed(() => props.scenario.victoryDisplay)
+
+const isMinimized_SkillTest = ref(false)
+provide('isMinimized_SkillTest', isMinimized_SkillTest)
+function minimize_SkillTest(isMinimized:boolean){
+  if (isMobile) {
+    isMinimized_SkillTest.value = isMinimized
+  }
+}
 
 const blessTokens = computed(() => props.scenario.chaosBag.chaosTokens.filter((t) => t.face === 'BlessToken'
 ).length)
@@ -2286,8 +2433,60 @@ async function addChaosToken(face: any){
       </div>
 
 
-      <div class="location-cards-container" @dblclick.passive="toggleZoom">
-        <div class="location-cards-scroller" ref="scrollerRef">
+      <div
+        ref="locationCardsContainer"
+        class="location-cards-container"
+        :class="{
+          'location-cards-container--hidden-action': hasHiddenLocationActionEdge,
+          'location-cards-container--hidden-action-top': hiddenLocationActionEdges.top,
+          'location-cards-container--hidden-action-right': hiddenLocationActionEdges.right,
+          'location-cards-container--hidden-action-bottom': hiddenLocationActionEdges.bottom,
+          'location-cards-container--hidden-action-left': hiddenLocationActionEdges.left,
+          'location-cards-container--unlocked': locationsUnlocked,
+          'location-cards-container--fullscreen': locationsFullscreen,
+        }"
+        @dblclick.passive="toggleZoom"
+      >
+        <!-- ponytail: fullscreen mirror of the player-zone zoom-control; duplicated markup
+             beats prop-drilling ~10 handlers into a shared child. Keep the two in sync. -->
+        <div v-if="locationsFullscreen" class="zoom-control zoom-control--fullscreen">
+          <button class="zoom-btn" @pointerdown.stop="startHold(decreaseZoom)" @pointerup="stopHold" @pointerleave="stopHold">−</button>
+          <input v-model.number="locationsZoom" type="range" min="0.25" max="6" step="0.05" class="zoom-slider" />
+          <button class="zoom-btn" @pointerdown.stop="startHold(increaseZoom)" @pointerup="stopHold" @pointerleave="stopHold">+</button>
+          <button
+            class="zoom-btn"
+            :class="{ 'zoom-btn--active': locationsUnlocked }"
+            @click.stop="toggleLocationsUnlocked"
+            v-tooltip="locationsUnlocked ? 'Lock locations' : 'Unlock locations to drag'"
+          >
+            <LockOpenIcon v-if="locationsUnlocked" class="zoom-btn__icon" />
+            <LockClosedIcon v-else class="zoom-btn__icon" />
+          </button>
+          <button
+            v-if="hasAnyOffset"
+            class="zoom-btn"
+            @click.stop="resetLocationsLayout"
+            v-tooltip="'Reset location positions'"
+          >
+            <ArrowUturnLeftIcon class="zoom-btn__icon" />
+          </button>
+          <button
+            class="zoom-btn zoom-btn--active"
+            @click.stop="locationsFullscreen = false"
+            v-tooltip="'Exit fullscreen locations (Esc)'"
+          >
+            <ArrowsPointingInIcon class="zoom-btn__icon" />
+          </button>
+        </div>
+        <div
+          class="location-cards-scroller"
+          ref="scrollerRef"
+          @pointerdown="onStagePointerDown"
+          @pointermove="onStagePointerMove"
+          @pointerup="onStagePointerUp"
+          @pointercancel="onStagePointerUp"
+          @click.capture="onStageClick"
+        >
         <div class="location-cards-stage">
         <Connections :game="game" :playerId="playerId" :enableCosmicEmissaryAnimation="enableCosmicEmissaryAnimation" />
         <transition-group name="map" tag="div" ref="locationMap" class="location-cards" :css="props.scenario.id !== 'c10651'" :style="locationStyles" @before-leave="beforeLeave">
@@ -2399,17 +2598,7 @@ async function addChaosToken(face: any){
         </div>
       </div>
 
-      <!-- 手机 shell：player-zone 收进底部抽屉（keep-mounted 保持 PlayerTabs 状态）；
-           桌面 inline=true 原地透传渲染，零变化。 -->
-      <OverlayDrawer
-        :inline="!phoneShell"
-        :open="!!phoneShell?.playersOpen.value"
-        keep-mounted
-        side="bottom"
-        :dock-target="phoneShell?.bottomDockTarget"
-        @close="phoneShell && (phoneShell.playersOpen.value = false)"
-      >
-      <div id="player-zone">
+      <div id="player-zone" :class="{ 'player-zone--fullscreen': locationsFullscreen }">
         <PlayerTabs
           :game="game"
           :playerId="playerId"
@@ -2440,6 +2629,15 @@ async function addChaosToken(face: any){
             >
               <ArrowUturnLeftIcon class="zoom-btn__icon" />
             </button>
+            <button
+              class="zoom-btn"
+              :class="{ 'zoom-btn--active': locationsFullscreen }"
+              @click.stop="locationsFullscreen = !locationsFullscreen"
+              v-tooltip="locationsFullscreen ? 'Exit fullscreen locations (Esc)' : 'Expand locations to full screen'"
+            >
+              <ArrowsPointingInIcon v-if="locationsFullscreen" class="zoom-btn__icon" />
+              <ArrowsPointingOutIcon v-else class="zoom-btn__icon" />
+            </button>
           </div>
         </PlayerTabs>
         <div id="totals">
@@ -2450,9 +2648,8 @@ async function addChaosToken(face: any){
           <PoolItem v-if="frostTokens > 0" type="ct_frost" :amount="frostTokens" />
         </div>
       </div>
-      </OverlayDrawer>
     </div>
-    <div v-if="!phoneShell" class="phases">
+    <div class="phases">
       <div class="phase" :class="{ 'active-phase': phase == 'MythosPhase' }">
         <div class="subphases">
           <div v-tooltip.left="$t('phase.mythosPhaseBeginsStep')" :class="{'current': phaseStep?.contents === 'MythosPhaseBeginsStep' }">1.1</div>
@@ -2617,7 +2814,7 @@ async function addChaosToken(face: any){
 
     &:deep(.player-info) {
       grid-column: 1;
-      grid-row: 2 / 5;
+      grid-row: 2 / 3;
       display: flex;
       flex-direction: column;
 
@@ -2654,7 +2851,7 @@ async function addChaosToken(face: any){
 
     .location-cards-container {
       grid-column: 2;
-      grid-row: 1 / 5;
+      grid-row: 1 / 3;
     }
   }
 }
@@ -2664,7 +2861,7 @@ async function addChaosToken(face: any){
   min-height: 0;
   min-width: 0;
   overflow: auto;
-  touch-action: pan-x pan-y;
+  touch-action: manipulation;
   scrollbar-gutter: stable both-edges;
   scroll-padding: 30%;
   padding: 24px;
@@ -2734,6 +2931,12 @@ async function addChaosToken(face: any){
 }
 
 .location-cards-container {
+  --hidden-location-action-glow: rgba(255, 0, 255, 0.32);
+  --hidden-location-action-soft: rgba(255, 0, 255, 0.12);
+  --hidden-location-action-top: transparent;
+  --hidden-location-action-right: transparent;
+  --hidden-location-action-bottom: transparent;
+  --hidden-location-action-left: transparent;
   display: flex;
   overflow: hidden;
   flex: 1;
@@ -2743,6 +2946,87 @@ async function addChaosToken(face: any){
     padding-bottom: 5px;
   }
 }
+
+.location-cards-container--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-50);
+  background: var(--background);
+}
+
+.zoom-control--fullscreen {
+  position: absolute;
+  top: 45px;
+  right: 10px;
+  z-index: var(--z-index-10, 10);
+  display: flex !important;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* Keep the player zone (hand + in-play assets) usable while the board is a
+   fixed fullscreen overlay: pin it to the viewport bottom above the overlay. */
+.player-zone--fullscreen {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--z-index-50) + 1);
+  background: var(--background);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.location-cards-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-index-30);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background:
+    linear-gradient(to bottom, var(--hidden-location-action-top), transparent 14px) top / 100% 14px no-repeat,
+    linear-gradient(to left, var(--hidden-location-action-right), transparent 14px) right / 14px 100% no-repeat,
+    linear-gradient(to top, var(--hidden-location-action-bottom), transparent 14px) bottom / 100% 14px no-repeat,
+    linear-gradient(to right, var(--hidden-location-action-left), transparent 14px) left / 14px 100% no-repeat;
+  box-shadow: inset 0 0 6px var(--hidden-location-action-soft);
+}
+
+.location-cards-container--hidden-action::after {
+  opacity: 1;
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+.location-cards-scroller {
+  cursor: grab;
+  user-select: none;
+}
+
+.location-cards-scroller:active {
+  cursor: grabbing;
+}
+
+
+.location-cards-container--hidden-action-top {
+  --hidden-location-action-top: var(--hidden-location-action-glow);
+}
+
+.location-cards-container--hidden-action-right {
+  --hidden-location-action-right: var(--hidden-location-action-glow);
+}
+
+.location-cards-container--hidden-action-bottom {
+  --hidden-location-action-bottom: var(--hidden-location-action-glow);
+}
+
+.location-cards-container--hidden-action-left {
+  --hidden-location-action-left: var(--hidden-location-action-glow);
+}
+
 
 .portrait {
   border-radius: 3px;
@@ -3458,6 +3742,7 @@ async function addChaosToken(face: any){
 /* While a swarm is fanned open (hovering the swarm, or its abilities menu is open),
    lift the whole cell above its neighbours so the fanned cards aren't occluded by an
    adjacent location's wrapper — otherwise sweeping across the fan would lose hover. */
+.location-cell:has(.enemy--outer:hover),
 .location-cell:has(.swarm:hover),
 .location-cell:has(.enemy--swarming.showAbilities) {
   z-index: var(--z-index-30);
@@ -3617,12 +3902,6 @@ async function addChaosToken(face: any){
   }
 }
 
-/* 手机抽屉内：player-zone 纵排、限高（桌面 inline 渲染不带 .overlay-drawer 祖先，不受影响） */
-:global(.overlay-drawer #player-zone) {
-  flex-direction: column;
-  max-height: 80dvh;
-}
-
 #player-zone {
   display: flex;
   flex-direction: row;
@@ -3631,6 +3910,9 @@ async function addChaosToken(face: any){
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.4);
   .player-info {
     flex: 1;
+  }
+  @media (max-width: 800px) {
+    padding-bottom: 50px;
   }
 }
 

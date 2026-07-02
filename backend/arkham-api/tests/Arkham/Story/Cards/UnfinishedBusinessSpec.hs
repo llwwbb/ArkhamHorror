@@ -1,18 +1,15 @@
 module Arkham.Story.Cards.UnfinishedBusinessSpec (spec) where
 
-import Arkham.DefeatedBy
 import Arkham.Enemy.Cards qualified as Enemies
-import Arkham.Investigator.Cards qualified as Investigators
 import Arkham.Matcher
 import Arkham.Placement
 import Arkham.Story.Cards qualified as Stories
-import Arkham.Window qualified as Window
 import TestImport qualified as TI
 import TestImport.New
 
 spec :: Spec
 spec = describe "Unfinished Business" $ do
-  it "uses printed extended-letter art for its threat-area side" do
+  it "links each story side back to its Heretic enemy side" do
     map (.otherSide)
       [ Stories.unfinishedBusiness_B
       , Stories.unfinishedBusiness_D
@@ -23,12 +20,12 @@ spec = describe "Unfinished Business" $ do
       ]
       `TI.shouldBe` map
         Just
-        [ "05178b"
-        , "05178d"
-        , "05178f"
-        , "05178h"
-        , "05178j"
-        , "05178l"
+        [ "05178a"
+        , "05178c"
+        , "05178e"
+        , "05178g"
+        , "05178i"
+        , "05178k"
         ]
 
   -- Errata (FAQ v1.6): "Keep this card in your threat area (this side faceup).
@@ -43,35 +40,3 @@ spec = describe "Unfinished Business" $ do
     run $ Resign (toId investigator)
     chooseOnlyOption "flip Unfinished Business back over"
     assert $ selectAny (enemyIs Enemies.heretic_A)
-
-  it "resolves into the defeating investigator's threat area when another investigator clicks the forced ability"
-    $ gameTest
-    $ \defeatingInvestigator -> do
-      clickingInvestigator <- addInvestigator Investigators.rolandBanks
-      location <- testLocationWith id
-      run $ placedLocation location
-      moveTo defeatingInvestigator location
-      moveTo clickingInvestigator location
-
-      heretic <- testEnemyWithDef Enemies.heretic_A id
-      run $ PlaceEnemy (toId heretic) (AtLocation (toId location))
-
-      let
-        windows =
-          [ Window.mkAfter
-              $ Window.EnemyDefeated
-                (Just $ toId defeatingInvestigator)
-                (DefeatedByDamage $ InvestigatorSource $ toId defeatingInvestigator)
-                (toId heretic)
-          ]
-
-      run $ UseCardAbility (toId clickingInvestigator) (toSource heretic) 2 windows NoPayment
-      chooseOnlyOption "resolve Unfinished Business"
-
-      assert
-        $ selectAny
-        $ StoryWithTitle "Unfinished Business"
-        <> StoryWithPlacement (InThreatArea $ toId defeatingInvestigator)
-      assertNone
-        $ StoryWithTitle "Unfinished Business"
-        <> StoryWithPlacement (InThreatArea $ toId clickingInvestigator)

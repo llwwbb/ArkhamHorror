@@ -1,6 +1,8 @@
 <script lang="ts" setup>
+import type { CardContents } from '@/arkham/types/Card';
 import * as CardT from '@/arkham/types/Card';
-import { computed, ref, ComputedRef, reactive } from 'vue';
+import gsap from 'gsap';
+import { computed, inject, Ref, ref, ComputedRef, reactive, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useDebug } from '@/arkham/debug';
 import { Game } from '@/arkham/types/Game';
 import { toCardContents } from '@/arkham/types/Card';
@@ -15,7 +17,6 @@ import Asset from '@/arkham/components/Asset.vue';
 import EventView from '@/arkham/components/Event.vue';
 import Skill from '@/arkham/components/Skill.vue';
 import HandCard from '@/arkham/components/HandCard.vue';
-import PlayerHandCards from '@/arkham/components/PlayerHandCards.vue';
 import CardRow from '@/arkham/components/CardRow.vue';
 import Investigator from '@/arkham/components/Investigator.vue';
 import ChoiceModal from '@/arkham/components/ChoiceModal.vue';
@@ -24,9 +25,12 @@ import * as Arkham from '@/arkham/types/Investigator';
 import { useI18n } from 'vue-i18n';
 import Draw from '@/arkham/components/Draw.vue'
 import { IsMobile } from '@/arkham/isMobile';
-import { usePhoneShell } from '@/arkham/composables/phoneShell';
-import { usePlayerHand } from '@/arkham/composables/usePlayerHand';
-import { createCardTransitionHooks } from '@/arkham/cardTransitions';
+import { Modifier } from '@/arkham/types/Modifier';
+import { Enemy } from '@/arkham/types/Enemy';
+import { XMarkIcon } from '@heroicons/vue/20/solid';
+import * as Api from '@/arkham/api';
+import type { CardDef } from '@/arkham/types/CardDef';
+import { fullName } from '@/arkham/types/Name';
 const { t } = useI18n();
 
 interface RefWrapper<T> {
@@ -41,8 +45,19 @@ export interface Props {
 }
 
 const props = defineProps<Props>()
+const solo = inject<Ref<boolean>>('solo')
+const showOtherPlayersHands = inject<Ref<boolean>>('showOtherPlayersHands')
 
 const investigatorId = computed(() => props.investigator.id)
+const ENCOUNTER_BACK = imgsrc("encounter_back.jpg")
+const PLAYER_BACK = imgsrc("player_back.jpg")
+
+function backForEnemy(enemy: Enemy) {
+  const card = props.game.cards[enemy.cardId]
+  if (!card) return ENCOUNTER_BACK
+  if (card.tag === 'PlayerCard') return PLAYER_BACK
+  return ENCOUNTER_BACK
+}
 
 const assets = computed(() => {
   const xs = props.investigator.assets.map(a => props.game.assets[a])
@@ -74,6 +89,10 @@ const engagedEnemies = computed(() =>
 
 const hasThreatArea = computed(() =>
   stories.value.length > 0 || engagedEnemies.value.length > 0 || props.investigator.treacheries.length > 0
+)
+
+const inHandEnemies = computed(() =>
+  Object.values(props.game.enemies).filter((e) => (e.placement.tag === "StillInHand" || e.placement.tag === "HiddenInHand") && e.placement.contents === investigatorId.value)
 )
 
 const hunchDeck = computed(() => {
@@ -112,6 +131,7 @@ const topOfHunchDeck = computed(() => {
 
 const viewingDiscard = ref(false)
 
+const id = computed(() => props.investigator.id)
 const choices = computed(() => ArkhamGame.choices(props.game, props.playerId))
 
 const tarotCardAbility = (card: TarotCard) => {
@@ -133,10 +153,54 @@ const noCards = computed<ArkhamCard.Card[]>(() => [])
 const showCards = reactive<RefWrapper<any>>({ ref: noCards })
 const cardRowTitle = ref("")
 
-const { totalHandSize, actualHandSize, handSizeClasses } = usePlayerHand({
-  game: () => props.game,
-  investigator: () => props.investigator,
+const inHandTreacheries = computed(() => Object.values(props.game.treacheries).
+  filter((t) => t.placement.tag === "HiddenInHand" && t.placement.contents === id.value))
+
+const totalHandSize = computed(() => {
+  const onlyCountFirstCopy = props.investigator.modifiers?.some((m: Modifier) => m.type.tag === 'OtherModifier' && m.type.contents === "OnlyFirstCopyCardCountsTowardMaximumHandSize")
+
+  const sizeModifiers: Record<string, number> = props.game.modifiers.reduce((a, m) => {
+    if (m[1][0].type?.tag === "HandSizeCardCount") {
+      if (m[0].tag === "CardIdTarget") {
+        if(typeof m[0].contents === 'string') {
+          return {...a, [m[0].contents]: m[1][0].type.contents}
+        }
+      }
+    }
+    return a
+  }, {})
+
+  // if onlyCountFirstCopy is true, we need to filter the hand to only count the first copy of each card
+  const hand = onlyCountFirstCopy
+    ? playerHand.value.filter((c, i) => {
+        return playerHand.value.findIndex(cc => CardT.asCardCode(cc) === CardT.asCardCode(c)) === i
+      })
+    : playerHand.value
+
+  const playerHandSize = hand.reduce((a, c) => {
+    return a + (sizeModifiers[toCardContents(c).id] ?? 1)
+  }, 0)
+
+  const treacheryHandSize = inHandTreacheries.value.reduce((a, c) => {
+    return a + (sizeModifiers[c.cardId] ?? 1)
+  }, 0)
+
+  const enemyHandSize = inHandEnemies.value.reduce((a, c) => {
+    return a + (sizeModifiers[c.cardId] ?? 1)
+  }, 0)
+
+  return playerHandSize + treacheryHandSize + enemyHandSize
 })
+
+const actualHandSize = computed(() => {
+  return playerHand.value.length + inHandTreacheries.value.length + inHandEnemies.value.length
+})
+
+const handSizeClasses = computed(() => ({
+  'hand-size-ok': (props.investigator.handSize ?? 8) > totalHandSize.value,
+  'hand-size-warn': (props.investigator.handSize ?? 8) == totalHandSize.value,
+  'hand-size-alert': (props.investigator.handSize ?? 8) < totalHandSize.value,
+}))
 
 const doShowCards = (event: Event, cards: ComputedRef<ArkhamCard.Card[]>, title: string, isDiscards: boolean) => {
   cardRowTitle.value = title
@@ -149,13 +213,174 @@ const hideCards = () => {
   viewingDiscard.value = false
 }
 
+const committedIdSet = computed(() => new Set((props.game.skillTest?.committedCards ?? []).map(c => toCardContents(c).id)))
+
+const playerHand = computed(() =>
+  props.investigator.hand.filter(card => !committedIdSet.value.has(toCardContents(card).id))
+)
+
+const showDebugAddCard = ref(false)
+const debugPlayerCards = ref<CardDef[]>([])
+const debugCardSearch = ref('')
+const debugAddCardError = ref<string | null>(null)
+const debugAddCardLoading = ref(false)
+
+const campaignCardPrefixes: Record<string, string[]> = {
+  'nightofthezealot': ['01'],
+  '01': ['01'],
+  'thedunwichlegacy': ['02'],
+  '02': ['02'],
+  'thepathtocarcosa': ['03'],
+  '03': ['03'],
+  'theforgottenage': ['04'],
+  '04': ['04'],
+  'thecircleundone': ['05'],
+  '05': ['05'],
+  'thedreameaters': ['06'],
+  '06': ['06'],
+  'theinnsmouthconspiracy': ['07'],
+  '07': ['07'],
+  'edgeoftheearth': ['08'],
+  '08': ['08'],
+  'thescarletkeys': ['09'],
+  '09': ['09'],
+  'thefeastofhemlockvale': ['10'],
+  '10': ['10'],
+  'thedrownedcity': ['11'],
+  '11': ['11'],
+  'returntonightofthezealot': ['01', '50'],
+  '50': ['01', '50'],
+  'returntothedunwichlegacy': ['02', '51'],
+  '51': ['02', '51'],
+  'returntothepathtocarcosa': ['03', '52'],
+  '52': ['03', '52'],
+  'returntotheforgottenage': ['04', '53'],
+  '53': ['04', '53'],
+  'returntothecircleundone': ['05', '54'],
+  '54': ['05', '54'],
+}
+
+const playerCardTypes = new Set(['AssetType', 'EventType', 'SkillType', 'PlayerTreacheryType', 'PlayerEnemyType'])
+const debugCardTypes = new Set([...playerCardTypes, 'InvestigatorType'])
+const standaloneSideStoryPlayerCardPrefixes = ['70', '71', '72', '81', '82', '83', '84', '85', '86', '87', '88', '89']
+const standaloneSideStoryPlayerCardCodes = new Set(['90045a', '90045b', '90073', '90074', '90075', '90076'])
+
+const currentCampaignPlayerCardCodes = computed(() => new Set([
+  ...Object.values(props.game.campaign?.storyCards ?? {}).flat().map(CardT.asCardCode),
+  ...Object.values(props.game.campaign?.decks ?? {}).flat().map(CardT.asCardCode),
+]))
+
+const filteredDebugPlayerCards = computed(() => {
+  const query = debugCardSearch.value.trim().toLocaleLowerCase()
+  const cards = [...debugPlayerCards.value].sort((a, b) =>
+    debugCardLabel(a).localeCompare(debugCardLabel(b)),
+  )
+
+  if (!query) return cards.slice(0, 50)
+
+  return cards
+    .filter((card) => {
+      const haystack = [
+        card.cardCode,
+        fullName(card.name),
+        card.cardType,
+        ...card.classSymbols,
+        ...card.cardTraits,
+      ]
+        .join(' ')
+        .toLocaleLowerCase()
+
+      return haystack.includes(query)
+    })
+    .slice(0, 50)
+})
+
+function debugCardCode(card: CardDef) {
+  return card.cardCode.replace(/^c/, '')
+}
+
+function debugCardLabel(card: CardDef) {
+  const level = card.level == null ? '' : ` (${card.level})`
+  return `${fullName(card.name)}${level} [${debugCardCode(card)}]`
+}
+
+function campaignKey(value: string) {
+  return value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function currentCampaignPrefixes() {
+  const campaign = props.game.campaign
+  if (!campaign) return []
+
+  return [campaign.id, campaign.name]
+    .map(campaignKey)
+    .flatMap((key) => campaignCardPrefixes[key] ?? [key])
+}
+
+function isCurrentCampaignPlayerCard(card: CardDef) {
+  if (currentCampaignPlayerCardCodes.value.has(card.cardCode)) return true
+  if (!props.game.campaign || card.encounterSet == null || !playerCardTypes.has(card.cardType)) return false
+
+  const cardCode = card.cardCode.replace(/^c/, '')
+  return currentCampaignPrefixes().some((prefix) => cardCode.startsWith(prefix))
+}
+
+function isStandaloneSideStoryPlayerCard(card: CardDef) {
+  if (card.encounterSet == null || !playerCardTypes.has(card.cardType)) return false
+
+  const cardCode = card.cardCode.replace(/^c/, '')
+  return standaloneSideStoryPlayerCardCodes.has(cardCode)
+    || standaloneSideStoryPlayerCardPrefixes.some((prefix) => cardCode.startsWith(prefix))
+}
+
+function isDebugPlayerCard(card: CardDef) {
+  return (card.encounterSet == null && debugCardTypes.has(card.cardType))
+    || isCurrentCampaignPlayerCard(card)
+    || isStandaloneSideStoryPlayerCard(card)
+}
+
+async function openDebugAddCard() {
+  if (!debug.active) return
+  showDebugAddCard.value = true
+  debugAddCardError.value = null
+
+  if (debugPlayerCards.value.length === 0) {
+    debugAddCardLoading.value = true
+    try {
+      const allCards = await Api.fetchCards(true)
+      debugPlayerCards.value = allCards.filter(isDebugPlayerCard)
+    } catch (error) {
+      console.error(error)
+      debugAddCardError.value = 'Unable to load player cards.'
+    } finally {
+      debugAddCardLoading.value = false
+    }
+  }
+}
+
+async function debugAddCardToHand(card: CardDef) {
+  debugAddCardError.value = null
+  const cardId = crypto.randomUUID()
+
+  try {
+    await debug.send(props.game.id, { tag: 'CreateCard', contents: [cardId, card.cardCode] })
+    await debug.send(props.game.id, {
+      tag: 'DebugAddToHand',
+      contents: [props.investigator.id, cardId],
+    })
+    debugCardSearch.value = ''
+    showDebugAddCard.value = false
+  } catch (error) {
+    console.error(error)
+    debugAddCardError.value = `Unable to add ${fullName(card.name)} to hand.`
+  }
+}
+
 const debug = useDebug()
 const events = computed(() => props.investigator.events.map((e) => props.game.events[e]).filter(e => e))
 const skills = computed(() => props.investigator.skills.map((e) => props.game.skills[e]).filter(e => e))
 const emptySlots = computed(() => props.investigator.slots.filter((s) => s.empty))
 const { isMobile } = IsMobile();
-// 手机 shell 下 Question 由 MobilePlayLayout 渲染停靠版，这里抑制自身的浮窗（Task 11）
-const phoneShell = usePhoneShell()
 
 const slotImg = (slot: Arkham.Slot) => {
   switch (slot.tag) {
@@ -176,9 +401,66 @@ const slotImg = (slot: Arkham.Slot) => {
   }
 }
 
-// 入场区与桌面手牌区共用同一个 rectMap，保持卡牌在手牌 ↔ 入场区之间的跨区飞行动画
-const cardRectMap = new Map<string, DOMRect>()
-const { onBeforeEnter, onEnter, onLeave } = createCardTransitionHooks(cardRectMap)
+// global position information for animation
+const rectMap = new Map<string, DOMRect>()
+
+function isHtmlElement(el: Element): el is HTMLElement { return el instanceof HTMLElement }
+
+function onBeforeEnter(el: Element) {
+  if (!isHtmlElement(el)) return
+  if (el.classList.contains('committed-skills')) return
+  const idx = el.dataset.index
+  if (!idx || !rectMap.has(idx)) return
+  el.style.opacity = '0'
+  el.style.width = '0'
+}
+
+function onEnter(el: Element, done: () => void) {
+  if (!isHtmlElement(el)) return
+  if (el.classList.contains('committed-skills')) { el.removeAttribute('style'); done(); return }
+
+  const idx = el.dataset.index
+  const finalRect = el.getBoundingClientRect()
+
+  if (!idx) {
+    const width = window.getComputedStyle(el).width
+    gsap.to(el, { opacity: 1, width, onComplete: () => { el.removeAttribute('style'); done() } })
+    return
+  }
+
+  const rect = rectMap.get(idx)
+  rectMap.delete(idx)
+  if (!rect) { el.removeAttribute('style'); done(); return }
+
+  const startX = rect.left - finalRect.left
+  const startY = rect.top - finalRect.top
+
+  const c = el.cloneNode(true) as HTMLElement
+  c.style.position = 'fixed'
+  c.style.width = rect.width + 'px'
+  el.parentNode?.insertBefore(c, el)
+
+  const cRect = c.getBoundingClientRect()
+  const finalX = finalRect.left - cRect.left
+
+  gsap.timeline()
+    .add('start')
+    .to(el, { startAt: { opacity: 0, width: 0 }, width: rect.width, clearProps: 'width', duration: 0.3 }, 'start')
+    .to(c, {
+      startAt: { x: startX, y: startY, opacity: 1 },
+      x: finalX, y: 0, duration: 0.3,
+      onComplete: () => { c.remove(); el.style.opacity = '1'; done() }
+    }, 'start')
+}
+
+function onLeave(el: Element, done: () => void) {
+  if (!isHtmlElement(el)) return
+  if (el.classList.contains('committed-skills')) { done(); return }
+  const idx = el.dataset.index
+  if (!idx) { done(); return }
+  rectMap.set(idx, el.getBoundingClientRect())
+  gsap.to(el, { startAt: { opacity: 0 }, width: 0, margin: 0, duration: 0.3, onComplete: done })
+}
 
 const realityAcid = ref('89005')
 
@@ -186,6 +468,31 @@ const dragover = (e: DragEvent) => {
   e.preventDefault()
   if (e.dataTransfer) {
     e.dataTransfer.dropEffect = 'copy'
+  }
+}
+
+function onDropHand(event: DragEvent) {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    const data = event.dataTransfer.getData('text/plain')
+    if (data) {
+      const json = JSON.parse(data)
+      if (json.tag === "CardTarget") {
+        debug.send(props.game.id, {tag: 'DebugAddToHand', contents: [id.value, json.contents]})
+      }
+    }
+  }
+}
+
+function startHandDrag(event: DragEvent, card: (CardContents | CardT.Card)) {
+  if (!debug.active) {
+    event.preventDefault()
+    return
+  }
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'copy'
+    const cardId = CardT.toCardContents(card).id
+    event.dataTransfer.setData('text/plain', JSON.stringify({ "tag": "CardTarget", "contents": cardId }))
   }
 }
 
@@ -203,6 +510,55 @@ function onDrop(event: DragEvent) {
 }
 
 const playAreaCollapsed = ref(false)
+
+const handCardHeight = Math.min(7 * window.innerWidth / 50 + 114, 340);
+const handCardExposedHeight_MIN = `${-(handCardHeight - 50)}`;
+const handCardExposedHeight_MAX = `0`;
+const handAreaMarginBottom = ref(handCardExposedHeight_MIN);
+const handAreaPointerEvents = ref('none');
+
+onMounted(() => {
+  if (isMobile) {
+    document.addEventListener('click',toggleHandAreaMarginBottom)
+    const isMinimized_SkillTest = inject('isMinimized_SkillTest', ref(false))
+    watch([() => props.game.skillTest, isMinimized_SkillTest], ([newSkillTest,isMinimized]) => {
+      if (newSkillTest && !isMinimized) {
+        handAreaMarginBottom.value = handCardExposedHeight_MAX;
+        handAreaPointerEvents.value = 'auto';
+        document.removeEventListener('click', toggleHandAreaMarginBottom)
+      } else {
+        handAreaMarginBottom.value = handCardExposedHeight_MIN;
+        handAreaPointerEvents.value = 'none';
+        document.removeEventListener('click', toggleHandAreaMarginBottom)
+        document.addEventListener('click', toggleHandAreaMarginBottom)
+      }
+    });
+  }
+});
+
+onBeforeUnmount(() => {
+  if (isMobile) {
+    document.removeEventListener('click', toggleHandAreaMarginBottom)
+  }
+});
+
+function toggleHandAreaMarginBottom(event: Event) {
+  const target = event.target as HTMLElement
+  if (target.classList.contains('hand-area-IsMobile')) {
+    handAreaMarginBottom.value = handCardExposedHeight_MAX;
+    handAreaPointerEvents.value = 'auto'
+  }
+  else if(!target.closest('.in-hand')){
+    handAreaMarginBottom.value = handCardExposedHeight_MIN;
+    handAreaPointerEvents.value = 'none'
+  }
+}
+
+function closeHand() {
+  handAreaMarginBottom.value = handCardExposedHeight_MIN;
+  handAreaPointerEvents.value = 'none';
+}
+
 </script>
 
 <template>
@@ -321,11 +677,45 @@ const playAreaCollapsed = ref(false)
     </transition>
 
     <ChoiceModal
-      v-if="playerId === investigator.playerId && !phoneShell"
+      v-if="playerId === investigator.playerId"
       :game="game"
       :playerId="playerId"
       @choose="$emit('choose', $event)"
     />
+
+    <div
+      v-if="debug.active && showDebugAddCard"
+      class="debug-add-card-overlay"
+      @click.self="showDebugAddCard = false"
+    >
+      <div class="debug-add-card-modal">
+        <h3>Add player card to {{ fullName(investigator.name) }}'s hand</h3>
+        <label>
+          Search card
+          <input
+            v-model="debugCardSearch"
+            type="search"
+            autofocus
+            placeholder="Name, code, type, class, or trait"
+            @keydown.stop
+          />
+        </label>
+        <p v-if="debugAddCardLoading" class="debug-add-card-status">Loading player cards…</p>
+        <p v-if="debugAddCardError" class="debug-add-card-error">{{ debugAddCardError }}</p>
+        <div v-else class="debug-add-card-results">
+          <button
+            v-for="card in filteredDebugPlayerCards"
+            :key="card.cardCode"
+            type="button"
+            @click="debugAddCardToHand(card)"
+          >
+            <span>{{ debugCardLabel(card) }}</span>
+            <small>{{ card.cardType }} · {{ card.classSymbols.join(', ') || 'Neutral' }}</small>
+          </button>
+        </div>
+        <button type="button" @click="showDebugAddCard = false">{{ $t('close') }}</button>
+      </div>
+    </div>
 
     <div class="player">
       <div v-if="hunchDeck" class="hunch-deck">
@@ -368,15 +758,122 @@ const playAreaCollapsed = ref(false)
         />
       </div>
       <div v-if="!isMobile" class="hand hand-area">
-        <PlayerHandCards
-          :game="game"
-          :playerId="playerId"
-          :investigator="investigator"
-          :rectMap="cardRectMap"
-          @choose="$emit('choose', $event)"
-        />
+        <transition-group tag="section" class="hand" @enter="onEnter" @leave="onLeave" @before-enter="onBeforeEnter"
+          @drop="onDropHand($event)"
+          @dragover.prevent="dragover($event)"
+          @dragenter.prevent
+          >
+          <HandCard
+            v-for="card in playerHand"
+            :card="card"
+            :game="game"
+            :playerId="playerId"
+            :ownerId="investigator.id"
+            :key="toCardContents(card).id"
+            @choose="$emit('choose', $event)"
+            :draggable="debug.active"
+            @dragstart="startHandDrag($event, card)"
+          />
+
+          <template v-for="enemy in inHandEnemies" :key="enemy.id">
+            <EnemyView
+              v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
+              :enemy="enemy"
+              :game="game"
+              :data-index="enemy.cardId"
+              :playerId="playerId"
+              @choose="$emit('choose', $event)"
+            />
+            <div class="card-container" v-else>
+              <img class="card" :src="backForEnemy(enemy)" />
+            </div>
+          </template>
+
+          <template v-for="treachery in inHandTreacheries" :key="treachery.id">
+            <Treachery
+              v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
+              :treachery="treachery"
+              :game="game"
+              :data-index="treachery.cardId"
+              :playerId="playerId"
+              @choose="$emit('choose', $event)"
+            />
+            <div class="card-container" v-else>
+              <img class="card" :src="ENCOUNTER_BACK" />
+            </div>
+          </template>
+
+        </transition-group>
+        <div class="hand-debug-actions" v-if="debug.active">
+          <button type="button" @click="openDebugAddCard">+ Card to hand</button>
+        </div>
         <div v-if="investigator.handSize" class="hand-size" :class="handSizeClasses" :current-length="totalHandSize">{{ t('handSize') }}: {{totalHandSize}}/{{investigator.handSize}}</div>
       </div>
+    </div>
+    <div v-if="isMobile" class="hand hand-area-IsMobile" :style="{ bottom: `${handAreaMarginBottom}px` }" @click="toggleHandAreaMarginBottom">
+      <button
+        v-if="debug.active"
+        v-show="handAreaPointerEvents === 'auto'"
+        class="hand-debug-add-button"
+        type="button"
+        @click.stop="openDebugAddCard"
+      >
+        + Card
+      </button>
+      <button
+        v-show="handAreaPointerEvents === 'auto'"
+        class="hand-close-button"
+        type="button"
+        aria-label="Close hand"
+        @click.stop="closeHand"
+      >
+        <XMarkIcon aria-hidden="true" />
+      </button>
+      <transition-group tag="section" class="hand" @enter="onEnter" @leave="onLeave" @before-enter="onBeforeEnter"
+        @drop="onDropHand($event)"
+        @dragover.prevent="dragover($event)"
+        @dragenter.prevent
+        :style="{ pointerEvents: `${handAreaPointerEvents}`, flex: 1 }"
+        >
+        <HandCard
+          v-for="card in playerHand"
+          :card="card"
+          :game="game"
+          :playerId="playerId"
+          :ownerId="investigator.id"
+          :key="toCardContents(card).id"
+          @choose="$emit('choose', $event)"
+          :draggable="debug.active"
+          @dragstart="startHandDrag($event, card)"
+        />
+        <template v-for="enemy in inHandEnemies" :key="enemy.id">
+          <EnemyView
+            v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
+            :enemy="enemy"
+            :game="game"
+            :data-index="enemy.cardId"
+            :playerId="playerId"
+            @choose="$emit('choose', $event)"
+          />
+          <div class="card-container" v-else>
+            <img class="card" :src="backForEnemy(enemy)" />
+          </div>
+        </template>
+        <template v-for="treachery in inHandTreacheries" :key="treachery.id">
+          <Treachery
+            v-if="solo || showOtherPlayersHands || (playerId == investigator.playerId)"
+            :treachery="treachery"
+            :game="game"
+            :data-index="treachery.cardId"
+            :playerId="playerId"
+            :isInHand="true"
+            @choose="$emit('choose', $event)"
+          />
+          <div class="card-container" v-else>
+            <img class="card" :src="ENCOUNTER_BACK" />
+          </div>
+        </template>
+      </transition-group>
     </div>
     <CardRow
       v-if="showCards.ref.length > 0"
@@ -494,6 +991,22 @@ const playAreaCollapsed = ref(false)
   display: flex;
   gap: 5px;
   overflow-x: auto;
+}
+
+.hand-move,
+.hand-enter-active,
+.hand-leave-active {
+  transition: all 0.3s ease;
+}
+
+.hand-enter-from,
+.hand-leave-to {
+  opacity: 0;
+  transform: translateY(-40px);
+}
+
+.hand-leave-active {
+  position: absolute;
 }
 
 .in-play-move,
@@ -646,9 +1159,153 @@ const playAreaCollapsed = ref(false)
   max-width: 100%;
 }
 
+.hand-debug-actions button,
+.hand-debug-add-button {
+  border: 1px solid var(--button-highlight);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.hand-debug-actions button:hover,
+.hand-debug-add-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.hand-area-IsMobile {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: var(--z-index-100);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: calc(var(--card-height) * 4);
+  background: var(--background-dark);
+  transition: bottom 0.3s ease;
+  overflow: hidden;
+  :deep(.card){
+    width: calc(var(--card-width) * 4);
+    min-width: calc(var(--card-width) * 4);
+  }
+}
+
+.hand-debug-add-button {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: var(--z-index-101);
+}
+
+.hand-close-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: var(--z-index-101);
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.hand-close-button svg {
+  width: 18px;
+  height: 18px;
+}
+
 .card {
   width: var(--card-width);
   min-width: var(--card-width);
   border-radius: 2px;
+}
+
+.debug-add-card-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-index-1000);
+}
+
+.debug-add-card-modal {
+  background: #1a1a2e;
+  border: 1px solid var(--button-highlight);
+  border-radius: 8px;
+  color: #eee;
+  max-width: 700px;
+  min-width: 300px;
+  padding: 1.5rem;
+  width: min(700px, 90vw);
+
+  h3 {
+    color: #adf;
+    font-size: 1.1rem;
+    margin: 0 0 1rem;
+  }
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+  }
+
+  input {
+    background: #111827;
+    border: 1px solid #4b5563;
+    border-radius: 4px;
+    color: #eee;
+    padding: 0.5rem;
+  }
+}
+
+.debug-add-card-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 50vh;
+  overflow: auto;
+
+  button {
+    align-items: flex-start;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid transparent;
+    color: #eee;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin: 0;
+    padding: 0.5rem;
+    text-align: left;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--button-highlight);
+    }
+  }
+
+  small {
+    opacity: 0.75;
+  }
+}
+
+.debug-add-card-error {
+  color: #f88;
+}
+
+.debug-add-card-status {
+  opacity: 0.8;
 }
 </style>

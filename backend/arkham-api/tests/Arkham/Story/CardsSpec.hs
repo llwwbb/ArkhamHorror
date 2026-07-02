@@ -6,7 +6,7 @@ import TestImport.New
 
 spec :: Spec
 spec = describe "Story card definitions" do
-  it "does not derive missing art for printed story backs" do
+  it "links printed story backs to their asset or location sides" do
     map (.otherSide)
       [ Stories.engramsOath
       , Stories.songsThatTheHyadesShallSing
@@ -23,16 +23,16 @@ spec = describe "Story card definitions" do
       ]
       `TI.shouldBe` map
         Just
-        [ "03076b"
-        , "03325b"
-        , "03326b"
-        , "03326d"
-        , "03327b"
-        , "03327d"
-        , "03327f"
-        , "03328b"
-        , "03328d"
-        , "03328f"
-        , "03329b"
-        , "03329d"
+        [ "03076a"
+        , "03325a"
+        , "03326a"
+        , "03326c"
+        , "03327a"
+        , "03327c"
+        , "03327e"
+        , "03328a"
+        , "03328c"
+        , "03328e"
+        , "03329a"
+        , "03329c"
         ]

@@ -262,7 +262,7 @@ sickeningReality_69 :: CardDef
 sickeningReality_69 = doubleSided $ story "03069" "Sickening Reality" TheLastKing
 
 engramsOath :: CardDef
-engramsOath = otherSideIs "03076b" $ story "03076b" "Engram's Oath" TheLastKing
+engramsOath = otherSideIs "03076a" $ story "03076b" "Engram's Oath" TheLastKing
 
 lagneauPerdu :: CardDef
 lagneauPerdu = doubleSided $ story "03077b" "L'agneau Perdu" TheLastKing
@@ -278,37 +278,37 @@ aboveAndBelow = doubleSided $ story "03080b" "Above and Below" TheLastKing
 
 songsThatTheHyadesShallSing :: CardDef
 songsThatTheHyadesShallSing =
-  otherSideIs "03325b" $ story "03325b" "Songs That the Hyades Shall Sing" DimCarcosa
+  otherSideIs "03325a" $ story "03325b" "Songs That the Hyades Shall Sing" DimCarcosa
 
 starsOfAldebaran :: CardDef
-starsOfAldebaran = otherSideIs "03326b" $ story "03326b" "Stars of Aldebaran" DimCarcosa
+starsOfAldebaran = otherSideIs "03326a" $ story "03326b" "Stars of Aldebaran" DimCarcosa
 
 bleakDesolation :: CardDef
-bleakDesolation = otherSideIs "03326d" $ story "03326d" "Bleak Desolation" DimCarcosa
+bleakDesolation = otherSideIs "03326c" $ story "03326d" "Bleak Desolation" DimCarcosa
 
 inhabitantOfCarcosa :: CardDef
-inhabitantOfCarcosa = otherSideIs "03327b" $ story "03327b" "Inhabitant of Carcosa" DimCarcosa
+inhabitantOfCarcosa = otherSideIs "03327a" $ story "03327b" "Inhabitant of Carcosa" DimCarcosa
 
 aMomentsRest :: CardDef
-aMomentsRest = otherSideIs "03327d" $ story "03327d" "A Moment's Rest" DimCarcosa
+aMomentsRest = otherSideIs "03327c" $ story "03327d" "A Moment's Rest" DimCarcosa
 
 theCoffin :: CardDef
-theCoffin = otherSideIs "03327f" $ story "03327f" "The Coffin" DimCarcosa
+theCoffin = otherSideIs "03327e" $ story "03327f" "The Coffin" DimCarcosa
 
 mappingTheStreets :: CardDef
-mappingTheStreets = otherSideIs "03328b" $ story "03328b" "Mapping the Streets" DimCarcosa
+mappingTheStreets = otherSideIs "03328a" $ story "03328b" "Mapping the Streets" DimCarcosa
 
 theKingsParade :: CardDef
-theKingsParade = otherSideIs "03328d" $ story "03328d" "The King's Parade" DimCarcosa
+theKingsParade = otherSideIs "03328c" $ story "03328d" "The King's Parade" DimCarcosa
 
 theArchway :: CardDef
-theArchway = otherSideIs "03328f" $ story "03328f" "The Archway" DimCarcosa
+theArchway = otherSideIs "03328e" $ story "03328f" "The Archway" DimCarcosa
 
 theHeightOfTheDepths :: CardDef
-theHeightOfTheDepths = otherSideIs "03329b" $ story "03329b" "The Height of the Depths" DimCarcosa
+theHeightOfTheDepths = otherSideIs "03329a" $ story "03329b" "The Height of the Depths" DimCarcosa
 
 stepsOfThePalace :: CardDef
-stepsOfThePalace = otherSideIs "03329d" $ story "03329d" "Steps of the Palace" DimCarcosa
+stepsOfThePalace = otherSideIs "03329c" $ story "03329d" "Steps of the Palace" DimCarcosa
 
 theFall :: CardDef
 theFall = doubleSided $ story "03330b" "The Fall" DimCarcosa
@@ -327,27 +327,27 @@ josefsPlan = doubleSided $ story "05085b" "Josef's Plan" AtDeathsDoorstep
 
 unfinishedBusiness_B :: CardDef
 unfinishedBusiness_B =
-  victory 1 $ otherSideIs "05178b" $ story "05178b" "Unfinished Business" TheWagesOfSin
+  victory 1 $ otherSideIs "05178a" $ story "05178b" "Unfinished Business" TheWagesOfSin
 
 unfinishedBusiness_D :: CardDef
 unfinishedBusiness_D =
-  victory 1 $ otherSideIs "05178d" $ story "05178d" "Unfinished Business" TheWagesOfSin
+  victory 1 $ otherSideIs "05178c" $ story "05178d" "Unfinished Business" TheWagesOfSin
 
 unfinishedBusiness_F :: CardDef
 unfinishedBusiness_F =
-  victory 1 $ otherSideIs "05178f" $ story "05178f" "Unfinished Business" TheWagesOfSin
+  victory 1 $ otherSideIs "05178e" $ story "05178f" "Unfinished Business" TheWagesOfSin
 
 unfinishedBusiness_H :: CardDef
 unfinishedBusiness_H =
-  victory 1 $ otherSideIs "05178h" $ story "05178h" "Unfinished Business" TheWagesOfSin
+  victory 1 $ otherSideIs "05178g" $ story "05178h" "Unfinished Business" TheWagesOfSin
 
 unfinishedBusiness_J :: CardDef
 unfinishedBusiness_J =
-  victory 1 $ otherSideIs "05178j" $ story "05178j" "Unfinished Business" TheWagesOfSin
+  victory 1 $ otherSideIs "05178i" $ story "05178j" "Unfinished Business" TheWagesOfSin
 
 unfinishedBusiness_L :: CardDef
 unfinishedBusiness_L =
-  victory 1 $ otherSideIs "05178l" $ story "05178l" "Unfinished Business" TheWagesOfSin
+  victory 1 $ otherSideIs "05178k" $ story "05178l" "Unfinished Business" TheWagesOfSin
 
 gavriellasFate :: CardDef
 gavriellasFate = doubleSided $ story "05262" "Gavriella's Fate" UnionAndDisillusion
