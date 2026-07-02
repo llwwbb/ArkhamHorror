@@ -31,16 +31,31 @@ export interface ArkhamDBCard {
 export interface DbCardsState {
   dbCards: ArkhamDBCard[]
   dbCardsIndex: Map<string, ArkhamDBCard>
+  englishDbCards: ArkhamDBCard[]
+  englishDbCardsIndex: Map<string, ArkhamDBCard>
   lang: string
   loadingLang: string | null
+  loadingEnglish: boolean
+}
+
+const buildCardIndex = (cards: ArkhamDBCard[]): Map<string, ArkhamDBCard> => {
+  const index = new Map<string, ArkhamDBCard>()
+  for (const card of cards) {
+    index.set(card.code, card)
+    index.set(`${card.code}b`, card)
+  }
+  return index
 }
 
 export const useDbCardStore = defineStore("dbCards", {
   state: (): DbCardsState => ({
     dbCards: [],
     dbCardsIndex: new Map(),
+    englishDbCards: [],
+    englishDbCardsIndex: new Map(),
     lang: 'en',
-    loadingLang: null
+    loadingLang: null,
+    loadingEnglish: false
   } as DbCardsState),
 
   actions: {
@@ -50,6 +65,14 @@ export const useDbCardStore = defineStore("dbCards", {
       }
 
       return this.dbCardsIndex.get(code) ?? null
+    },
+
+    getEnglishDbCard(code: string): ArkhamDBCard | null {
+      if (this.englishDbCards.length < 1) {
+        void this.initEnglishDbCards()
+      }
+
+      return this.englishDbCardsIndex.get(code) ?? null
     },
 
     getCardName(cardTitle: string, typeCode: string = ""): string {
@@ -73,12 +96,7 @@ export const useDbCardStore = defineStore("dbCards", {
       if (this.lang !== lang) return
 
       this.dbCards = data
-      const index = new Map<string, ArkhamDBCard>()
-      for (const card of data as ArkhamDBCard[]) {
-        index.set(card.code, card)
-        index.set(`${card.code}b`, card)
-      }
-      this.dbCardsIndex = index
+      this.dbCardsIndex = buildCardIndex(data as ArkhamDBCard[])
     },
 
     async initDbCards() {
@@ -94,6 +112,30 @@ export const useDbCardStore = defineStore("dbCards", {
         await this.fetchDbCards(language)
       } finally {
         if (this.loadingLang === language) this.loadingLang = null
+      }
+    },
+
+    async initEnglishDbCards() {
+      if (this.englishDbCards.length > 0) return
+      if (this.loadingEnglish) return
+
+      const language = localStorage.getItem('language') || 'en'
+      if (language === 'en' && this.lang === 'en' && this.dbCards.length > 0) {
+        this.englishDbCards = this.dbCards
+        this.englishDbCardsIndex = this.dbCardsIndex
+        return
+      }
+
+      this.loadingEnglish = true
+
+      try {
+        const data = await fetch('cards/cards_en.json').then(async (cardResponse) => {
+          return await cardResponse.json()
+        })
+        this.englishDbCards = data
+        this.englishDbCardsIndex = buildCardIndex(data as ArkhamDBCard[])
+      } finally {
+        this.loadingEnglish = false
       }
     }
   }

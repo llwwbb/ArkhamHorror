@@ -167,7 +167,10 @@ watch(hoveredElement, (el) => {
 
 const CARD_SELECTOR = '.card,[data-image-id],[data-target],[data-image]'
 const OVERLAY_BLOCKER_SELECTOR = '.draggable,.intro-text,.choice-modal-wrapper,.no-card-overlay'
+const HOVER_CLEAR_DELAY_MS = 80
+const HOVER_BRIDGE_PADDING = 18
 let hoverTimer: number | null = null
+let hideTimer: number | null = null
 let pressTimer: number | null = null
 let canDisablePress = false
 let currentPointerType = 'mouse'
@@ -175,8 +178,58 @@ let dragActive = false
 
 const clearTimer = (t: number | null) => (t !== null ? (clearTimeout(t), null) : null)
 
+const withinRect = (x: number, y: number, rect: DOMRect): boolean =>
+  rect.width > 0
+    && rect.height > 0
+    && x >= rect.left
+    && x <= rect.right
+    && y >= rect.top
+    && y <= rect.bottom
+
+const withinOverlayBridge = (e: MouseEvent): boolean => {
+  if (!cardOverlay.value || !hoveredElement.value) return false
+
+  const overlayRect = cardOverlay.value.getBoundingClientRect()
+  if (withinRect(e.clientX, e.clientY, overlayRect)) return true
+
+  const cardRect = hoveredElement.value.getBoundingClientRect()
+  const horizontalGap =
+    overlayRect.left > cardRect.right
+      ? { left: cardRect.right, right: overlayRect.left }
+      : cardRect.left > overlayRect.right
+        ? { left: overlayRect.right, right: cardRect.left }
+        : null
+  if (horizontalGap) {
+    const top = Math.max(cardRect.top, overlayRect.top) - HOVER_BRIDGE_PADDING
+    const bottom = Math.min(cardRect.bottom, overlayRect.bottom) + HOVER_BRIDGE_PADDING
+    return e.clientX >= horizontalGap.left
+      && e.clientX <= horizontalGap.right
+      && e.clientY >= top
+      && e.clientY <= bottom
+  }
+
+  const verticalGap =
+    overlayRect.top > cardRect.bottom
+      ? { top: cardRect.bottom, bottom: overlayRect.top }
+      : cardRect.top > overlayRect.bottom
+        ? { top: overlayRect.bottom, bottom: cardRect.top }
+        : null
+  if (!verticalGap) return false
+
+  const left = Math.max(cardRect.left, overlayRect.left) - HOVER_BRIDGE_PADDING
+  const right = Math.min(cardRect.right, overlayRect.right) + HOVER_BRIDGE_PADDING
+  return e.clientX >= left
+    && e.clientX <= right
+    && e.clientY >= verticalGap.top
+    && e.clientY <= verticalGap.bottom
+}
+
 const targetFromEvent = (e: Event): HTMLElement | null => {
   const raw = e.target as HTMLElement | null
+  if (raw?.closest('.card-overlay')) return hoveredElement.value
+
+  if (e instanceof MouseEvent && withinOverlayBridge(e)) return hoveredElement.value
+
   const closest = raw ? (raw.closest(CARD_SELECTOR) as HTMLElement | null) : null
   if (closest) return closest
 
@@ -197,17 +250,13 @@ const targetFromEvent = (e: Event): HTMLElement | null => {
   return candidates.find((el) => {
     if (el.classList.contains('dragging') || el.classList.contains('no-overlay')) return false
     const rect = el.getBoundingClientRect()
-    return rect.width > 0
-      && rect.height > 0
-      && clientX >= rect.left
-      && clientX <= rect.right
-      && clientY >= rect.top
-      && clientY <= rect.bottom
+    return withinRect(clientX, clientY, rect)
   }) ?? null
 }
 
 const queueHover = (el: HTMLElement) => {
   hoverTimer = clearTimer(hoverTimer)
+  hideTimer = clearTimer(hideTimer)
   const delay = el.dataset.delay ? parseInt(el.dataset.delay, 10) : 0
   hoverTimer = window.setTimeout(() => {
     hoveredElement.value = el
@@ -215,12 +264,24 @@ const queueHover = (el: HTMLElement) => {
   }, delay)
 }
 
+const queueHide = () => {
+  hideTimer = clearTimer(hideTimer)
+  hideTimer = window.setTimeout(() => {
+    hoveredElement.value = null
+    hideTimer = null
+  }, HOVER_CLEAR_DELAY_MS)
+}
+
 const onMouseOver = (e: MouseEvent) => {
   if (currentPointerType === 'touch' || dragActive) return
   const el = targetFromEvent(e)
   hoverTimer = clearTimer(hoverTimer)
   if (!el || el.classList.contains('dragging') || el.classList.contains('no-overlay')) {
-    hoveredElement.value = null
+    if (hoveredElement.value) queueHide()
+    return
+  }
+  if (el === hoveredElement.value) {
+    hideTimer = clearTimer(hideTimer)
     return
   }
   queueHover(el)
@@ -229,6 +290,7 @@ const onMouseOver = (e: MouseEvent) => {
 const onMouseLeave = () => {
   if (currentPointerType === 'touch') return
   hoverTimer = clearTimer(hoverTimer)
+  hideTimer = clearTimer(hideTimer)
   hoveredElement.value = null
 }
 
@@ -263,6 +325,7 @@ const onPointerUp = () => {
 
 const clearOverlay = () => {
   hoverTimer = clearTimer(hoverTimer)
+  hideTimer = clearTimer(hideTimer)
   pressTimer = clearTimer(pressTimer)
   playabilityTimer = clearTimer(playabilityTimer)
   cosmicEmissaryTimer = clearTimer(cosmicEmissaryTimer)
@@ -318,6 +381,14 @@ onUnmounted(() => {
  * ========================================================================== */
 
 const card = computed<string | null>(() => (hoveredElement.value ? getCardImage(hoveredElement.value) : null))
+const currentLanguage = computed<string>(() => {
+  const storeLanguage = store.lang
+  const language = localStorage.getItem('language') || 'en'
+  return storeLanguage === language ? storeLanguage : language
+})
+type DescriptionLanguage = 'current' | 'english'
+const selectedDescriptionLanguage = ref<DescriptionLanguage | null>(null)
+const activeDescriptionLanguage = computed<DescriptionLanguage>(() => selectedDescriptionLanguage.value ?? 'current')
 
 const upsideDown = computed<boolean>(() => hoveredElement.value?.classList.contains('Reversed') ?? false)
 const reversed = computed<boolean>(() => hoveredElement.value?.classList.contains('reversed') ?? false)
@@ -348,7 +419,10 @@ const sideways = computed<boolean>(() => {
   return el.matches('.card, [data-image-id], [data-target]') && el.offsetWidth > el.offsetHeight
 })
 
-watch(card, (src) => { if (src) loadAR(src) })
+watch(card, (src) => {
+  selectedDescriptionLanguage.value = null
+  if (src) loadAR(src)
+})
 
 /* =============================================================================
  * Overlay positioning
@@ -510,6 +584,16 @@ const cardCode = computed<string | null>(() => {
   const m = card.value.match(/cards\/(\d+)(_.*)?\.avif$/)
   return m ? m[1] : null
 })
+
+const canToggleEnglishDescription = computed<boolean>(() => currentLanguage.value !== 'en' && !!cardCode.value)
+const languageToggleLabel = computed<string>(() => activeDescriptionLanguage.value === 'english' ? currentLanguage.value.toUpperCase() : 'EN')
+
+const toggleEnglishDescription = async () => {
+  if (!canToggleEnglishDescription.value) return
+  const next: DescriptionLanguage = activeDescriptionLanguage.value === 'english' ? 'current' : 'english'
+  selectedDescriptionLanguage.value = next
+  if (next === 'english') await store.initEnglishDbCards()
+}
 
 const mutated = computed<string>(() => {
   if (!card.value) return ''
@@ -880,9 +964,9 @@ const replaceText = (text: string): string => !text ? '' :
     .replaceAll('</i>', '</span>')
     .replace(tokenRE, (m) => TOKEN_MAP[m] ?? m)
 
-const getCardName = (dbCard: ArkhamDBCard, needBack: boolean): string | null => {
-  if (!card.value || isLocalized(card.value)) return null
-  if (dbCard.name === dbCard.real_name) return null
+const getCardName = (dbCard: ArkhamDBCard, needBack: boolean, force: boolean = false): string | null => {
+  if (!card.value || (!force && isLocalized(card.value))) return null
+  if (!force && dbCard.name === dbCard.real_name) return null
   let name = (needBack ? (dbCard.double_sided ? (dbCard.back_name || dbCard.name) : dbCard.back_name) : dbCard.name) || null
   if (!name) return null
   if (!needBack && dbCard.subname) name = `${name}: ${dbCard.subname}`
@@ -891,41 +975,41 @@ const getCardName = (dbCard: ArkhamDBCard, needBack: boolean): string | null => 
   return name
 }
 
-const getCardTypeName = (dbCard: ArkhamDBCard,): string | null => {
-  if (!card.value || isLocalized(card.value)) return null
+const getCardTypeName = (dbCard: ArkhamDBCard, force: boolean = false): string | null => {
+  if (!card.value || (!force && isLocalized(card.value))) return null
   const t = dbCard.type_name || null
   return t ? replaceText(t) : null
 }
 
-const getCardFactionName = (dbCard: ArkhamDBCard,): string | null => {
-  if (!card.value || isLocalized(card.value)) return null
+const getCardFactionName = (dbCard: ArkhamDBCard, force: boolean = false): string | null => {
+  if (!card.value || (!force && isLocalized(card.value))) return null
   const t = dbCard.faction_name || null
   return t ? replaceText(t) : null
 }
 
-const getCardFactionCode = (dbCard: ArkhamDBCard,): string | null => {
-  if (!card.value || isLocalized(card.value)) return null
+const getCardFactionCode = (dbCard: ArkhamDBCard, force: boolean = false): string | null => {
+  if (!card.value || (!force && isLocalized(card.value))) return null
   return dbCard.faction_code || null
 }
 
-const getCardTraits = (dbCard: ArkhamDBCard, needBack: boolean): string | null =>
-  (!card.value || isLocalized(card.value)) ? null :
+const getCardTraits = (dbCard: ArkhamDBCard, needBack: boolean, force: boolean = false): string | null =>
+  (!card.value || (!force && isLocalized(card.value))) ? null :
     (needBack ? (dbCard.double_sided ? (dbCard.back_traits || dbCard.traits) : dbCard.back_traits) : dbCard.traits) || null
 
-const getCardText = (dbCard: ArkhamDBCard, needBack: boolean): string | null => {
-  if (!card.value || isLocalized(card.value)) return null
+const getCardText = (dbCard: ArkhamDBCard, needBack: boolean, force: boolean = false): string | null => {
+  if (!card.value || (!force && isLocalized(card.value))) return null
   const t = needBack ? (dbCard.back_text || null) : (dbCard.text || null)
   return t ? replaceText(t) : null
 }
 
-const getCardFlavor = (dbCard: ArkhamDBCard, needBack: boolean): string | null => {
-  if (!card.value || isLocalized(card.value)) return null
+const getCardFlavor = (dbCard: ArkhamDBCard, needBack: boolean, force: boolean = false): string | null => {
+  if (!card.value || (!force && isLocalized(card.value))) return null
   const t = needBack ? (dbCard.back_flavor || null) : (dbCard.flavor || null)
   return t ? replaceText(t) : null
 }
 
-const getCardCustomizationText = (dbCard: ArkhamDBCard): string | null =>
-  (!card.value || isLocalized(card.value)) ? null : replaceText(dbCard.customization_text || '')
+const getCardCustomizationText = (dbCard: ArkhamDBCard, force: boolean = false): string | null =>
+  (!card.value || (!force && isLocalized(card.value))) ? null : replaceText(dbCard.customization_text || '')
 
 watchEffect(() => {
   dbCardName.value = dbCardTypeName.value = dbCardFactionName.value = dbCardFactionCode.value = dbCardTraits.value = dbCardText.value = dbCardCustomizationText.value = dbCardFlavor.value = ''
@@ -935,21 +1019,25 @@ watchEffect(() => {
   if (!m) return
   const code = m[1]
   const tabooSuffix = m[2]
-  const language = localStorage.getItem('language') || 'en'
-  if (imgsrc(`cards/${m[0]}`).includes(language)) return
+  const language = currentLanguage.value
+  if (language !== 'en') void store.initEnglishDbCards()
+  const useEnglish = activeDescriptionLanguage.value === 'english'
+  const forceCurrent = selectedDescriptionLanguage.value === 'current'
+  if (!useEnglish && !forceCurrent && imgsrc(`cards/${m[0]}`).includes(language)) return
 
-  const dbCard = store.getDbCard(code)
+  const dbCard = useEnglish ? store.getEnglishDbCard(code) : store.getDbCard(code)
   if (!dbCard) return
   const needBack = dbCard.code !== code
+  const force = useEnglish || forceCurrent
 
-  const name = getCardName(dbCard, needBack)
-  const type = getCardTypeName(dbCard)
-  const faction = getCardFactionName(dbCard)
-  const factionCode = getCardFactionCode(dbCard)
-  const traits = getCardTraits(dbCard, needBack)
-  const text = getCardText(dbCard, needBack)
-  const flavor = getCardFlavor(dbCard, needBack)
-  const cust = getCardCustomizationText(dbCard)
+  const name = getCardName(dbCard, needBack, force)
+  const type = getCardTypeName(dbCard, force)
+  const faction = getCardFactionName(dbCard, force)
+  const factionCode = getCardFactionCode(dbCard, force)
+  const traits = getCardTraits(dbCard, needBack, force)
+  const text = getCardText(dbCard, needBack, force)
+  const flavor = getCardFlavor(dbCard, needBack, force)
+  const cust = getCardCustomizationText(dbCard, force)
 
   dbCardName.value = name ? `${tabooSuffix ? '[Taboo] ' : ''}${name}` : ''
   dbCardTypeName.value = type ?? ''
@@ -1131,6 +1219,16 @@ watchEffect(() => {
       </svg>
 
       <div v-for="entry in crossedOff" :key="entry" class="crossed-off" :class="{ [toCamelCase(entry)]: true }"></div>
+      <button
+        v-if="canToggleEnglishDescription"
+        class="card-language-toggle"
+        type="button"
+        :title="activeDescriptionLanguage === 'english' ? 'Show selected language card text' : 'Show English card text'"
+        @click.stop="toggleEnglishDescription"
+      >
+        <font-awesome-icon :icon="['fas', 'language']" aria-hidden="true" />
+        <span>{{ languageToggleLabel }}</span>
+      </button>
     </div>
 
     <div
@@ -1140,6 +1238,16 @@ watchEffect(() => {
     >
       <div class="card-data-header">
         <p v-if="dbCardName"><b>{{ dbCardName }}</b></p>
+        <button
+          v-if="canToggleEnglishDescription"
+          class="card-data-language-toggle"
+          type="button"
+          :title="activeDescriptionLanguage === 'english' ? 'Show selected language card text' : 'Show English card text'"
+          @click.stop="toggleEnglishDescription"
+        >
+          <font-awesome-icon :icon="['fas', 'language']" aria-hidden="true" />
+          <span>{{ languageToggleLabel }}</span>
+        </button>
       </div>
       <div class="card-data-body">
         <div class="card-info">
@@ -1287,6 +1395,7 @@ watchEffect(() => {
   box-shadow: 1px 1px 6px rgba(0, 0, 0, 0.75);
   display: flex;
   flex-direction: column;
+  pointer-events: auto;
   --panel-color: #808080;
   --border-color: var(--panel-color);
 }
@@ -1324,6 +1433,51 @@ watchEffect(() => {
   padding: 3% 15px;
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.card-data-header p {
+  margin: 0;
+}
+
+.card-language-toggle,
+.card-data-language-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(0, 0, 0, 0.68);
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1;
+  min-width: 42px;
+  min-height: 28px;
+}
+
+.card-language-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: var(--z-index-3);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.card-data-language-toggle {
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.card-language-toggle:hover,
+.card-data-language-toggle:hover {
+  background: rgba(0, 0, 0, 0.82);
 }
 
 .card-data-body {
