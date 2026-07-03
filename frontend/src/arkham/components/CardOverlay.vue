@@ -21,6 +21,7 @@ import { type ArkhamKey, keyToId } from '@/arkham/types/Key'
 import PoolItem from '@/arkham/components/PoolItem.vue'
 import { useDbCardStore, ArkhamDBCard } from '@/stores/dbCards'
 import { useI18n } from 'vue-i18n'
+import { cardImagePartsFromImage } from '@/arkham/cardLanguage'
 
 /* =============================================================================
  * Constants, basic helpers, and caches
@@ -579,11 +580,8 @@ const isSpirit = computed<boolean>(() => {
   return el.dataset.isSpirit === 'true'
 })
 
-const cardCode = computed<string | null>(() => {
-  if (!card.value) return null
-  const m = card.value.match(/cards\/(\d+)(_.*)?\.avif$/)
-  return m ? m[1] : null
-})
+const cardImageParts = computed(() => cardImagePartsFromImage(card.value))
+const cardCode = computed<string | null>(() => cardImageParts.value?.code ?? null)
 
 const canToggleEnglishDescription = computed<boolean>(() => currentLanguage.value !== 'en' && !!cardCode.value)
 const languageToggleLabel = computed<string>(() => activeDescriptionLanguage.value === 'english' ? currentLanguage.value.toUpperCase() : 'EN')
@@ -596,9 +594,8 @@ const toggleEnglishDescription = async () => {
 }
 
 const mutated = computed<string>(() => {
-  if (!card.value) return ''
-  const m = card.value.match(/cards\/\d+(_Mutated\d+)\.avif$/)
-  return m ? m[1] : ''
+  const suffix = cardImageParts.value?.suffix ?? ''
+  return /^_Mutated\d+$/.test(suffix) ? suffix : ''
 })
 
 const additionalCard = computed<string | null>(() => {
@@ -1015,15 +1012,15 @@ watchEffect(() => {
   dbCardName.value = dbCardTypeName.value = dbCardFactionName.value = dbCardFactionCode.value = dbCardTraits.value = dbCardText.value = dbCardCustomizationText.value = dbCardFlavor.value = ''
   const src = card.value
   if (!src) return
-  const m = src.match(/(\d+b?)(_.*)?\.avif$/)
-  if (!m) return
-  const code = m[1]
-  const tabooSuffix = m[2]
+  const parts = cardImagePartsFromImage(src)
+  if (!parts) return
+  const { code } = parts
+  const tabooSuffix = parts.suffix
   const language = currentLanguage.value
   if (language !== 'en') void store.initEnglishDbCards()
   const useEnglish = activeDescriptionLanguage.value === 'english'
   const forceCurrent = selectedDescriptionLanguage.value === 'current'
-  if (!useEnglish && !forceCurrent && imgsrc(`cards/${m[0]}`).includes(language)) return
+  if (!useEnglish && !forceCurrent && imgsrc(`cards/${code}${tabooSuffix}.avif`).includes(language)) return
 
   const dbCard = useEnglish ? store.getEnglishDbCard(code) : store.getDbCard(code)
   if (!dbCard) return

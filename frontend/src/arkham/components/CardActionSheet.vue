@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { getCardImage } from '@/arkham/cardImageLookup'
 import OverlayDrawer from '@/components/OverlayDrawer.vue'
 import { useDbCardStore, type ArkhamDBCard } from '@/stores/dbCards'
+import { cardImagePartsFromImage } from '@/arkham/cardLanguage'
 
 const props = defineProps<{
   target: HTMLElement
@@ -27,9 +28,7 @@ const currentLanguage = computed(() => {
 })
 
 const cardCode = computed(() => {
-  if (!image.value) return null
-  const match = image.value.match(/cards\/(\d+b?)(?:_.*)?\.avif(?:\?.*)?$/)
-  return match ? match[1] : null
+  return cardImagePartsFromImage(image.value)?.code ?? null
 })
 
 const canToggleEnglishDescription = computed(() => currentLanguage.value !== 'en' && !!cardCode.value)
