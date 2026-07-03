@@ -39,6 +39,7 @@ import AbilityButton from '@/arkham/components/AbilityButton.vue'
 import Act from '@/arkham/components/Act.vue';
 import CardView from '@/arkham/components/Card.vue';
 import Draggable from '@/components/Draggable.vue';
+import OverlayDrawer from '@/components/OverlayDrawer.vue';
 import ChaosBag from '@/arkham/components/ChaosBag.vue';
 import Agenda from '@/arkham/components/Agenda.vue';
 import Investigator from '@/arkham/components/Investigator.vue';
@@ -64,6 +65,7 @@ import { useDebug, scenarioHasDebugOptions } from '@/arkham/debug'
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { IsMobile } from '@/arkham/isMobile';
+import { usePhoneShell } from '@/arkham/composables/phoneShell'
 const { t } = useI18n();
 
 // types
@@ -84,6 +86,7 @@ export interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits(['choose', 'toggleRealityAcidLight'])
 const debug = useDebug()
+const phoneShell = usePhoneShell()
 const { addEntry, removeEntry } = useMenu()
 
 const upgradeDeck = computed(() => Object.values(props.game.question).some((q) => q.tag === 'ChooseUpgradeDeck'))
@@ -2608,6 +2611,14 @@ async function addChaosToken(face: any){
         </div>
       </div>
 
+      <OverlayDrawer
+        :inline="!phoneShell"
+        :open="!!phoneShell?.playersOpen.value"
+        keep-mounted
+        side="bottom"
+        :dock-target="phoneShell?.bottomDockTarget"
+        @close="phoneShell && (phoneShell.playersOpen.value = false)"
+      >
       <div id="player-zone" :class="{ 'player-zone--fullscreen': locationsFullscreen }">
         <PlayerTabs
           :game="game"
@@ -2658,8 +2669,9 @@ async function addChaosToken(face: any){
           <PoolItem v-if="frostTokens > 0" type="ct_frost" :amount="frostTokens" />
         </div>
       </div>
+      </OverlayDrawer>
     </div>
-    <div class="phases">
+    <div v-if="!phoneShell" class="phases">
       <div class="phase" :class="{ 'active-phase': phase == 'MythosPhase' }">
         <div class="subphases">
           <div v-tooltip.left="$t('phase.mythosPhaseBeginsStep')" :class="{'current': phaseStep?.contents === 'MythosPhaseBeginsStep' }">1.1</div>
@@ -3911,6 +3923,12 @@ async function addChaosToken(face: any){
     z-index: var(--z-index-1);
     margin-top: calc((var(--card-width) / (3 / 2)) * -1);
   }
+}
+
+:global(.overlay-drawer #player-zone) {
+  flex-direction: column;
+  max-height: 80dvh;
+  padding-bottom: 0;
 }
 
 #player-zone {

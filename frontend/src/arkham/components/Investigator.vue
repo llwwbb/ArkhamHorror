@@ -444,26 +444,6 @@ const spadeInjury = computed(() => {
 
 <template>
   <div v-if="portrait" class="portrait-container" ref="frame">
-    <span v-if="isMobile">
-      <i class="action" v-for="n in investigator.remainingActions" :key="n"></i>
-      <template v-for="action in investigator.additionalActions" :key="action">
-        <button @click="useEffectAction(action)" v-if="action.tag === 'EffectAction'" v-tooltip="action.contents[0]" :class="[{ activeButton: isActiveEffectAction(action)}, `${investigatorClass.toLowerCase()}ActionButton`]">
-          <i class="action"></i>
-        </button>
-        <i v-else class="action" :class="`${investigatorClass.toLowerCase()}Action`"></i>
-      </template>
-    </span>
-    <span
-      v-if="isMobile && isTakingImmediateAction"
-      class="no-free-abilities"
-      v-tooltip="{ content: $t('investigator.freeAbilitiesUnavailable'), html: true }"
-    >
-      <span class="fast-icon"></span>
-      <svg class="no-sign" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="5" y1="5" x2="19" y2="19" />
-      </svg>
-    </span>
     <div
       v-if="miniCardDevoured"
       class="portrait portrait--replacement-marker portrait--devoured-mini-card"
@@ -527,7 +507,7 @@ const spadeInjury = computed(() => {
       <div>
         <div class="player-buttons">
           <div class="button-group" :class="{ 'button-group--skip-all-pending': isCurrentPlayersInvestigator && skipAllInProgress }">
-            <span v-if="!isMobile" class="action-container">
+            <span class="action-container">
               <i class="spade" v-if="spadeInjury"></i>
               <i class="heart" v-if="heartInjury"></i>
               <i class="diamond" v-if="diamondInjury"></i>
@@ -1019,6 +999,22 @@ i.action {
       width: 100%;
       height: fit-content;
       font-size: small;
+    }
+  }
+}
+
+.action-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+
+  @media (max-width: 800px) and (orientation: portrait) {
+    min-height: 1rem;
+
+    :deep(button) {
+      width: auto;
+      height: auto;
+      font-size: inherit;
     }
   }
 }
