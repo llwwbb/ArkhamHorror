@@ -32,6 +32,11 @@ async function flushOverlay() {
   await nextTick()
 }
 
+function pressAndClick(button: HTMLButtonElement) {
+  button.dispatchEvent(new Event('pointerup', { bubbles: true }))
+  button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+}
+
 describe('CardOverlay language toggle', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
@@ -92,6 +97,41 @@ describe('CardOverlay language toggle', () => {
     await flushOverlay()
 
     expect(document.querySelector('.card-data-language-toggle')?.textContent).toContain('EN')
+    expect(document.querySelector('.card-data')?.textContent).toContain('罗兰·班克斯')
+    expect(document.querySelector('.card-data')?.textContent).toContain('中文描述')
+
+    app.unmount()
+  })
+
+  it('keeps the desktop overlay open when toggling English back to the selected language', async () => {
+    const target = document.createElement('img')
+    target.className = 'card'
+    target.src = '/img/arkham/cards/01001.avif'
+    document.body.appendChild(target)
+
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const app = createApp(CardOverlay)
+    app.use(pinia)
+    app.use(createI18n({ legacy: false, locale: 'zh', messages: { zh: {} } }))
+    app.mount(host)
+
+    target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: 1, clientY: 1 }))
+    await flushOverlay()
+
+    const englishButton = document.querySelector<HTMLButtonElement>('.card-language-toggle')
+    expect(englishButton?.textContent).toContain('EN')
+
+    pressAndClick(englishButton!)
+    await flushOverlay()
+
+    const selectedLanguageButton = document.querySelector<HTMLButtonElement>('.card-language-toggle')
+    expect(selectedLanguageButton?.textContent).toContain('ZH')
+
+    pressAndClick(selectedLanguageButton!)
+    await flushOverlay()
+
+    expect(document.querySelector('.card-language-toggle')?.textContent).toContain('EN')
     expect(document.querySelector('.card-data')?.textContent).toContain('罗兰·班克斯')
     expect(document.querySelector('.card-data')?.textContent).toContain('中文描述')
 

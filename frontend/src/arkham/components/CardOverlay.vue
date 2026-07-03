@@ -315,7 +315,9 @@ const onPointerMove = (e: PointerEvent) => {
   }
 }
 
-const onPointerUp = () => {
+const onPointerUp = (e?: PointerEvent) => {
+  const target = e?.target as HTMLElement | null
+  if (target?.closest('.card-overlay')) return
   if (canDisablePress) {
     canDisablePress = false
   } else {
