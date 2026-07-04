@@ -304,6 +304,10 @@
     "listView": "List view",
     "imageView": "Image view",
     "includeEncounter": "Include Encounter",
+    "cardPool": "Card pool",
+    "playerCards": "Player",
+    "campaignCards": "Campaign",
+    "bothCards": "Both",
     "chapter1": "Chapter 1",
     "chapter2": "Chapter 2"
   },
@@ -550,6 +554,7 @@
       "exhaust": "Exhaust",
       "defeat": "Defeat",
       "discard": "Discard",
+      "flip": "Flip",
       "showSlots": "Show Slots"
     },
     "concealedCard": {
