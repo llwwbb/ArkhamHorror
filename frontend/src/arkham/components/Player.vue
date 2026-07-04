@@ -31,6 +31,7 @@ import { XMarkIcon } from '@heroicons/vue/20/solid';
 import * as Api from '@/arkham/api';
 import type { CardDef } from '@/arkham/types/CardDef';
 import { fullName } from '@/arkham/types/Name';
+import { usePhoneShell } from '@/arkham/composables/phoneShell'
 const { t } = useI18n();
 
 interface RefWrapper<T> {
@@ -381,6 +382,8 @@ const events = computed(() => props.investigator.events.map((e) => props.game.ev
 const skills = computed(() => props.investigator.skills.map((e) => props.game.skills[e]).filter(e => e))
 const emptySlots = computed(() => props.investigator.slots.filter((s) => s.empty))
 const { isMobile } = IsMobile();
+const phoneShell = usePhoneShell()
+const showLegacyMobileHand = computed(() => isMobile.value && !phoneShell)
 
 const slotImg = (slot: Arkham.Slot) => {
   switch (slot.tag) {
@@ -518,7 +521,7 @@ const handAreaMarginBottom = ref(handCardExposedHeight_MIN);
 const handAreaPointerEvents = ref('none');
 
 onMounted(() => {
-  if (isMobile) {
+  if (showLegacyMobileHand.value) {
     document.addEventListener('click',toggleHandAreaMarginBottom)
     const isMinimized_SkillTest = inject('isMinimized_SkillTest', ref(false))
     watch([() => props.game.skillTest, isMinimized_SkillTest], ([newSkillTest,isMinimized]) => {
@@ -537,7 +540,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (isMobile) {
+  if (showLegacyMobileHand.value) {
     document.removeEventListener('click', toggleHandAreaMarginBottom)
   }
 });
@@ -810,7 +813,7 @@ function closeHand() {
         <div v-if="investigator.handSize" class="hand-size" :class="handSizeClasses" :current-length="totalHandSize">{{ t('handSize') }}: {{totalHandSize}}/{{investigator.handSize}}</div>
       </div>
     </div>
-    <div v-if="isMobile" class="hand hand-area-IsMobile" :style="{ bottom: `${handAreaMarginBottom}px` }" @click="toggleHandAreaMarginBottom">
+    <div v-if="showLegacyMobileHand" class="hand hand-area-IsMobile" :style="{ bottom: `${handAreaMarginBottom}px` }" @click="toggleHandAreaMarginBottom">
       <button
         v-if="debug.active"
         v-show="handAreaPointerEvents === 'auto'"

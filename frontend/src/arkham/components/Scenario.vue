@@ -2661,7 +2661,7 @@ async function addChaosToken(face: any){
             </button>
           </div>
         </PlayerTabs>
-        <div id="totals">
+        <div v-if="!phoneShell" id="totals">
           <PoolItem type="doom" :amount="game.totalDoom" tooltip="Total Doom" />
           <PoolItem type="clue" :amount="game.totalClues" tooltip="Total Spendable Clues" />
           <PoolItem v-if="blessTokens > 0" type="ct_bless" :amount="blessTokens" />
@@ -3939,9 +3939,6 @@ async function addChaosToken(face: any){
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.4);
   .player-info {
     flex: 1;
-  }
-  @media (max-width: 800px) {
-    padding-bottom: 50px;
   }
 }
 
