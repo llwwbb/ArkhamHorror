@@ -12,8 +12,9 @@ const emit = defineEmits<{
   undo: []
 }>()
 
+const GAME_LOG_DISPLAY_LIMIT = 30
 const messages = ref<Element | null>(null)
-const truncatedGameLog = computed(() => props.gameLog.slice(-10))
+const truncatedGameLog = computed(() => props.gameLog.slice(-GAME_LOG_DISPLAY_LIMIT))
 
 onMounted(async () => {
   const el = messages.value
