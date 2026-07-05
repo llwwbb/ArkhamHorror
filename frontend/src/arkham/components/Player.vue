@@ -488,6 +488,7 @@ const emptySlots = computed(() => props.investigator.slots.filter((s) => s.empty
 const { isMobile } = IsMobile();
 const phoneShell = usePhoneShell()
 const showLegacyMobileHand = computed(() => isMobile.value && !phoneShell)
+const showLegacyChoiceModal = computed(() => !phoneShell)
 
 const slotImg = (slot: Arkham.Slot) => {
   switch (slot.tag) {
@@ -784,7 +785,7 @@ function closeHand() {
     </transition>
 
     <ChoiceModal
-      v-if="playerId === investigator.playerId"
+      v-if="showLegacyChoiceModal && playerId === investigator.playerId"
       :game="game"
       :playerId="playerId"
       @choose="$emit('choose', $event)"

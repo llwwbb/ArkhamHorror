@@ -417,6 +417,16 @@ const flippableCard = (cardCode: string) => {
 
 }
 
+:global(.story-question-root--phone-shell) .intro-text {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(100%, 560px);
+  max-height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  padding-bottom: 0;
+}
+
 @media (max-width: 700px) {
   .intro-text {
     box-sizing: border-box;
@@ -424,6 +434,10 @@ const flippableCard = (cardCode: string) => {
     padding-bottom: calc(var(--mobile-nav-height, 56px) + env(safe-area-inset-bottom, 0px) + 20px);
     margin-bottom: 0;
     font-size: 1.2em;
+  }
+
+  :global(.story-question-root--phone-shell) .intro-text {
+    padding-bottom: 0;
   }
 
   .entry {

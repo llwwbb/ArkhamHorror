@@ -16,6 +16,7 @@ import FormattedEntry from '@/arkham/components/FormattedEntry.vue';
 import * as ArkhamGame from '@/arkham/types/Game';
 import WorldMap, { type MapData } from '@/arkham/components/TheScarletKeys/WorldMap.vue';
 import BuildSpiritDeck from '@/arkham/components/BuildSpiritDeck.vue';
+import { usePhoneShell } from '@/arkham/composables/phoneShell'
 
 export interface Props {
   game: Game
@@ -24,6 +25,7 @@ export interface Props {
 
 const props = defineProps<Props>()
 const emit = defineEmits(['choose'])
+const phoneShell = usePhoneShell()
 
 const ownQuestion = computed(() => props.game.question[props.playerId])
 
@@ -155,7 +157,7 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
 </script>
 
 <template>
-  <div :class="['story-question-root', { 'view-only': viewOnly }]">
+  <div :class="['story-question-root', { 'view-only': viewOnly, 'story-question-root--phone-shell': phoneShell }]">
     <div v-if="viewOnly" class="waiting-banner">
       {{ t('waitingForPlayer', { name: viewerInvestigatorName }) }}
     </div>
@@ -297,6 +299,21 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
 <style scoped>
 .story-question-root {
   display: contents;
+}
+
+.story-question-root--phone-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.story-question-root--phone-shell .question-label {
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .story-question-root.view-only {

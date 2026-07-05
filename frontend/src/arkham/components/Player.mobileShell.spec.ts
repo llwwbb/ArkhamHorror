@@ -9,4 +9,9 @@ describe('Player mobile shell hand rendering', () => {
     expect(playerSource).toContain('if (showLegacyMobileHand.value) {')
     expect(playerSource).toContain('v-if="showLegacyMobileHand" class="hand hand-area-IsMobile"')
   })
+
+  it('does not render the legacy draggable choice modal inside the phone shell', () => {
+    expect(playerSource).toContain('const showLegacyChoiceModal = computed(() => !phoneShell)')
+    expect(playerSource).toContain('v-if="showLegacyChoiceModal && playerId === investigator.playerId"')
+  })
 })
