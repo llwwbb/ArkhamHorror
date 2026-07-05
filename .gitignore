@@ -93,6 +93,7 @@ spectate-mobile.png
 phase4-*.png
 AGENTS.md
 tmp/
+.buildx-cache/
 .agents/
 .windsurf/
 skills-lock.json
