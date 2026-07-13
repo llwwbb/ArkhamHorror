@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { imgsrc } from '@/arkham/helpers'
+import { cardImg } from '@/arkham/helpers'
 
 export interface PlayabilityInfo {
   cardId: string
@@ -18,7 +18,7 @@ defineEmits<{ close: [] }>()
       <div class="debug-playability-content">
         <img
           class="debug-card-image"
-          :src="imgsrc(`cards/${info.cardCode.replace('c', '')}.avif`)"
+          :src="cardImg(info.cardCode.replace('c', ''))"
         />
         <ul class="playability-checks">
           <li

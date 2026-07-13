@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/arkham/helpers', () => ({ imgsrc: (p: string) => `/img/${p}` }))
+vi.mock('@/arkham/helpers', () => ({ cardImg: (art: string) => `/img/cards/${art}.avif` }))
 
 import { getCardImage } from './cardImageLookup'
 

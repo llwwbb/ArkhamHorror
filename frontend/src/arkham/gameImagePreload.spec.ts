@@ -3,7 +3,7 @@ import { loadAllGameImages, _resetForTests } from './gameImagePreload'
 import type { Game } from '@/arkham/types/Game'
 
 vi.mock('@/arkham/helpers', () => ({
-  imgsrc: (path: string) => `/img/${path}`,
+  cardImg: (art: string) => `/img/cards/${art}.avif`,
 }))
 
 vi.mock('@/arkham/types/Card', () => ({

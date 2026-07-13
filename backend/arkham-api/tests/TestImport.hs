@@ -586,7 +586,13 @@ addInvestigator
 addInvestigator defF = do
   investigator' <- testInvestigator defF
   env <- get
-  runReaderT (overGame (entitiesL . Entities.investigatorsL %~ insertEntity investigator')) env
+  runReaderT
+    ( overGame
+        ( (entitiesL . Entities.investigatorsL %~ insertEntity investigator')
+            . (playerOrderL %~ (<> [toId investigator']))
+        )
+    )
+    env
   pure investigator'
 
 testConnectedLocations
@@ -640,10 +646,13 @@ createMessageChecker :: (Message -> Bool) -> TestAppT (IORef Bool)
 createMessageChecker f = do
   ref <- liftIO $ newIORef False
   testApp <- get
+  -- Chain rather than replace, so several checkers can watch the same game.
+  let prev = testLogger testApp
   put
     $ testApp
-      { testLogger =
-          Just (\msg -> when (f msg) (liftIO $ atomicWriteIORef ref True))
+      { testLogger = Just \msg -> do
+          for_ prev ($ msg)
+          when (f msg) (liftIO $ atomicWriteIORef ref True)
       }
   pure ref
 
@@ -868,9 +877,16 @@ scenarioTest = scenarioTestWith Investigators.jennyBarnes
 -- | Like 'scenarioTest' but lets the caller choose which investigator the game
 -- is seeded with (rather than the default Jenny Barnes).
 scenarioTestWith :: CardDef -> ScenarioId -> (Investigator -> TestAppT ()) -> IO ()
-scenarioTestWith investigatorDef scenarioId body = do
+scenarioTestWith investigatorDef = scenarioTestWithDifficulty investigatorDef Easy
+
+-- | Like 'scenarioTestWith' but also lets the caller choose the difficulty
+-- (needed for effects that differ between the Easy/Standard and Hard/Expert
+-- sides of a scenario reference card).
+scenarioTestWithDifficulty
+  :: CardDef -> Difficulty -> ScenarioId -> (Investigator -> TestAppT ()) -> IO ()
+scenarioTestWithDifficulty investigatorDef difficulty scenarioId body = do
   investigator <- testInvestigator investigatorDef
-  let scenario' = lookupScenario scenarioId Easy
+  let scenario' = lookupScenario scenarioId difficulty
   g <- newGame scenario' investigator
   gameRef <- newIORef g
   queueRef <- newQueue []
@@ -924,6 +940,7 @@ newGame scenario' investigator = do
         , gameGameState = IsActive
         , gameFoundCards = mempty
         , gameFocusedCards = mempty
+        , gameHighlightedCards = mempty
         , gameFocusedTarotCards = mempty
         , gameFocusedChaosTokens = mempty
         , gameActiveCard = Nothing

@@ -30,6 +30,7 @@ import Arkham.Strategy as X
 import Arkham.Text as X
 
 import Arkham.Ability.Types
+import Arkham.Achievement.Types (Achievement)
 import Arkham.Act.Sequence
 import Arkham.Action hiding (Explore)
 import Arkham.Action qualified as Action
@@ -480,6 +481,16 @@ data Message
   | UpdateGlobalSetting InvestigatorId SetGlobalSetting
   | UpdateCardSetting InvestigatorId CardCode SetCardSetting
   | SetAsIfRuling AsIfRuling
+  | SetUltimatumsAndBoonsEnabled Bool
+  | -- | Ultimatum of The Scream: ban this ally for the rest of the campaign
+    RecordScreamedAlly CardCode
+  | -- | Above-the-table achievement earned; persisted per human player and
+    -- toasted by the API layer (the engine only announces it).
+    EarnAchievement Achievement
+  | -- | Checklist items completed toward a cross-playthrough achievement
+    -- (see 'achievementChecklist'); the API layer merges them into the
+    -- per-user progress row and awards the earn when the list is complete.
+    AchievementProgress Achievement [Text]
   | -- AI seat configuration (mutates Settings.settingsAiPlayers)
     RegisterAiPlayer PlayerId AiPlayerState
   | SetAiFocusOverride PlayerId (Maybe Focus)
@@ -766,6 +777,7 @@ data Message
   | FindEncounterCard InvestigatorId Target [ScenarioZone] CardMatcher FindEncounterCardStrategy
   | FinishedWithMulligan InvestigatorId
   | FocusCards [Card]
+  | HighlightCards [Card]
   | FocusChaosTokens [ChaosToken]
   | Force Message
   | FoundAndDrewEncounterCard InvestigatorId EncounterCardSource EncounterCard
@@ -896,6 +908,10 @@ data Message
   | PutOnBottomOfDeck InvestigatorId DeckSignifier Target
   | Record CampaignLogKey
   | RecordForInvestigator InvestigatorId CampaignLogKey
+  | -- | Adjust a per-investigator tally in that investigator's own campaign log
+    -- (e.g. Dark Matter "Memories"). Negative values cross off tallies; the
+    -- count never drops below zero.
+    IncrementRecordCountForInvestigator InvestigatorId CampaignLogKey Int
   | RecordCount CampaignLogKey Int
   | IncrementRecordCount CampaignLogKey Int
   | DecrementRecordCount CampaignLogKey Int
@@ -1131,6 +1147,7 @@ data Message
   | Simultaneously [Message]
   | -- Debug
     ClearQueue
+  | SetCardOwner CardId InvestigatorId
   | DebugAddToHand InvestigatorId CardId
   | DebugCustomize InvestigatorId CardId
   | DebugIncreaseCustomization InvestigatorId CardCode Customization [CustomizationChoice]

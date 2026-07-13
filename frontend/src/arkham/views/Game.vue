@@ -1,7 +1,8 @@
 <script lang="ts" setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, markRaw, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 import {
   AdjustmentsHorizontalIcon,
   ClockIcon,
@@ -42,6 +43,7 @@ import OrganizerBar from '@/arkham/components/OrganizerBar.vue'
 import PlayerEventBar from '@/arkham/components/PlayerEventBar.vue'
 import EventStartBarrier from '@/arkham/components/EventStartBarrier.vue'
 import EventActAdvanceBarrier from '@/arkham/components/EventActAdvanceBarrier.vue'
+import AchievementToast from '@/arkham/components/AchievementToast.vue'
 import AiControlPanel from '@/arkham/components/AiControlPanel.vue'
 import Draggable from '@/components/Draggable.vue'
 import GameBar from '@/arkham/components/GameBar.vue'
@@ -65,6 +67,8 @@ const store = useCardStore()
 const settings = useSettings()
 const eventStore = useEventStore()
 const { addEntry, menuItems } = useMenu()
+const { t } = useI18n()
+const toast = useToast()
 const aiDevEnabled = computed(() => settings.aiInvestigatorsEnabled)
 const flashlightX = ref(0)
 const flashlightY = ref(0)
@@ -75,6 +79,20 @@ let focusLightAnimationFrame: number | null = null
 
 store.fetchCards()
 
+const showAchievement = (tag: string) => {
+  toast(
+    {
+      component: markRaw(AchievementToast),
+      props: {
+        title: t('achievements.toastTitle'),
+        name: t(`achievements.entries.${tag}.name`),
+        text: t(`achievements.entries.${tag}.text`),
+      },
+    },
+    { timeout: 8000, icon: false, closeButton: false, toastClassName: 'achievement-toast' },
+  )
+}
+
 const modals = useGameModals()
 const socket = useGameSocket({
   gameId: () => props.gameId,
@@ -82,6 +100,7 @@ const socket = useGameSocket({
   modals,
   emitter,
   onSharedStateUpdate: (state) => eventStore.applySharedState(state),
+  onAchievement: showAchievement,
 })
 // send/choose* 等其余字段经 provideGameContext 注入给子组件，这里只解构 Game.vue 自用的
 const {
@@ -114,7 +133,6 @@ watch(showOtherPlayersHands, (v) => {
 })
 const showSettings = ref(false)
 const showHistory = ref(false)
-const { t } = useI18n()
 const { sheetTap, confirmSheetAction, closeSheet } = useCardTapSheet({
   isTouch: () => isTouch.value,
   game,

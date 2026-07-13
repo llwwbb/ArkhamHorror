@@ -37,6 +37,7 @@ import Arkham.Prelude
 import Arkham.Projection
 import Arkham.SideStory
 import Arkham.Tarot
+import Arkham.UltimatumsAndBoons
 import Arkham.Xp
 import Data.Aeson.Key qualified as Aeson
 import Data.Map.Strict qualified as Map
@@ -82,8 +83,13 @@ defaultCampaignRunner msg a = case msg of
     -- between two scenarios
     killed <- select KilledInvestigator
     insane <- select InsaneInvestigator
+    -- Ultimatum of Survival: a killed or insane investigator's player is
+    -- eliminated from the campaign and cannot continue with a new
+    -- investigator, so they get no replacement-deck prompt.
+    survival <- hasUltimatum UltimatumOfSurvival
     case nub (killed <> insane) of
       [] -> pure ()
+      _ | survival -> pure ()
       xs -> push . chooseUpgradeDecks =<< traverse getPlayer xs
     pure a
   CampaignStep (ScenarioStepWithOptions sid opts) -> do
@@ -108,7 +114,16 @@ defaultCampaignRunner msg a = case msg of
     -- [ALERT] Update TheDreamEaters if this alters a
     pure a
   CampaignStep (UpgradeDeckStep _) -> do
-    investigators <- select InvestigatorCanAddCardsToDeck
+    investigators <- do
+      candidates <- select InvestigatorCanAddCardsToDeck
+      -- Ultimatum of Survival: eliminated players don't return with a new
+      -- investigator, so killed/insane seats get no upgrade/replacement prompt.
+      survival <- hasUltimatum UltimatumOfSurvival
+      if survival
+        then do
+          eliminated <- nub <$> liftA2 (<>) (select KilledInvestigator) (select InsaneInvestigator)
+          pure $ filter (`notElem` eliminated) candidates
+        else pure candidates
     players <- traverse getPlayer investigators
     pushAll
       [ ResetGame
@@ -156,6 +171,10 @@ defaultCampaignRunner msg a = case msg of
       $ updateAttrs a
       $ (storyCardsL %~ adjustMap (filter ((/= cardDef) . toCardDef)) iid)
       . (decksL %~ adjustMap (withDeck $ filter ((/= cardDef) . toCardDef)) iid)
+  ReplaceCard cardId card ->
+    -- Keep campaign story cards in sync when a card's identity changes (e.g. a
+    -- story asset moved from the encounter pool to the player pool).
+    pure $ updateAttrs a (storyCardsL %~ Map.map (map (\c -> if toCardId c == cardId then card else c)))
   AddChaosToken token -> do
     if token `notElem` [CurseToken, BlessToken]
       then pure $ updateAttrs a (chaosBagL %~ (token :))
@@ -180,15 +199,47 @@ defaultCampaignRunner msg a = case msg of
             Just _ -> pure Nothing
         else pure Nothing
 
-    (deck', randomWeaknesses) <- addRandomBasicWeaknessIfNeeded investigatorClass playerCount mDecklist deck
+    (deck', baseRandomWeaknesses) <- addRandomBasicWeaknessIfNeeded investigatorClass playerCount mDecklist deck
+    -- Ultimatum of Disaster: deckbuilding requirements gain 1 additional
+    -- random basic weakness.
+    disaster <- hasUltimatum UltimatumOfDisaster
+    extraWeakness <-
+      if disaster
+        then (: []) <$> (genCard =<< getRandomBasicWeakness investigatorClass playerCount mDecklist)
+        else pure []
+    let randomWeaknesses = baseRandomWeaknesses <> extraWeakness
+    morrigan <- hasBoon BoonOfTheMorrigan
+    -- Boon of the Morrígan opens an interactive choice. Defer it out of the
+    -- ChooseDecks window: every InitDeck runs while decks are still being
+    -- chosen, so presenting the choice there folds it into the shared
+    -- ChooseDeck question and races the per-player investigator setup (a player
+    -- could be dropped from the game). It is queued after this InitDeck's own
+    -- messages (below) and resolves in the active game, one player at a time.
+    morriganSwaps <-
+      if morrigan
+        then
+          concat <$> for randomWeaknesses \_ ->
+            morriganWeaknessMessages
+              iid
+              (genCard =<< getRandomBasicWeakness investigatorClass playerCount mDecklist)
+        else pure []
+    let weaknessMessages =
+          if morrigan then [] else map (AddCampaignCardToDeck iid ShuffleIn) randomWeaknesses
+    ancients <- hasBoon BoonOfTheAncients
     purchaseTrauma <- initDeckTrauma deck' iid CampaignTarget
     initXp <- initDeckXp deck' iid CampaignTarget
     pushAll
-      $ map (AddCampaignCardToDeck iid ShuffleIn) randomWeaknesses
+      $ weaknessMessages
       <> purchaseTrauma
       <> toList mEldritchBrand
       <> [DoStep 1 msg]
       <> initXp
+      <> (if ancients then ancientsStartingXpMessages iid else [])
+
+    -- Deferred after the pushAll above so it runs once decks are done; falls
+    -- back to now when no ChooseDecks is pending (single-player / tests).
+    unless (null morriganSwaps)
+      $ insertAfterMatchingOrNow morriganSwaps (== DoneChoosingDecks)
 
     pure $ updateAttrs a $ decksL %~ insertMap iid deck'
   DoStep 1 (InitDeck InitDeckAttrs {initDeckInvestigator = iid, initDeckDeck = deck}) -> do
@@ -422,6 +473,14 @@ defaultCampaignRunner msg a = case msg of
         case step.unwrap.normalize of
           EpilogueStep -> push $ CampaignStep step
           _ -> pushAll [HandleKilledOrInsaneInvestigators, CampaignStep step]
+    -- Ultimatum of The Scream: strip banned allies from every player's deck.
+    -- Stored campaign decks plus seated investigators (a deck may not be
+    -- stored yet mid-transition). Pushed after the step messages so the
+    -- removals process before them.
+    investigators <- getInvestigators
+    pushAll
+      =<< screamedAllyCleanupMessages
+        (nub $ Map.keys (campaignDecks $ toAttrs a) <> investigators)
     pure
       $ updateAttrs a
       $ \attrs ->

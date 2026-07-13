@@ -24,7 +24,7 @@ import Arkham.Agenda.Sequence qualified as Agenda
 import Arkham.Agenda.Types (Field (..))
 import Arkham.Asset.Cards qualified as Assets
 import Arkham.Asset.Types (Field (..))
-import Arkham.Campaign.Types (Field (..))
+import Arkham.Campaign.Types (Field (..), getRandomBasicWeakness)
 import Arkham.CampaignLog hiding (optionsL)
 import Arkham.CampaignLogKey
 import Arkham.CampaignStep
@@ -70,13 +70,13 @@ import Arkham.Helpers.Scenario
 import Arkham.Helpers.SkillTest (getIsCommittable)
 import Arkham.Helpers.Window hiding (checkAfter, checkWhen, checkWindows)
 import Arkham.History
+import Arkham.I18n (countVar, ikey', withI18n)
 import Arkham.Id
 import Arkham.Investigator.Types (Field (..))
 import Arkham.Label (mkLabel)
 import Arkham.Location.Grid
 import Arkham.Location.Types (Field (..))
 import Arkham.Matcher qualified as Matcher
-import Arkham.I18n (countVar, ikey', withI18n)
 import Arkham.Message.Lifted hiding (discard)
 import Arkham.Message.Lifted.Choose
 import Arkham.Name hiding (labeled)
@@ -87,13 +87,21 @@ import Arkham.Projection
 import Arkham.Resolution
 import Arkham.Search hiding (drawnCardsL, foundCardsL)
 import Arkham.Search qualified as Search
+import Arkham.SideStory (challengeScenarioInvestigator)
 import Arkham.Skill.Types qualified as Field
 import Arkham.Story.Types (Field (..))
-import Arkham.SideStory (challengeScenarioInvestigator)
 import Arkham.Tarot
 import Arkham.Token
 import Arkham.Treachery.Cards qualified as Treacheries
 import Arkham.Treachery.Types (Field (..))
+import Arkham.UltimatumsAndBoons (
+  Boon (..),
+  Ultimatum (..),
+  UltimatumOrBoon (..),
+  hasBoon,
+  hasUltimatumOrBoon,
+  morriganWeaknessMessages,
+ )
 import Arkham.Window (mkWhen)
 import Arkham.Window qualified as Window
 import Arkham.Zone (Zone)
@@ -197,8 +205,10 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
   SetScenarioDifficulty difficulty -> do
     pure
       $ a
-      & difficultyL .~ difficulty
-      & referenceL .~ scenarioReferenceForDifficulty difficulty a
+      & difficultyL
+      .~ difficulty
+      & referenceL
+      .~ scenarioReferenceForDifficulty difficulty a
   StartCampaign -> do
     standalone <- getIsStandalone
     when standalone $ do
@@ -212,34 +222,71 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
            , StartScenario scenarioId Nothing
            ]
     pure a
-  InitDeck InitDeckAttrs {initDeckInvestigator = iid, initDeckDecklist = mDecklist, initDeckDeck = deck} -> do
-    standalone <- getIsStandalone
-    if standalone
-      then do
-        investigatorClass <- field InvestigatorClass iid
-        playerCount <- getPlayerCount
-        let cardCodes = map toCardCode $ unDeck deck
+  InitDeck
+    InitDeckAttrs {initDeckInvestigator = iid, initDeckDecklist = mDecklist, initDeckDeck = deck} -> do
+      standalone <- getIsStandalone
+      if standalone
+        then do
+          investigatorClass <- field InvestigatorClass iid
+          playerCount <- getPlayerCount
+          let cardCodes = map toCardCode $ unDeck deck
 
-        mEldritchBrand <-
-          if "11080" `elem` cardCodes
-            then
-              getMaybeCardAttachments iid (CardCode "11080") >>= \case
-                Nothing -> do
-                  pid <- getPlayer iid
-                  let cards = nub $ map toCardCode $ filterCards (card_ $ #asset <> #spell) (unDeck deck)
-                  pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" Nothing $ ChooseOne $ flip map cards \c ->
-                    CardLabel c False [UpdateCardSetting iid "11080" (SetCardSetting CardAttachments [c])]
-                Just _ -> pure Nothing
-            else pure Nothing
-        (deck', randomWeaknesses) <- addRandomBasicWeaknessIfNeeded investigatorClass playerCount mDecklist deck
-        weaknesses <- traverse (`genPlayerCardWith` setPlayerCardOwner iid) randomWeaknesses
-        purchaseTrauma <- initDeckTrauma deck' iid (toTarget a)
-        initXp <- initDeckXp deck' iid (toTarget a)
-        let deck'' = withDeck (<> weaknesses) deck'
+          mEldritchBrand <-
+            if "11080" `elem` cardCodes
+              then
+                getMaybeCardAttachments iid (CardCode "11080") >>= \case
+                  Nothing -> do
+                    pid <- getPlayer iid
+                    let cards = nub $ map toCardCode $ filterCards (card_ $ #asset <> #spell) (unDeck deck)
+                    pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" Nothing $ ChooseOne $ flip map cards \c ->
+                      CardLabel c False [UpdateCardSetting iid "11080" (SetCardSetting CardAttachments [c])]
+                  Just _ -> pure Nothing
+              else pure Nothing
+          (deck', baseRandomWeaknesses) <-
+            addRandomBasicWeaknessIfNeeded investigatorClass playerCount mDecklist deck
+          -- Ultimatum of Disaster: 1 additional random basic weakness.
+          disaster <- hasUltimatumOrBoon (Ultimatum UltimatumOfDisaster)
+          extraWeakness <-
+            if disaster
+              then (: []) <$> getRandomBasicWeakness investigatorClass playerCount mDecklist
+              else pure []
+          let randomWeaknesses = baseRandomWeaknesses <> extraWeakness
+          morrigan <- hasBoon BoonOfTheMorrigan
+          (weaknesses, morriganMessages) <-
+            if morrigan
+              then do
+                msgs <-
+                  concat <$> for randomWeaknesses \_ ->
+                    morriganWeaknessMessages
+                      iid
+                      (genCard =<< getRandomBasicWeakness investigatorClass playerCount mDecklist)
+                pure ([], msgs)
+              else do
+                ws <- traverse (`genPlayerCardWith` setPlayerCardOwner iid) randomWeaknesses
+                pure (ws, [])
+          purchaseTrauma <- initDeckTrauma deck' iid (toTarget a)
+          initXp <- initDeckXp deck' iid (toTarget a)
+          let deck'' = withDeck (<> weaknesses) deck'
 
-        pushAll $ LoadDeck iid deck'' : purchaseTrauma <> toList mEldritchBrand <> [DoStep 1 msg] <> initXp
-        pure $ a & playerDecksL %~ insertMap iid deck''
-      else pure a
+          pushAll
+            $ LoadDeck iid deck''
+            : purchaseTrauma
+              <> toList mEldritchBrand
+              <> [DoStep 1 msg]
+              <> initXp
+
+          -- Defer the Morrígan choice out of the ChooseDecks window. Every
+          -- InitDeck runs while decks are still being chosen; presenting an
+          -- interactive choice there folds it into the shared ChooseDeck
+          -- question and races the per-player investigator setup (a player could
+          -- be dropped from the game). Running it after DoneChoosingDecks lets
+          -- each choice resolve in the active game, one at a time. Queued after
+          -- the LoadDeck above so the added weakness isn't overwritten; falls
+          -- back to now when no ChooseDecks is pending (single-player / tests).
+          unless (null morriganMessages)
+            $ insertAfterMatchingOrNow morriganMessages (== DoneChoosingDecks)
+          pure $ a & playerDecksL %~ insertMap iid deck''
+        else pure a
   DoStep 1 (InitDeck InitDeckAttrs {initDeckInvestigator = iid, initDeckDeck = deck}) -> do
     standalone <- getIsStandalone
     when standalone do
@@ -258,8 +305,11 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     -- continuing scenario skips start-of-game windows (and opening-hand
     -- revelations). See local-faq 2026-06-17_hemlock-vale-preludes-same-game.
     let skipStartOfGame = maybe False (.skipStartOfGame) scenarioOptions
+    -- Ultimatum of Dread: do not skip the mythos phase during the first round.
+    dread <- hasUltimatumOrBoon (Ultimatum UltimatumOfDread)
     pushAll
-      $ [BeginGame | not skipStartOfGame] <> [BeginRound, Begin InvestigationPhase]
+      $ [BeginGame | not skipStartOfGame]
+      <> [BeginRound, Begin $ if dread && not skipStartOfGame then MythosPhase else InvestigationPhase]
     whenM (getHasRecord TheInvestigatorsSurvivedTheMidwinterGala) do
       lead <- getLead
       jewel <- genCard Assets.jewelOfSarnath
@@ -507,6 +557,15 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
           when (token `elem` [#curse, #bless, #frost]) do
             let shouldRevealAnother = DoNotRevealAnotherChaosToken `notElem` mods
             pushWhen shouldRevealAnother (DrawAnotherChaosToken iid)
+          -- Moon token (Circus Ex Mortis, guide p1): "0. Seal this token on
+          -- your investigator card and reveal another token." ResolveChaosToken
+          -- only fires for tokens revealed during a skill test, matching the
+          -- rule that a moon token revealed outside a skill test has no effect.
+          when (token == #moon) do
+            let shouldRevealAnother = DoNotRevealAnotherChaosToken `notElem` mods
+            pushAll
+              $ [SealChaosToken drawnToken, SealedChaosToken drawnToken (Just iid) (InvestigatorTarget iid)]
+              <> [DrawAnotherChaosToken iid | shouldRevealAnother]
     pure a
   EndOfScenario mNextCampaignStep -> do
     -- Do not update without updating Hemlock Preludes
@@ -570,9 +629,13 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
   PlaceLocation _ card ->
     pure
       $ a
-      & setAsideCardsL %~ delete card
-      & decksL . each %~ delete card
-      & discardL %~ filter ((/= card) . EncounterCard)
+      & setAsideCardsL
+      %~ delete card
+      & decksL
+      . each
+      %~ delete card
+      & discardL
+      %~ filter ((/= card) . EncounterCard)
   ReplaceLocation _ card _ -> pure $ a & setAsideCardsL %~ delete card
   CreateWeaknessInThreatArea card _ -> pure $ a & setAsideCardsL %~ delete card
   ShuffleCardsIntoTopOfDeck Deck.EncounterDeck n (onlyEncounterCards -> cards) -> do
@@ -769,9 +832,10 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     pure $ a & setAsideCardsL %~ filter (`notElem` cards)
   CardEnteredPlay _ card -> liftRunMessage (ObtainCard card.id) a
   ReplaceCard cardId card -> do
-    -- Keep any reference to this card in the victory display in sync (e.g. when a
-    -- card is flipped to its other side while sitting in the victory display).
-    pure $ a & victoryDisplayL %~ map (\c -> if toCardId c == cardId then card else c)
+    -- Keep any reference to this card in sync (e.g. when a card is flipped to its
+    -- other side, or a story asset's back changes, while sitting in a scenario zone).
+    let sync = map (\c -> if toCardId c == cardId then card else c)
+    pure $ a & victoryDisplayL %~ sync & setAsideCardsL %~ sync
   ObtainCard cardId -> do
     let
       deleteCard :: IsCard c => [c] -> [c]
@@ -1016,7 +1080,11 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
                 Zone.FromTopOfDeck n ->
                   insertWith (<>) Zone.FromDeck (map flipForDisplay . take (n + additionalDepth) $ deckGet a) hmap
                 Zone.FromBottomOfDeck n ->
-                  insertWith (<>) Zone.FromDeck (map flipForDisplay . take (n + additionalDepth) . reverse $ deckGet a) hmap
+                  insertWith
+                    (<>)
+                    Zone.FromDeck
+                    (map flipForDisplay . take (n + additionalDepth) . reverse $ deckGet a)
+                    hmap
                 Zone.FromDiscard ->
                   insertWith (<>) Zone.FromDiscard (map EncounterCard scenarioDiscard) hmap
                 other -> error $ mconcat ["Zone ", show other, " not yet handled"]
@@ -1454,7 +1522,8 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     let
       otherDiscardL :: Lens' ScenarioAttrs [EncounterCard]
       otherDiscardL = encounterDecksL . at k . non (Deck [], []) . _2
-    (discards, remainingDeck) <- breakNM n (`extendedCardMatch` matcher) (unDeck $ a ^. encounterDeckLensFromKey k)
+    (discards, remainingDeck) <-
+      breakNM n (`extendedCardMatch` matcher) (unDeck $ a ^. encounterDeckLensFromKey k)
     matches <- filterM (`extendedCardMatch` matcher) discards
     case remainingDeck of
       [] -> do

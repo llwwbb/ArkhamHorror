@@ -10,6 +10,7 @@ import type { Scenario, Campaign } from '@/arkham/data'
 import { storeToRefs } from 'pinia'
 import type { GameMode, MultiplayerVariant, CampaignType, AiSlotConfig } from '@/arkham/types/NewGame'
 
+import { ACHIEVEMENT_CAMPAIGN_IDS } from '@/arkham/achievements'
 import campaignJSON from '@/arkham/data/campaigns'
 import scenarioJSON from '@/arkham/data/scenarios'
 import sideStoriesJSON from '@/arkham/data/side-stories'
@@ -58,6 +59,13 @@ const aiPlayers = ref<(AiSlotConfig | null)[]>([])
 
 const fullCampaignOptionKey = ref<string | null>(null)
 const recommendedOptionState = ref<Record<string, boolean>>({})
+
+// Ultimatums and Boons variant tags selected in GameOptions (e.g. "BoonOfHades").
+const ultimatumsAndBoons = ref<string[]>([])
+
+// Achievement tracking (default on). Only honored for campaigns with an
+// achievement catalog; unsupported campaigns always send true.
+const achievementsEnabled = ref(true)
 
 // "Epic Multiplayer" side-story mode state (only meaningful for epic-capable
 // side stories; see GameOptions.vue / side-stories.json).
@@ -250,6 +258,7 @@ watch(selectedCampaign, (id) => {
   selectedScenario.value = null
   returnTo.value = false
   recommendedOptionState.value = {}
+  ultimatumsAndBoons.value = []
   strictAsIfAt.value = id != null && id >= '11'
 
   if (id === '09') fullCampaign.value = 'FullCampaign'
@@ -281,6 +290,11 @@ fetchDecks().then((result) => {
   decks.value = result
   ready.value = true
 })
+
+// The toggle is only rendered for supported campaigns; a stale "off" from a
+// supported selection must not leak into an unsupported one.
+const achievementsForCreate = (campaignId: string | null) =>
+  campaignId && ACHIEVEMENT_CAMPAIGN_IDS.includes(campaignId) ? achievementsEnabled.value : true
 
 async function start() {
   const enabledRecommendedOptions = Object.entries(recommendedOptionState.value)
@@ -350,7 +364,9 @@ async function start() {
         includeTarotReadings.value,
         options,
         strictAsIfAt.value,
-        aiPlayersForCreate
+        aiPlayersForCreate,
+        ultimatumsAndBoons.value,
+        achievementsForCreate(campaignId)
       ).then((game) => router.push(`/games/${game.id}`))
     }
   } else {
@@ -369,7 +385,9 @@ async function start() {
         includeTarotReadings.value,
         options,
         strictAsIfAt.value,
-        aiPlayersForCreate
+        aiPlayersForCreate,
+        ultimatumsAndBoons.value,
+        achievementsForCreate(campaignId)
       ).then((game) => router.push(`/games/${game.id}`))
     }
   }
@@ -410,6 +428,8 @@ async function start() {
           v-model:campaignName="campaignName"
           v-model:fullCampaignOptionKey="fullCampaignOptionKey"
           v-model:recommendedOptionState="recommendedOptionState"
+          v-model:ultimatumsAndBoons="ultimatumsAndBoons"
+          v-model:achievementsEnabled="achievementsEnabled"
           v-model:epicMode="epicMode"
           v-model:epicGroupCount="epicGroupCount"
           v-model:epicGroups="epicGroups"
@@ -444,27 +464,29 @@ async function start() {
             {{ $t('create.create') }}
           </button>
         </div>
-      </form>
+    </form>
   </div>
 </template>
 
 <style scoped>
-:global(html) {
-  scrollbar-gutter: stable;
-}
-
 .new-campaign-content {
-  width: 70vw;
-  max-width: 98vw;
-  min-width: 60vw;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  min-height: 0;
+  box-sizing: border-box;
+  padding-top: 20px;
+  padding-bottom: 10px;
 }
 
 #new-campaign {
-  width: 100%;
+  width: 70vw;
+  max-width: 98vw;
+  min-width: 60vw;
   color: #fff;
   border-radius: 3px;
-  margin-bottom: 20px;
+  margin: 0 auto 20px;
   display: grid;
   gap: 10px;
 }
@@ -520,10 +542,14 @@ h2 {
 }
 
 header {
+  width: 70vw;
+  max-width: 98vw;
+  min-width: 60vw;
+  margin: 0 auto 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 10px;
+  gap: 12px;
 }
 
 header h2 {

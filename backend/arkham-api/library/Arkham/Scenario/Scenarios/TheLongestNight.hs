@@ -13,7 +13,7 @@ import Arkham.Enemy.Cards qualified as Enemies
 import Arkham.Helpers.Doom (getDoomCount)
 import Arkham.Helpers.FlavorText
 import Arkham.Helpers.Location (withLocationOf)
-import Arkham.Helpers.Modifiers (ModifierType (..), modifySelectWith)
+import Arkham.Helpers.Modifiers (ModifierType (..), modifySelect, modifySelectWith)
 import Arkham.Helpers.Query (allInvestigators, getLead)
 import Arkham.Helpers.Window (wouldDo)
 import Arkham.Helpers.Xp
@@ -58,6 +58,7 @@ instance HasModifiersFor TheLongestNight where
       setActiveDuringSetup
       [DoNotTakeUpSlot #ally]
     modifySelectWith a (assetIs Assets.ajax) setActiveDuringSetup [DoNotTakeUpSlot #ally]
+    modifySelect a Anyone [CanIgnoreBarriers]
 
 theLongestNight :: Difficulty -> TheLongestNight
 theLongestNight difficulty = scenario TheLongestNight "10626" "The Longest Night" difficulty []
@@ -530,6 +531,9 @@ instance RunMessage TheLongestNight where
     ScenarioCountDecrementBy (Barriers l1 l2) n -> do
       let meta' = decrementBarriers n l1 l2 $ toResultDefault defaultMeta attrs.meta
       pure $ TheLongestNight $ attrs & metaL .~ toJSON meta'
+    RequestedPlayerCard iid (isSource attrs -> True) (Just card) _ -> do
+      addCampaignCardToDeck iid ShuffleIn card
+      pure s
     ScenarioResolution r -> scope "resolutions" do
       defeated <- select DefeatedInvestigator
       unless (null defeated) do

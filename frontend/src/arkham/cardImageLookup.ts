@@ -1,11 +1,11 @@
-import { imgsrc } from '@/arkham/helpers'
+import { cardImg } from '@/arkham/helpers'
 
 // 从任意 DOM 元素解析卡图 URL（原 CardOverlay.getImage 抽取而来，
 // CardOverlay 与 CardActionSheet 共用）。
 export const getCardImage = (el: HTMLElement, depth = 0): string | null => {
   if (depth > 3) return null // avoid runaway recursion
 
-  if (el.dataset.imageId) return imgsrc(`cards/${el.dataset.imageId}.avif`)
+  if (el.dataset.imageId) return cardImg(el.dataset.imageId)
 
   if (
     el instanceof HTMLImageElement &&

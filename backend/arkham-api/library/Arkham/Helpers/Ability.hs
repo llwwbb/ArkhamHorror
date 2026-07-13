@@ -13,7 +13,7 @@ import Arkham.Customization
 import Arkham.ForMovement
 import Arkham.Game.Settings
 import {-# SOURCE #-} Arkham.GameEnv
-import {-# SOURCE #-} Arkham.Helpers.Cost (getCanAffordCost)
+import {-# SOURCE #-} Arkham.Helpers.Cost (getAdditionalActionCost, getCanAffordCost)
 import {-# SOURCE #-} Arkham.Helpers.Criteria (passesCriteria)
 import Arkham.Helpers.Location (getLocationOf)
 import Arkham.Helpers.Modifiers (getModifiers, withoutModifier)
@@ -239,10 +239,12 @@ canDoAction' iid ab@Ability {abilitySource, abilityIndex, abilityCardCode} = \ca
           $ Matcher.locationWithInvestigator iid
           <> Matcher.LocationWithExposableConcealedCard ab.source
       if base
-        then pure $ base || concealed
-        else flip anyM modifiers \case
-          CanEvadeOverride (CriteriaOverride c) -> (|| concealed) <$> passesCriteria iid Nothing abilitySource abilitySource [] c
-          _ -> pure concealed
+        then pure True
+        else do
+          overrideValid <- flip anyM modifiers \case
+            CanEvadeOverride (CriteriaOverride c) -> passesCriteria iid Nothing abilitySource abilitySource [] c
+            _ -> pure False
+          pure $ overrideValid || concealed
   Action.Engage -> case abilitySource of
     EnemySource _ -> pure True
     _ -> do
@@ -289,6 +291,7 @@ canDoAction' iid ab@Ability {abilitySource, abilityIndex, abilityCardCode} = \ca
       , notNull <$> getScenarioDeck ExplorationDeck
       ]
   Action.Circle -> pure True
+  Action.Scan -> notNull <$> getScenarioDeck ScanningDeck
 
 getCanAffordAbility
   :: (HasCallStack, Tracing m, HasGame m) => InvestigatorId -> Ability -> [Window] -> m Bool
@@ -315,8 +318,10 @@ getCanAffordAbilityCost iid a@Ability {..} ws = do
           Just (InvestigateTargets matcher) -> do
             ls <- select (matcher <> Matcher.InvestigatableLocation)
             costs <- for ls $ \lid -> do
-              mods <- getModifiers lid
-              pure $ fold [m | not doDelayAdditionalCosts, AdditionalCostToInvestigate m <- mods]
+              -- These costs may be delayed until after choosing the target,
+              -- but affordability still depends on at least one target being
+              -- payable.
+              getAdditionalActionCost iid (toTarget lid) #investigate
             pure [OrCost costs | Free `notElem` costs]
           _ -> do
             field InvestigatorLocation iid >>= \case

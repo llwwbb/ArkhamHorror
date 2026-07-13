@@ -42,7 +42,7 @@ function pushMessage(result: object) {
   wsOptions.onMessage(null, { data: JSON.stringify(result) })
 }
 
-function makeSocket(spectate = false) {
+function makeSocket(spectate = false, onAchievement = vi.fn()) {
   const scope = effectScope()
   let socket!: ReturnType<typeof useGameSocket>
   let modals!: ReturnType<typeof useGameModals>
@@ -53,9 +53,10 @@ function makeSocket(spectate = false) {
       spectate,
       modals,
       emitter: { emit: vi.fn() },
+      onAchievement,
     })
   })
-  return { socket, modals, scope }
+  return { socket, modals, scope, onAchievement }
 }
 
 describe('useGameSocket', () => {
@@ -76,6 +77,13 @@ describe('useGameSocket', () => {
     await flush()
     pushMessage({ tag: 'GameMessage', contents: 'hello' })
     expect(socket.gameLog.value).toContain('hello')
+  })
+
+  it('GameAchievement 通知调用方显示成就', async () => {
+    const { onAchievement } = makeSocket()
+    await flush()
+    pushMessage({ tag: 'GameAchievement', contents: 'NoStoneUnturned' })
+    expect(onAchievement).toHaveBeenCalledWith('NoStoneUnturned')
   })
 
   it('GameError 写入 error 并恢复 oldQuestion', async () => {

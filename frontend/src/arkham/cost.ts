@@ -36,7 +36,7 @@ const intAt = (c: Cost, idx: number): number => {
 const gameValueCount = (gv: unknown): number => {
   if (!gv || typeof gv !== 'object') return 0
   const v = gv as { tag?: string; contents?: unknown }
-  if (v.tag === 'Static' || v.tag === 'PerPlayer') return Number(v.contents) || 0
+  if (v.tag === 'Static' || v.tag === 'Fixed' || v.tag === 'PerPlayer') return Number(v.contents) || 0
   return 0
 }
 
@@ -48,6 +48,84 @@ const gameValueTag = (gv: unknown): string | undefined => {
 const useTypeLabel = (useType: unknown): string => {
   if (typeof useType !== 'string') return ''
   return useType
+}
+
+const staticCalculationCount = (calculation: unknown): number | undefined => {
+  if (!calculation || typeof calculation !== 'object') return undefined
+  const value = calculation as { tag?: string; contents?: unknown }
+  if (value.tag !== 'Fixed' && value.tag !== 'Static') return undefined
+  const count = Number(value.contents)
+  return Number.isFinite(count) && count >= 0 ? count : undefined
+}
+
+const withMultipliedCount = (cost: Cost, multiplier: number): Cost | undefined => {
+  const multiply = (value: unknown): number => Number(value ?? 0) * multiplier
+  const contents = get<unknown>(cost, 'contents')
+
+  switch (cost.tag) {
+    case 'ResourceCost':
+    case 'ScenarioResourceCost':
+    case 'DiscardTopOfDeckCost':
+    case 'DiscardCombinedCost':
+    case 'SameSkillIconCost':
+    case 'AddFrostTokenCost':
+    case 'DrawEncounterCardsCost':
+      return { ...cost, contents: multiply(contents) }
+    case 'UseCost':
+    case 'EventUseCost': {
+      const parts = Array.isArray(contents) ? [...contents] : []
+      parts[2] = multiply(parts[2])
+      return { ...cost, contents: parts }
+    }
+    case 'DamageCost':
+    case 'DirectDamageCost':
+    case 'HorrorCost':
+    case 'DirectHorrorCost':
+    case 'DoomCost':
+    case 'AssetClueCost': {
+      const parts = Array.isArray(contents) ? [...contents] : []
+      parts[2] = multiply(parts[2])
+      return { ...cost, contents: parts }
+    }
+    case 'InvestigatorDamageCost':
+    case 'EachInvestigatorDamageCost': {
+      const parts = Array.isArray(contents) ? [...contents] : []
+      parts[3] = multiply(parts[3])
+      return { ...cost, contents: parts }
+    }
+    case 'DirectDamageAndHorrorCost': {
+      const parts = Array.isArray(contents) ? [...contents] : []
+      parts[2] = multiply(parts[2])
+      parts[3] = multiply(parts[3])
+      return { ...cost, contents: parts }
+    }
+    case 'HandDiscardCost':
+    case 'SkillIconCost':
+    case 'SkillIconCostMatching':
+    case 'DiscardFromCost':
+    case 'ShuffleDiscardCost':
+    case 'EnemyDoomCost':
+    case 'SpendTokenKeyCost':
+    case 'SealMultiCost':
+    case 'ReleaseChaosTokensCost':
+    case 'ShuffleBondedCost':
+    case 'ShuffleTopOfScenarioDeckIntoYourDeck':
+    case 'AddCurseTokensCost':
+    case 'ReturnChaosTokensToPoolCost': {
+      const parts = Array.isArray(contents) ? [...contents] : []
+      parts[0] = multiply(parts[0])
+      return { ...cost, contents: parts }
+    }
+    case 'ClueCost':
+    case 'PlaceClueOnLocationCost': {
+      if (!contents || typeof contents !== 'object') return undefined
+      const gameValue = contents as { tag?: string; contents?: unknown }
+      if (gameValue.tag !== 'Fixed' && gameValue.tag !== 'Static' && gameValue.tag !== 'PerPlayer') return undefined
+      return { ...cost, contents: { ...gameValue, contents: multiply(gameValue.contents) } }
+    }
+    default:
+      return undefined
+  }
 }
 
 export function formatCost(cost: Cost, t: Translate): string {
@@ -198,7 +276,8 @@ export function formatCost(cost: Cost, t: Translate): string {
     }
     case 'ClueCost': {
       const gv = get(cost, 'contents')
-      return t('label.cost.clue', { count: gameValueCount(gv) })
+      const key = gameValueTag(gv) === 'PerPlayer' ? 'label.cost.cluePerPlayer' : 'label.cost.clue'
+      return t(key, { count: gameValueCount(gv) })
     }
     case 'AssetClueCost': {
       const contents = get<unknown[]>(cost, 'contents') ?? []
@@ -209,9 +288,17 @@ export function formatCost(cost: Cost, t: Translate): string {
     case 'GroupClueCost':
     case 'SameLocationGroupClueCost': {
       const contents = get<unknown[]>(cost, 'contents') ?? []
-      const count = gameValueCount(contents[0])
+      const gameValue = contents[0]
+      const perPlayer = gameValueTag(gameValue) === 'PerPlayer'
+      const count = gameValueCount(gameValue)
       return t(
-        tag === 'SameLocationGroupClueCost' ? 'label.cost.sameLocationGroupClue' : 'label.cost.groupClue',
+        tag === 'SameLocationGroupClueCost'
+          ? perPlayer
+            ? 'label.cost.sameLocationGroupCluePerPlayer'
+            : 'label.cost.sameLocationGroupClue'
+          : perPlayer
+            ? 'label.cost.groupCluePerPlayer'
+            : 'label.cost.groupClue',
         { count }
       )
     }
@@ -222,7 +309,9 @@ export function formatCost(cost: Cost, t: Translate): string {
     }
     case 'GroupResourceCost': {
       const contents = get<unknown[]>(cost, 'contents') ?? []
-      return t('label.cost.groupResource', { count: gameValueCount(contents[0]) })
+      const gameValue = contents[0]
+      const key = gameValueTag(gameValue) === 'PerPlayer' ? 'label.cost.groupResourcePerPlayer' : 'label.cost.groupResource'
+      return t(key, { count: gameValueCount(gameValue) })
     }
     case 'GroupDiscardCost': {
       const contents = get<unknown[]>(cost, 'contents') ?? []
@@ -321,8 +410,11 @@ export function formatCost(cost: Cost, t: Translate): string {
     }
     case 'UpTo': {
       const contents = get<unknown[]>(cost, 'contents') ?? []
+      const max = staticCalculationCount(contents[0])
       const inner = contents[1] as Cost | undefined
-      return inner ? t('label.cost.upTo', { inner: formatCost(inner, t) }) : ''
+      if (!inner) return ''
+      const adjusted = max === undefined ? undefined : withMultipliedCount(inner, max)
+      return t('label.cost.upTo', { inner: formatCost(adjusted ?? inner, t) })
     }
     case 'AtLeastOne': {
       const contents = get<unknown[]>(cost, 'contents') ?? []

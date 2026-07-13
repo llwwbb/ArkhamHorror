@@ -55,6 +55,7 @@ preludeDawnOfTheSecondDay difficulty =
     ]
     $ (hasEncounterDeckL .~ False)
     . (referenceL .~ "10704")
+    . (isPreludeL .~ True)
 
 instance HasChaosTokenValue PreludeDawnOfTheSecondDay where
   getChaosTokenValue iid tokenFace (PreludeDawnOfTheSecondDay attrs) =
@@ -70,6 +71,7 @@ instance RunMessage PreludeDawnOfTheSecondDay where
       storyOnly finishedTheirMeal $ buildFlavor $ h "title" >> p "theHemlockCurse"
       for_ finishedTheirMeal \iid -> addCampaignCardToDeck iid ShuffleIn Skills.theHemlockCurse
       storyOnly others $ buildFlavor $ h "title" >> p "gnawingHunger"
+      for_ others (`sufferPhysicalTrauma` 1)
       pure s
     ResolveChaosToken token face iid | face `elem` [Cultist, ElderThing] -> do
       hemlockPreludeResolveChaosToken attrs token face iid
@@ -183,15 +185,17 @@ instance RunMessage PreludeDawnOfTheSecondDay where
               hr
               p.validate (not hatchedAPlan) "otherwise"
 
-          unless hatchedAPlan do
-            drawCards iid source 1
-            search
-              iid
-              source
-              iid
-              [fromTopOfDeck 9]
-              (basic $ oneOf [#tactic, #trick])
-              (AddFoundToHand iid 1)
+          if hatchedAPlan
+            then record ThePlanIsUnderway
+            else do
+              drawCards iid source 1
+              search
+                iid
+                source
+                iid
+                [fromTopOfDeck 9]
+                (basic $ oneOf [#tactic, #trick])
+                (AddFoundToHand iid 1)
         4 -> do
           codexFinished 4
           record WilliamTookHeart

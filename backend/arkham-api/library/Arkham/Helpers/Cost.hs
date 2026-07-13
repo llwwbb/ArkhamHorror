@@ -13,15 +13,15 @@ import Arkham.Classes.HasQueue
 import Arkham.Classes.Query
 import Arkham.Cost.FieldCost
 import Arkham.Distance
-import Arkham.Enemy.Types (Field (EnemySealedChaosTokens))
+import Arkham.Enemy.Types (Field (EnemySealedChaosTokens, EnemyTokens))
 import Arkham.Event.Types (Field (..))
 import {-# SOURCE #-} Arkham.GameEnv
 import Arkham.Helpers.Action (additionalActionCovers)
 import {-# SOURCE #-} Arkham.Helpers.Calculation
 import Arkham.Helpers.Card (extendedCardMatch, getModifiedCardCost)
 import Arkham.Helpers.ChaosBag
-import {-# SOURCE #-} Arkham.Helpers.Criteria (passesCriteria)
 import Arkham.Helpers.ChaosToken (matchChaosToken)
+import {-# SOURCE #-} Arkham.Helpers.Criteria (passesCriteria)
 import Arkham.Helpers.Customization
 import Arkham.Helpers.GameValue
 import {-# SOURCE #-} Arkham.Helpers.Investigator ()
@@ -54,13 +54,47 @@ import Arkham.Target
 import Arkham.Token
 import Arkham.Token qualified as Token
 import Arkham.Tracing
-import Arkham.Window (Window (..))
+import Arkham.Window (Window (..), mkWhen)
 import Arkham.Window qualified as Window
 import Control.Lens (non)
 import Control.Monad.State.Strict (evalStateT, get, put)
 import Data.List qualified as List
 import Data.List.Extra (nubOrd)
 import Data.Set qualified as Set
+
+getAdditionalActionCosts :: HasGame m => InvestigatorId -> Target -> Action -> m [Cost]
+getAdditionalActionCosts iid target action = do
+  investigatorModifiers <- getModifiers iid
+  targetModifiers <- getModifiers target
+  pure
+    $ mapMaybe
+      ( \case
+          AdditionalActionCostOf (IsAction action') n | action == action' -> Just (ActionCost n)
+          _ -> Nothing
+      )
+      investigatorModifiers
+    <> mapMaybe
+      ( \case
+          AdditionalCostToInvestigate c | action == #investigate -> Just c
+          AdditionalCostToExplore c | action == #explore -> Just c
+          AdditionalCostToResign c | action == #resign -> Just c
+          _ -> Nothing
+      )
+      targetModifiers
+
+getAdditionalActionCost :: HasGame m => InvestigatorId -> Target -> Action -> m Cost
+getAdditionalActionCost iid target action = mconcat <$> getAdditionalActionCosts iid target action
+
+getCanAffordAdditionalActionCost
+  :: (HasCallStack, HasGame m, Tracing m, Sourceable source)
+  => InvestigatorId
+  -> source
+  -> Target
+  -> Action
+  -> m Bool
+getCanAffordAdditionalActionCost iid source target action = do
+  cost <- getAdditionalActionCost iid target action
+  getCanAffordCost iid source [] [mkWhen Window.NonFast] cost
 
 hasSkillTestCost :: Cost -> Bool
 hasSkillTestCost = \case
@@ -156,6 +190,7 @@ getCanAffordCost_ !iid !(toSource -> source) !actions !windows' !canModify cost_
         targets & anyM \case
           ScenarioTarget -> scenarioFieldMap ScenarioTokens ((> 0) . countTokens tkn)
           LocationTarget lid -> fieldMap LocationTokens ((> 0) . countTokens tkn) lid
+          EnemyTarget lid -> fieldMap EnemyTokens ((> 0) . countTokens tkn) lid
           _ -> pure False
       PlaceKeyCost _ k -> fieldMap InvestigatorKeys (elem k) iid
       GroupSpendKeyCost k lm -> selectAny (Matcher.InvestigatorAt lm <> Matcher.InvestigatorWithKey k)
@@ -536,9 +571,10 @@ getCanAffordCost_ !iid !(toSource -> source) !actions !windows' !canModify cost_
         let lm = Matcher.replaceYouMatcher iid locationMatcher
         iids <- select $ Matcher.InvestigatorAt lm
         let countF = if null skillTypes then const True else (`member` insertSet WildIcon skillTypes)
-        total <- sum <$> for iids \iid' -> do
-          handCards <- mapMaybe (preview _PlayerCard) <$> field InvestigatorHand iid'
-          pure $ sum $ map (count countF . cdSkills . toCardDef) handCards
+        total <-
+          sum <$> for iids \iid' -> do
+            handCards <- mapMaybe (preview _PlayerCard) <$> field InvestigatorHand iid'
+            pure $ sum $ map (count countF . cdSkills . toCardDef) handCards
         pure $ total >= n
       SameSkillIconCost n -> do
         handCards <- mapMaybe (preview _PlayerCard) <$> field InvestigatorHand iid

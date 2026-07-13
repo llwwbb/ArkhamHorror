@@ -1,4 +1,4 @@
-import { imgsrc } from '@/arkham/helpers'
+import { cardImg } from '@/arkham/helpers'
 import { toCardContents } from '@/arkham/types/Card'
 import type { Game } from '@/arkham/types/Game'
 
@@ -9,7 +9,7 @@ export async function loadAllGameImages(game: Game): Promise<void> {
   const pending: string[] = []
   for (const card of Object.values(game.cards)) {
     const { cardCode, isFlipped } = toCardContents(card)
-    const url = imgsrc(`cards/${cardCode.replace(/^c/, '')}${isFlipped ? 'b' : ''}.avif`)
+    const url = cardImg(`${cardCode.replace(/^c/, '')}${isFlipped ? 'b' : ''}`)
     if (!preloaded.has(url) && !preloading.has(url)) pending.push(url)
   }
   if (pending.length === 0) return

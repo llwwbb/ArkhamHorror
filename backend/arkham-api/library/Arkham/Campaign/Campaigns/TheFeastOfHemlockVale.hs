@@ -61,6 +61,7 @@ instance IsCampaign TheFeastOfHemlockVale where
           TheThingInTheDepths -> handleTime
           TheTwistedHollow -> continue PreludeDawnOfTheSecondDay
           TheLongestNight -> continue PreludeDawnOfTheFinalDay
+          StandaloneScenarioStep _ nextStep' -> Just nextStep'
           EpilogueStep -> Nothing
           UpgradeDeckStep nextStep' -> Just nextStep'
           _ -> Nothing
@@ -170,7 +171,7 @@ instance RunMessage TheFeastOfHemlockVale where
                 interludeXpAll (toBonus "bonus" 1)
                 flavor $ setTitle "title" >> p "oldBlood2"
               labeled' "leah" do
-                incrementRecordCount JudithParkRelationshipLevel 1
+                incrementRecordCount LeahAtwoodRelationshipLevel 1
                 interludeXpAll (toBonus "bonus" 1)
                 flavor $ setTitle "title" >> p "oldBlood3"
                 when searched do
@@ -178,6 +179,7 @@ instance RunMessage TheFeastOfHemlockVale where
                   flavor $ setTitle "title" >> p "oldBlood4"
           "omega" -> do
             incrementRecordCount TheoPetersRelationshipLevel 1
+            interludeXpAll (toBonus "bonus" 1)
             reunited <- getHasRecord ThePetersFamilyWereReunited
             flavor do
               setTitle "title"
@@ -190,7 +192,6 @@ instance RunMessage TheFeastOfHemlockVale where
               record HelenPetersJoinedTheSurvey
               addCampaignCardToDeckChoice_ Assets.helenPetersTheEldestSister
           "gamma" -> do
-            incrementRecordCount TheoPetersRelationshipLevel 1
             simeonCrossedOut <- getHasRecord SimeonCrossedOut
             unless simeonCrossedOut do
               incrementRecordCount SimeonAtwoodRelationshipLevel 1
@@ -412,7 +413,7 @@ instance RunMessage TheFeastOfHemlockVale where
       let meta = toResultDefault initMeta attrs.meta
       let
         meta' =
-          case mstep of
+          case fmap (.unwrap.normalize) mstep of
             Just PreludeDawnOfTheSecondDay -> meta {day = Day2, time = Day}
             Just PreludeDawnOfTheFinalDay -> meta {day = Day3, time = Day}
             Just PreludeTheFinalEvening -> meta {day = Day3, time = Night}

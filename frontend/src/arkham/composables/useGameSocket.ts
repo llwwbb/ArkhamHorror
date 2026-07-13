@@ -16,6 +16,7 @@ export type ServerResult =
   | { tag: 'GameError'; contents: string }
   | { tag: 'GameMessage'; contents: string }
   | { tag: 'GameTarot'; contents: string }
+  | { tag: 'GameAchievement'; contents: string }
   | { tag: 'GameCard'; contents: string }
   | { tag: 'GameCardOnly'; contents: string }
   | { tag: 'GameUpdate'; contents: string }
@@ -35,6 +36,7 @@ export interface UseGameSocketOptions {
   modals: GameModals
   emitter: GameEmitter
   onSharedStateUpdate?: (state: SharedEventState) => void
+  onAchievement?: (tag: string) => void
 }
 
 const baseURL = `${window.location.protocol}//${window.location.hostname}${window.location.port ? `:${window.location.port}` : ''}`
@@ -269,6 +271,9 @@ export function useGameSocket(opts: UseGameSocketOptions) {
         // Store the raw token; GameMessage.vue localizes via handleEmbeddedI18n,
         // which keeps params intact and re-renders reactively on language change.
         gameLog.value = Object.freeze([...gameLog.value, result.contents])
+        return
+      case 'GameAchievement':
+        opts.onAchievement?.(result.contents)
         return
       case 'GameShowDiscard':
         emitter.emit('showDiscards', result.contents)

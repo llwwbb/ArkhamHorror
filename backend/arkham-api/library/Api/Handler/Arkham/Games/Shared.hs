@@ -13,6 +13,7 @@ import Api.Arkham.Epic (
  )
 import Api.Arkham.Helpers
 import Api.Arkham.Types.MultiplayerVariant
+import Arkham.Achievement.Types (Achievement, achievementChecklist, achievementName)
 import Arkham.Ai.Decision (
   choiceFeatures,
   decideAi,
@@ -36,7 +37,14 @@ import Arkham.Entities (entitiesActs)
 import Arkham.Epic.Types (
   GroupOrdinal (..),
   SharedEventState,
-  SharedKey (ActAdvanceGen, ActContribution, ActSpend, AdvanceRequested, AwaitingOrganizer, SharedActProgress),
+  SharedKey (
+    ActAdvanceGen,
+    ActContribution,
+    ActSpend,
+    AdvanceRequested,
+    AwaitingOrganizer,
+    SharedActProgress
+  ),
   actProgressStages,
   epicEnvDeltaRef,
   epicEnvGroup,
@@ -74,6 +82,7 @@ import Data.String.Conversions.Monomorphic (toStrictByteString)
 import Data.Text qualified as T
 import Data.These
 import Data.Time.Clock
+import Data.Traversable (for)
 import Data.UUID (nil)
 import Data.Vector qualified as V
 import Database.Esqueleto.Experimental hiding (update, (=.))
@@ -309,7 +318,7 @@ updateGame response gameId mRoom = do
   -- Yesod's HCContent control-flow exceptions (notFound, notAuthenticated,
   -- sendStatusJSON, etc.) and break 404/401 responses (see Undo.hs note).
   -- The runMessages span below is wrapped where it's safe.
-  (ArkhamGame {..}, oldLogEntries, updatedLog, mSharedUpdate, actAdvanced) <- runDB $ atomicallyWithGame gameId \g@ArkhamGame {..} -> do
+  (ArkhamGame {..}, oldLogEntries, updatedLog, mSharedUpdate, actAdvanced, newAchievements) <- runDB $ atomicallyWithGame gameId \g@ArkhamGame {..} -> do
     -- Read the prior log from the per-room cache when it's in sync with
     -- the just-locked game's step; otherwise fall back to the DB. Avoids
     -- the 217-row-avg getGameLog read on every action in the common case.
@@ -367,7 +376,7 @@ updateGame response gameId mRoom = do
       Nothing -> pure (Unhandled "AI seat disabled or no parked question")
       Just resolved -> handleAnswer gameJson playerId resolved
     case reply of
-      Unhandled _ -> pure (g, oldLogEntries, [], Nothing, False)
+      Unhandled _ -> pure (g, oldLogEntries, [], Nothing, False, [])
       Handled answerMessages -> do
         -- Epic Multiplayer: if this game is a group within an event, build an
         -- EpicEnv so Shared* messages emitted during the action are captured as
@@ -398,9 +407,18 @@ updateGame response gameId mRoom = do
         -- row indefinitely. On timeout, throw RunMessagesTimeout -- this
         -- aborts the surrounding DB transaction (rollback releases the lock)
         -- and lets the worker return to the pool.
+        -- Above-the-table achievements: collect EarnAchievement messages via
+        -- the (otherwise unused) runMessages message logger; persisted below.
+        achievementsRef <- newIORef []
+        achievementProgressRef <- newIORef []
+        let
+          collectAchievements = \case
+            EarnAchievement a -> modifyIORef' achievementsRef (a :)
+            AchievementProgress a items -> modifyIORef' achievementProgressRef ((a, items) :)
+            _ -> pure ()
         mResult <- liftIO $ timeout runMessagesTimeoutMicros do
           runGameApp (GameApp gameRef queueRef genRef (handleMessageLog logRef broadcast) tracer mEpicEnv) do
-            runMessages (gameIdToText gameId) Nothing
+            runMessages (gameIdToText gameId) (Just collectAchievements)
         case mResult of
           Just () -> pure ()
           Nothing -> liftIO $ throwIO $ RunMessagesTimeout gameId runMessagesTimeoutMicros
@@ -471,7 +489,39 @@ updateGame response gameId mRoom = do
                 pure $ Just (entityKey eventEntity, s)
           Nothing -> pure Nothing
 
-        pure (g', oldLogEntries, updatedLog, mSharedUpdate, actAdvanced)
+        -- Persist newly earned achievements: one row per human player per
+        -- achievement, ever. insertUnique against UniqueUserAchievement makes
+        -- re-earns no-ops; only genuinely new rows produce a toast.
+        earned <- liftIO $ ordNub . reverse <$> readIORef achievementsRef
+        -- Checklist progress (AchievementProgress): merge this action's items
+        -- per achievement, then per user below.
+        progressed <- liftIO $ reverse <$> readIORef achievementProgressRef
+        let
+          progressList =
+            [ (a, ordNub $ concat [zs | (a', zs) <- progressed, a' == a])
+            | a <- ordNub (map fst progressed)
+            ]
+        newAchievements <-
+          if null earned && null progressList
+            then pure []
+            else do
+              players <- P.selectList [ArkhamPlayerArkhamGameId P.==. gameId] []
+              let userIds = ordNub $ map (arkhamPlayerUserId . entityVal) players
+              directEarns <- fmap concat $ for earned \achievement -> do
+                inserted <- for userIds \uid ->
+                  P.insertUnique
+                    $ ArkhamAchievement uid achievement (Just now) (Just gameId) Null
+                pure [achievement | any isJust inserted]
+              -- Cross-playthrough checklists: accumulate items in the row's
+              -- progress column and earn when every checklist item is in.
+              -- Each user has their own history, so completion is per user.
+              progressEarns <- fmap concat $ for progressList \(achievement, items) -> do
+                completions <- for userIds \uid ->
+                  applyAchievementProgress uid achievement items gameId now
+                pure [achievement | or completions]
+              pure $ ordNub $ directEarns <> progressEarns
+
+        pure (g', oldLogEntries, updatedLog, mSharedUpdate, actAdvanced, newAchievements)
 
   -- Update the per-room cache after the DB transaction has committed,
   -- so the cache is never ahead of durably-stored state.
@@ -485,6 +535,10 @@ updateGame response gameId mRoom = do
       arkhamGameName
       publishLog
       arkhamGameCurrentData
+
+  -- Achievement unlock toasts, after the rows are durably committed.
+  for_ newAchievements \achievement ->
+    publishToRoom gameId $ GameAchievement (achievementName achievement)
 
   -- Epic Multiplayer: propagate a shared-counter change across the event — update
   -- every client's shared store AND sync the other groups' game-state boards to
@@ -505,6 +559,53 @@ updateGame response gameId mRoom = do
   -- once-only token. It touches ONLY shared counters — it never injects messages
   -- into any group's game (that injection was clobbering followers' encounter draws).
   for_ mSharedUpdate \(eid, s) -> coordinateEpicActAdvance eid s
+
+{- | Merge reported checklist items into the user's progress row for a
+cross-playthrough achievement (see 'achievementChecklist'); the row's
+progress column holds the checked item keys as a JSON array. Returns True
+when this merge completed the checklist — the row flips to earned, pointing
+at the completing game. Already-earned rows are left untouched.
+-}
+applyAchievementProgress
+  :: UserId -> Achievement -> [Text] -> ArkhamGameId -> UTCTime -> DB Bool
+applyAchievementProgress uid achievement items gameId now = do
+  let
+    checklist = fromMaybe [] (achievementChecklist achievement)
+    complete merged = not (null checklist) && all (`elem` merged) checklist
+  P.getBy (UniqueUserAchievement uid achievement) >>= \case
+    Just (Entity rowId row)
+      | isJust (arkhamAchievementEarnedAt row) -> pure False
+      | otherwise -> do
+          let
+            existing = case fromJSON (arkhamAchievementProgress row) of
+              Success xs -> xs
+              _ -> []
+            merged = ordNub (existing <> items)
+          if complete merged
+            then do
+              P.update
+                rowId
+                [ ArkhamAchievementProgress P.=. toJSON merged
+                , ArkhamAchievementEarnedAt P.=. Just now
+                , ArkhamAchievementArkhamGameId P.=. Just gameId
+                ]
+              pure True
+            else do
+              P.update rowId [ArkhamAchievementProgress P.=. toJSON merged]
+              pure False
+    Nothing -> do
+      let merged = ordNub items
+      if complete merged
+        then do
+          void
+            $ P.insertUnique
+            $ ArkhamAchievement uid achievement (Just now) (Just gameId) (toJSON merged)
+          pure True
+        else do
+          void
+            $ P.insertUnique
+            $ ArkhamAchievement uid achievement Nothing Nothing (toJSON merged)
+          pure False
 
 {- | Read the cached log entries IF the cache is consistent with the locked
 game's current step. Returns Nothing on a mismatch (so the caller refetches
@@ -812,9 +913,10 @@ floorAllGroupsAtCurrentStep eid = do
       pure g.step
     for_ mStep \(Value step) -> setGameUndoFloor gid step
 
--- | Each group's @(ordinal, contribution)@ toward a stage-@stage@ advance, read
--- from the authoritative shared 'ActContribution' counters (mirrored from the
--- contributing acts). Shaped for the organizer endpoint to cap each group's spend.
+{- | Each group's @(ordinal, contribution)@ toward a stage-@stage@ advance, read
+from the authoritative shared 'ActContribution' counters (mirrored from the
+contributing acts). Shaped for the organizer endpoint to cap each group's spend.
+-}
 getEventGroupContributions :: ArkhamEpicEventId -> Int -> Handler [(Int, Int)]
 getEventGroupContributions eid stage = do
   mEvent <- runDB $ selectOne do
@@ -826,7 +928,10 @@ getEventGroupContributions eid stage = do
     Just (Entity _ event) -> do
       let shared = arkhamEpicEventSharedState event
       groups <- getEventGroupGroups eid
-      pure [(ordinal, sharedCounter (ActContribution stage (GroupOrdinal ordinal)) shared) | (ordinal, _gid) <- groups]
+      pure
+        [ (ordinal, sharedCounter (ActContribution stage (GroupOrdinal ordinal)) shared)
+        | (ordinal, _gid) <- groups
+        ]
 
 {- | Apply an organizer's act-advance allocation for a stage. Atomic + idempotent:
 under the event @FOR UPDATE@ lock, ONLY if @AwaitingOrganizer stage == 1@ (so a

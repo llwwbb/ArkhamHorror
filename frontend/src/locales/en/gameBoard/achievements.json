@@ -1,0 +1,361 @@
+{
+  "toastTitle": "Achievement unlocked!",
+  "tabTitle": "Achievements",
+  "pageTitle": "Achievements",
+  "gameDeleted": "(game deleted)",
+  "viewGame": "View game",
+  "settingsToggleTitle": "Achievement tracking",
+  "settingsToggleDescription": "Track this campaign's official achievements as you play. Unlocks are recorded to your account and shown in the campaign log.",
+  "noneEarnedYet": "No achievements earned yet.",
+  "campaigns": {
+    "50": "Return to the Night of the Zealot",
+    "51": "Return to the Dunwich Legacy",
+    "52": "Return to The Path to Carcosa",
+    "53": "Return to The Forgotten Age",
+    "54": "Return to The Circle Undone"
+  },
+  "entries": {
+    "TheZealotsRevenge": {
+      "name": "The Zealot's Revenge",
+      "text": "Have Lita Chantler's reaction ability deal the killing blow to the Ghoul Priest."
+    },
+    "IDontTrustHer": {
+      "name": "I Don't Trust Her",
+      "text": "When given the option to add Lita Chantler to your deck, refuse to do so."
+    },
+    "InsuranceDoesntCoverGhouls": {
+      "name": "Insurance Doesn't Cover Ghouls",
+      "text": "Burn your house to the ground in The Gathering."
+    },
+    "ButDoIHaveTo": {
+      "name": "…But Do I Have To?",
+      "text": "In The Midnight Masks, have each investigator remain in Your House for the first three rounds."
+    },
+    "ConspiracyOfSilence": {
+      "name": "Conspiracy of Silence",
+      "text": "Find and interrogate all six unique cultists in The Midnight Masks."
+    },
+    "TourOfArkham": {
+      "name": "Tour of Arkham",
+      "text": "Trigger each of the \"once per game\" abilities on all of the locations in play in The Midnight Masks."
+    },
+    "DoYouGetItNow": {
+      "name": "Do You Get It Now?",
+      "text": "Trigger the Forced ability on Billy Cooper by defeating the Ghoul Priest at his location."
+    },
+    "PinchHitter": {
+      "name": "Pinch Hitter",
+      "text": "Defeat three Ghoul enemies with a Baseball Bat without it breaking."
+    },
+    "EvenDeathMayDie": {
+      "name": "Even Death May Die",
+      "text": "Defeat Umôrdhoth while the Vault of Earthly Demise is attached to it."
+    },
+    "BreakTheCircle": {
+      "name": "Break the Circle",
+      "text": "Complete The Devourer Below without Umôrdhoth spawning."
+    },
+    "TheyreJustMisunderstood": {
+      "name": "They're Just Misunderstood",
+      "text": "Win the Night of the Zealot campaign without defeating a single unique Cultist enemy."
+    },
+    "UmordhothsFavor": {
+      "name": "Umôrdhoth's Favor",
+      "text": "Win the Night of the Zealot campaign without defeating a single Ghoul enemy."
+    },
+    "ZealotLineInTheSand": {
+      "name": "Line in the Sand",
+      "text": "Win the Night of the Zealot campaign with at least three Ultimatums active."
+    },
+    "ArkhamExpertise": {
+      "name": "Arkham Expertise",
+      "text": "Win the Night of the Zealot campaign on Expert difficulty."
+    },
+    "WhatIsThisStuffAnyway": {
+      "name": "What Is This Stuff, Anyway?",
+      "text": "Defeat The Experiment using the Alchemical Concoction in Extracurricular Activities."
+    },
+    "NoVoidForYou": {
+      "name": "No Void For You",
+      "text": "Complete The Miskatonic Museum without ever defeating the Hunting Horror."
+    },
+    "FirstRuleOfArkham": {
+      "name": "First Rule of Arkham",
+      "text": "Burn the Necronomicon in The Miskatonic Museum."
+    },
+    "AllAboard": {
+      "name": "All Aboard",
+      "text": "Complete The Essex County Express without letting any Helpless Passengers leave play."
+    },
+    "TheGangsAllHere": {
+      "name": "The Gang's All Here",
+      "text": "In The Survivors, have the following characters survive The Dunwich Legacy:",
+      "items": {
+        "DrHenryArmitage": "Dr. Henry Armitage",
+        "ZebulonWhateley": "Zebulon Whateley",
+        "DrFrancisMorgan": "Dr. Francis Morgan",
+        "EarlSawyer": "Earl Sawyer",
+        "ProfessorWarrenRice": "Professor Warren Rice"
+      }
+    },
+    "NoBroodLeftBehind": {
+      "name": "No Brood Left Behind",
+      "text": "Have no Broods of Yog-Sothoth escape into the wild in Undimensioned and Unseen."
+    },
+    "RemindMeNotToPissHerOff": {
+      "name": "Remind Me Not To Piss Her Off",
+      "text": "Defeat either version of Seth Bishop while Naomi O'Bannion is under your control."
+    },
+    "Eureka": {
+      "name": "Eureka!",
+      "text": "Identify the Strange Solution."
+    },
+    "BeyondWhatVeil": {
+      "name": "Beyond What Veil?",
+      "text": "Take 10 damage from Beyond the Veil without being defeated."
+    },
+    "HereWeGoAgain": {
+      "name": "Here We Go Again",
+      "text": "Have Dr. Henry Armitage, Dr. Francis Morgan, and Professor Warren Rice in play at the same time."
+    },
+    "BirdHunting": {
+      "name": "Bird Hunting",
+      "text": "Defeat 3 Whippoorwills in a single turn."
+    },
+    "TheyArentGettingAwayWithThis": {
+      "name": "They Aren't Getting Away With This",
+      "text": "Win The Dunwich Legacy campaign as \"Ashcan\" Pete with Duke listed under \"Sacrificed to Yog-Sothoth.\""
+    },
+    "TabulaRasa": {
+      "name": "Tabula Rasa",
+      "text": "Win The Dunwich Legacy campaign with no Tablet or Elder Thing tokens in the chaos bag."
+    },
+    "DunwichLineInTheSand": {
+      "name": "Line in the Sand",
+      "text": "Win The Dunwich Legacy campaign with at least three Ultimatums active."
+    },
+    "DunwichExpertise": {
+      "name": "Dunwich Expertise",
+      "text": "Win The Dunwich Legacy campaign on Expert difficulty."
+    },
+    "FairWarning": {
+      "name": "Fair Warning",
+      "text": "Defeat the Royal Emissary three times during a single playthrough of Curtain Call."
+    },
+    "FirstSteps": {
+      "name": "First Steps",
+      "text": "Interview the following VIPs in The Last King:",
+      "items": {
+        "ConstanceDumaine": "Constance Dumaine",
+        "SebastienMoreau": "Sebastien Moreau",
+        "JordanPerry": "Jordan Perry",
+        "AshleighClarke": "Ashleigh Clarke",
+        "IshimaruHaruko": "Ishimaru Haruko"
+      }
+    },
+    "CrashingTheParty": {
+      "name": "Crashing the Party",
+      "text": "Defeat the Lunatic version of Dianne Devine in The Last King."
+    },
+    "ForPryingEyes": {
+      "name": "For Prying Eyes",
+      "text": "Add the Hidden Library to the victory display in Echoes of the Past."
+    },
+    "TheCuckoosNest": {
+      "name": "The Cuckoo's Nest",
+      "text": "Resign with Daniel Chesterfield under an investigator's control in The Unspeakable Oath."
+    },
+    "TakeALookAtThis": {
+      "name": "Take a Look at This!",
+      "text": "Parley with the Host of Insanity in The Unspeakable Oath."
+    },
+    "ThePathOfDeath": {
+      "name": "The Path of Death",
+      "text": "Use your Clasp of Black Onyx to find a shortcut in The Pallid Mask."
+    },
+    "GuessingGame": {
+      "name": "Guessing Game",
+      "text": "Advance to the final agenda of one agenda deck before advancing the first agenda of the other agenda deck in Black Stars Rise."
+    },
+    "HasturMadeMeDoIt": {
+      "name": "Hastur Made Me Do It",
+      "text": "Defeat Hastur in Dim Carcosa while a Possession treachery is in your hand."
+    },
+    "SayMyName": {
+      "name": "Say My Name",
+      "text": "After you have heeded Daniel's warning, speak the name of HASTUR aloud seven or more times during a single scenario (or its setup)."
+    },
+    "GetBackHere": {
+      "name": "Get Back Here",
+      "text": "Win The Path to Carcosa campaign having never ended a scenario with The Man in the Pallid Mask in play."
+    },
+    "ThePathIsFalse": {
+      "name": "The Path is False",
+      "text": "Win The Path to Carcosa campaign with 8 Doubt."
+    },
+    "ThePathIsReal": {
+      "name": "The Path is Real",
+      "text": "Win The Path to Carcosa campaign with 8 Conviction."
+    },
+    "ThePathIsMine": {
+      "name": "The Path is Mine",
+      "text": "Win The Path to Carcosa campaign with less than 2 Doubt and Conviction in total."
+    },
+    "CarcosaLineInTheSand": {
+      "name": "Line in the Sand",
+      "text": "Win The Path to Carcosa campaign with at least three Ultimatums active."
+    },
+    "CarcosaExpertise": {
+      "name": "Carcosa Expertise",
+      "text": "Win The Path to Carcosa campaign on Expert difficulty."
+    },
+    "WhyDidItHaveToBeSnakes": {
+      "name": "Why Did It Have to Be Snakes?",
+      "text": "Defeat twenty Serpent enemies across The Forgotten Age campaign."
+    },
+    "WatchThemUnravel": {
+      "name": "Watch Them Unravel",
+      "text": "Complete all four act decks during a single playthrough of Threads of Fate."
+    },
+    "HopeForHumanity": {
+      "name": "Hope for Humanity",
+      "text": "Restore Ichtaca's faith in humanity in The Boundary Beyond."
+    },
+    "Scenario5What": {
+      "name": "Scenario 5-What?",
+      "text": "Skip Heart of the Elders, Part 1."
+    },
+    "BeyondPerfection": {
+      "name": "Beyond Perfection",
+      "text": "Complete all eight tasks on act 2 of The City of Archives during a single playthrough."
+    },
+    "IRememberEverything": {
+      "name": "I Remember Everything!",
+      "text": "Restore Alejandro's memories in The City of Archives."
+    },
+    "Patricide": {
+      "name": "Patricide",
+      "text": "Defeat Yig in The Depths of Yoth."
+    },
+    "HesGotAPoint": {
+      "name": "He's Got a Point",
+      "text": "Side with Alejandro in Shattered Aeons."
+    },
+    "ValusiaSoundsGreat": {
+      "name": "Valusia Sounds Great",
+      "text": "Side with Ichtaca in Shattered Aeons."
+    },
+    "IveBuiltUpAnImmunity": {
+      "name": "I've Built Up An Immunity",
+      "text": "Win The Forgotten Age campaign without ever becoming poisoned."
+    },
+    "WeHaveAnUnderstanding": {
+      "name": "We Have an Understanding",
+      "text": "Win The Forgotten Age campaign without ever dealing any damage to the Harbinger of Valusia."
+    },
+    "WhoNeedsAnyOfThisJunk": {
+      "name": "Who Needs Any of This Junk?",
+      "text": "Win The Forgotten Age campaign without purchasing any supplies."
+    },
+    "DontTreadOnMe": {
+      "name": "Don't Tread on Me",
+      "text": "Win The Forgotten Age campaign with no tally marks recorded under Yig's Fury in your Campaign Log."
+    },
+    "BaneOfYig": {
+      "name": "Bane of Yig",
+      "text": "Win The Forgotten Age campaign with 25 or more tally marks recorded under Yig's Fury in your Campaign Log."
+    },
+    "IfICouldTurnBackTime": {
+      "name": "If I Could Turn Back Time",
+      "text": "Forge your own path, unlock Scenario IX, and win The Forgotten Age campaign."
+    },
+    "YothExpertise": {
+      "name": "Yoth Expertise",
+      "text": "Win The Forgotten Age campaign on Expert difficulty."
+    },
+    "WhoYouGonnaCall": {
+      "name": "Who You Gonna Call?",
+      "text": "Defeat 13 Geist or Spectral enemies across the campaign. Enemies who are not discarded or added to the victory display do not count."
+    },
+    "SaviorOfHumanity": {
+      "name": "Savior of Humanity",
+      "text": "Rescue every Silver Twilight enemy who appears in At Death's Doorstep."
+    },
+    "TenOutOfTenWouldReadAgain": {
+      "name": "10/10 Would Read Again",
+      "text": "Using The Black Book, take a total of 10 horror with its ability throughout the campaign."
+    },
+    "CarlShmarl": {
+      "name": "Carl Shmarl",
+      "text": "Become part of the Silver Twilight Lodge's Inner Circle, then betray them in Union and Disillusion."
+    },
+    "TheThreefoldRule": {
+      "name": "The Threefold Rule",
+      "text": "Join forces with Erynn and turn on her coven in Union and Disillusion."
+    },
+    "NewWorldOrder": {
+      "name": "New World Order",
+      "text": "Help the Silver Twilight Lodge win The Circle Undone campaign."
+    },
+    "ImmortalitySoundsNice": {
+      "name": "Immortality Sounds Nice",
+      "text": "Help Anette's Coven win The Circle Undone campaign."
+    },
+    "MoreLikeExcursion": {
+      "name": "More Like Excursion",
+      "text": "Complete In the Clutches of Chaos without a single incursion occurring."
+    },
+    "MemberThese": {
+      "name": "'Member These?",
+      "text": "Discover the following Mementos:",
+      "items": {
+        "MesmerizingFlute": "Mesmerizing Flute",
+        "KeziahsFormulae": "Keziah's Formulae",
+        "RitualComponents": "Ritual Components",
+        "WornCrucifix": "Worn Crucifix",
+        "ScrapOfTornShadow": "Scrap of Torn Shadow",
+        "WispOfSpectralMist": "Wisp of Spectral Mist",
+        "StrangeIncantation": "Strange Incantation",
+        "CornHuskDoll": "Corn Husk Doll",
+        "GilmansJournal": "Gilman's Journal",
+        "BloodyTreeCarvings": "Bloody Tree Carvings"
+      }
+    },
+    "CaseClosed": {
+      "name": "Case Closed",
+      "text": "Save each of the following characters from a terrible fate:",
+      "items": {
+        "ValentinoRivas": "Valentino Rivas",
+        "GavriellaMizrah": "Gavriella Mizrah",
+        "PennyWhite": "Penny White",
+        "JeromeDavids": "Jerome Davids"
+      }
+    },
+    "MusicOfTheOuterGods": {
+      "name": "Music of the Outer Gods",
+      "text": "Accept your fate and win The Circle Undone campaign by joining the Pipers of Azathoth."
+    },
+    "WeaverOfShadowAndMist": {
+      "name": "Weaver of Shadow and Mist",
+      "text": "Reject your fate and win The Circle Undone campaign by crafting a spell to contain Azathoth."
+    },
+    "FinePrint": {
+      "name": "Fine Print",
+      "text": "Win The Circle Undone campaign by signing your name in The Black Book of Azathoth."
+    },
+    "SpeakTheWordsAloud": {
+      "name": "duolA sdroW eht kaepS",
+      "text": "Win The Circle Undone campaign by discovering and reversing an ancient incantation."
+    },
+    "CircleExpertise": {
+      "name": "Circle Expertise",
+      "text": "Win The Circle Undone campaign on Expert difficulty."
+    }
+  },
+  "clearAll": "Clear all",
+  "clearCampaign": "Clear campaign",
+  "clearOne": "Clear this achievement",
+  "clearAllConfirm": "Clear ALL earned achievements? This cannot be undone.",
+  "clearCampaignConfirm": "Clear all earned achievements for {campaign}? This cannot be undone.",
+  "clearOneConfirm": "Clear the achievement \"{name}\"? This cannot be undone."
+}

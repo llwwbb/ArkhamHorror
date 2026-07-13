@@ -7,6 +7,7 @@
   "nav": {
     "home": "Home",
     "about": "About",
+    "achievements": "Achievements",
     "admin": "Admin",
     "cards": "Cards",
     "myDecks": "Decks",
@@ -235,6 +236,10 @@
   "fromDiscard": "From Discard",
   "fromEncounterDeck": "From Encounter Deck",
   "fromEncounterDiscard": "From Encounter Discard",
+  "fromInvestigatorDeck": "From {name}'s Deck",
+  "fromInvestigatorHand": "From {name}'s Hand",
+  "fromInvestigatorDiscard": "From {name}'s Discard",
+  "searchThisDeck": "Search this deck (it will be shuffled)",
   "ok": "OK",
   "back": "Back",
   "join": "Join",
@@ -442,7 +447,8 @@
   },
   "chooseDeck": {
     "search": "Search…",
-    "useThisDeck": "Use this deck"
+    "useThisDeck": "Use this deck",
+    "randomBasicWeaknessPoolTooltip": "Adjust which products are used when randomly assigning this deck's basic weakness."
   },
   "deckRestrictions": {
     "scarletKeys": {
