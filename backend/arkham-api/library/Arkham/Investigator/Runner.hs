@@ -23,6 +23,7 @@ import Arkham.Name as X
 import Arkham.Source as X
 import Arkham.Stats as X
 import Arkham.Target as X
+import Arkham.Homebrew.Defs (allTraits)
 import Arkham.Trait as X hiding (Cosmos, Cultist, ElderThing, Haunted)
 import Data.Aeson (Result (..))
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -167,11 +168,20 @@ instance RunMessage Investigator where
       modifiers' <- getModifiers (toTarget i)
       let msg' = if Blank `elem` modifiers' then Blanked msg else msg
       case investigatorForm (toAttrs a) of
-        TransfiguredForm inner -> withInvestigatorCardCode inner \(SomeInvestigator @a) ->
-          Investigator
-            . investigatorFromAttrs @original
-            . toAttrs
-            <$> runMessage @a msg' (investigatorFromAttrs @a (toAttrs a))
+        TransfiguredForm inner -> withInvestigatorCardCode inner \(SomeInvestigator @a) -> do
+          let a0 = toAttrs a
+          a' <- toAttrs <$> runMessage @a msg' (investigatorFromAttrs @a (asFormAttrs a0))
+          -- the form reads and writes its own meta, ours is left alone for our
+          -- signature cards. Changing form means a different form, which starts
+          -- uninitialized.
+          pure
+            . Investigator
+            $ investigatorFromAttrs @original
+              a'
+                { investigatorMeta = investigatorMeta a0
+                , investigatorFormMeta =
+                    if investigatorForm a' == investigatorForm a0 then investigatorMeta a' else Null
+                }
         _ -> Investigator <$> runMessage msg' a
 
 instance RunMessage InvestigatorAttrs where
@@ -445,7 +455,10 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
         <$> filterM filterAbility investigatorUsedAbilities
     pure $ a & usedAbilitiesL .~ usedAbilities
   ForTarget (isTarget a -> True) (EndOfScenario {}) -> do
-    pure $ a & handL .~ mempty & defeatedL .~ False & resignedL .~ False
+    -- eliminated must clear with defeated/resigned, or interludes (and scenarios
+    -- with skipInvestigatorSetup, which never run ForInvestigators ResetGame)
+    -- would treat everyone eliminated last scenario as still eliminated.
+    pure $ a & handL .~ mempty & defeatedL .~ False & resignedL .~ False & eliminatedL .~ False
   ForInvestigators _ ResetGame ->
     pure
       $ (cbCardBuilder (investigator id (toCardDef a) (getAttrStats a)) nullCardId investigatorPlayerId)
@@ -2226,10 +2239,10 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
             push
               $ Msg.chooseOneDropDown
                 player
-                [ ( tshow trait
+                [ ( displayTrait trait
                   , DebugIncreaseCustomization iid cardCode customization (ChosenTrait trait : choices)
                   )
-                | trait <- [minBound ..]
+                | trait <- allTraits
                 ]
           (CustomizationCardChoice matcher : _) -> do
             player <- getPlayer iid

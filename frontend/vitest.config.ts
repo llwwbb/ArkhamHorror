@@ -11,6 +11,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@homebrew': fileURLToPath(new URL('./homebrew', import.meta.url)),
     },
   },
 })

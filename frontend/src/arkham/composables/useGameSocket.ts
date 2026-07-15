@@ -123,7 +123,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
         game.value = locked ? { ...updatedGame, question: {} } : updatedGame
         updateGameLog(updatedGame.log)
         preloadGameImages(updatedGame)
-        if (!locked && solo.value === true) {
+        if (!locked && solo.value === true && Object.keys(game.value.question).length > 0) {
           if (Object.keys(game.value.question).length == 1) {
             playerId.value = Object.keys(game.value.question)[0]
           } else if (game.value.activePlayerId !== playerId.value) {

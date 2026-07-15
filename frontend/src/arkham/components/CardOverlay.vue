@@ -13,9 +13,11 @@ import {
 import { cardImg, imgsrc, isLocalized, toCamelCase } from '@/arkham/helpers'
 import { getCardImage } from '@/arkham/cardImageLookup'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
+import { homebrewTokenMap } from '@/arkham/homebrewAssets'
 import { BugAntIcon } from '@heroicons/vue/20/solid'
 import { useDebug } from '@/arkham/debug'
-import { fetchPlayability, type PlayabilityResponse } from '@/arkham/api'
+import { fetchCard, fetchPlayability, type PlayabilityResponse } from '@/arkham/api'
+import type { CardDef } from '@/arkham/types/CardDef'
 import KeyToken from '@/arkham/components/Key.vue'
 import { type ArkhamKey, keyToId } from '@/arkham/types/Key'
 import PoolItem from '@/arkham/components/PoolItem.vue'
@@ -56,9 +58,12 @@ const { t } = useI18n()
 const cardOverlay = ref<HTMLElement | null>(null)
 const hoveredElement = ref<HTMLElement | null>(null)
 const { isTouch: isMobile } = useDeviceLayout()
+const overPopover = computed(() => !!hoveredElement.value?.closest('.v-popper__popper'))
 
 const playabilityData = ref<PlayabilityResponse | null>(null)
 let playabilityTimer: number | null = null
+const cardDefCache = new Map<string, CardDef | null>()
+const overlayCardDef = ref<CardDef | null>(null)
 let cosmicEmissaryTimer: number | null = null
 type CosmicEmissaryTimerContext = {
   gameId: string
@@ -395,6 +400,31 @@ const currentLanguage = computed<string>(() => {
 type DescriptionLanguage = 'current' | 'english'
 const selectedDescriptionLanguage = ref<DescriptionLanguage | null>(null)
 const activeDescriptionLanguage = computed<DescriptionLanguage>(() => selectedDescriptionLanguage.value ?? 'current')
+const overlayCardCode = computed<string | null>(() => {
+  const el = hoveredElement.value
+  if (!el) return null
+  const direct = normalizedCardCode(el.dataset.cardCode ?? el.dataset.imageId)?.replace(/b$/, '')
+  if (direct) return direct
+  const match = card.value?.match(/\/cards\/c?(\d+)b?\.(?:avif|jpg|jpeg|png|webp)(?:\?.*)?$/i)
+  return match?.[1] ?? null
+})
+const cardErrata = computed<string | null>(() => overlayCardDef.value?.errata ?? null)
+
+watch(overlayCardCode, async (code) => {
+  overlayCardDef.value = null
+  if (!code) return
+  if (cardDefCache.has(code)) {
+    overlayCardDef.value = cardDefCache.get(code) ?? null
+    return
+  }
+  try {
+    const cardDef = await fetchCard(code)
+    cardDefCache.set(code, cardDef)
+    if (overlayCardCode.value === code) overlayCardDef.value = cardDef
+  } catch {
+    cardDefCache.set(code, null)
+  }
+})
 
 const upsideDown = computed<boolean>(() => hoveredElement.value?.classList.contains('Reversed') ?? false)
 const reversed = computed<boolean>(() => hoveredElement.value?.classList.contains('reversed') ?? false)
@@ -963,7 +993,6 @@ const TOKEN_MAP: Record<string, string> = {
   '[bless]': '<span class="bless-icon"></span>',
   '[curse]': '<span class="curse-icon"></span>',
   '[frost]': '<span class="frost-icon"></span>',
-  '[moon]': '<span class="moon-icon"></span>',
   '[per_investigator]': '<span class="per-player"></span>',
   '[seal_a]': '<span class="seal-a-icon"></span>',
   '[seal_b]': '<span class="seal-b-icon"></span>',
@@ -973,6 +1002,7 @@ const TOKEN_MAP: Record<string, string> = {
   '[day]': '<span class="day-icon"></span>',
   '[night]': '<span class="night-icon"></span>',
   '[codex]': '<span class="codex-icon"></span>',
+  ...homebrewTokenMap,
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -1070,12 +1100,13 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div
-    class="card-overlay"
-    ref="cardOverlay"
-    :style="{ top: overlayPosition.top + 'px', left: overlayPosition.left + 'px'}"
-    :class="{ sideways, tarot, isMobile }"
-  >
+  <Teleport to="body">
+    <div
+      class="card-overlay"
+      ref="cardOverlay"
+      :style="{ top: overlayPosition.top + 'px', left: overlayPosition.left + 'px'}"
+      :class="{ sideways, tarot, isMobile, overPopover }"
+    >
     <div class="card-image">
       <svg
         v-if="card"
@@ -1248,6 +1279,7 @@ watchEffect(() => {
         <font-awesome-icon :icon="['fas', 'language']" aria-hidden="true" />
         <span>{{ languageToggleLabel }}</span>
       </button>
+      <p v-if="cardErrata" class="card-errata">Errata: {{ cardErrata }}</p>
     </div>
 
     <div
@@ -1319,7 +1351,8 @@ watchEffect(() => {
         </li>
       </ul>
     </div>
-  </div>
+    </div>
+  </Teleport>
   <Teleport to="body">
     <div v-if="cosmicEmissaryPrompt" class="cosmic-emissary-prompt-backdrop">
       <div class="cosmic-emissary-prompt" role="dialog" aria-modal="true" aria-labelledby="cosmic-emissary-prompt-title">
@@ -1550,6 +1583,10 @@ watchEffect(() => {
   pointer-events: none;
   animation: fadeIn 0.5s;
 }
+.card-overlay.overPopover {
+  z-index: var(--z-card-hover-overlay-over-popover);
+}
+
 .card-overlay.sideways {
   /* on narrow portrait screens, allow horizontal scroll if both SVGs visible */
   @media (max-width: 800px) and (orientation: portrait){
@@ -1573,6 +1610,19 @@ watchEffect(() => {
 .reversed, .Reversed { transform: rotateZ(180deg); }
 
 .card-image { position: relative; }
+
+.card-errata {
+  width: 300px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #111827;
+  color: #fff7d6;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+  box-shadow: 0 3px 10px #000;
+}
 
 .spirit-icon {
   position: absolute;

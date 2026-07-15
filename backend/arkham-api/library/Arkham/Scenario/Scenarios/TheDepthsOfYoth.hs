@@ -13,13 +13,14 @@ import Arkham.Deck qualified as Deck
 import Arkham.Effect.Window
 import Arkham.EncounterSet qualified as Set
 import Arkham.Enemy.Cards qualified as Enemies
-import Arkham.Enemy.Types (Field (..))
+import Arkham.Enemy.Types (Enemy, Field (..))
 import Arkham.Helpers
 import Arkham.Helpers.FlavorText
 import Arkham.Helpers.Location (withLocationOf, getLocationOf)
 import Arkham.Helpers.Query
 import Arkham.Helpers.Scenario
 import Arkham.Helpers.Xp
+import Arkham.I18n
 import Arkham.Location.Cards qualified as Locations
 import Arkham.Matcher
 import Arkham.Message (questionLabel)
@@ -247,7 +248,7 @@ instance RunMessage TheDepthsOfYoth where
       choiceId <- getRandom
       push
         $ questionLabel
-          "The investigators may choose how many tally marks are under “Yig’s Fury.” The lower the number chosen, the safer and easier the scenario will be."
+          (ikey' "label.chooseYigsFury")
           lead
         $ ChooseAmounts
           "Fury"
@@ -318,7 +319,19 @@ instance RunMessage TheDepthsOfYoth where
                     (mapOneOf enemyIs [Enemies.harbingerOfValusia, Enemies.harbingerOfValusiaTheSleeperReturns])
                     >>= \case
                       Just eid -> field EnemyDamage eid
-                      Nothing -> getRecordCount TheHarbingerIsStillAlive
+                      -- the Harbinger may have fled mid-scenario (set aside, out of play);
+                      -- read its damage from the set-aside zone so it isn't lost (#5133)
+                      Nothing ->
+                        selectOne
+                          ( OutOfPlayEnemy SetAsideZone
+                              $ mapOneOf enemyIs [Enemies.harbingerOfValusia, Enemies.harbingerOfValusiaTheSleeperReturns]
+                          )
+                          >>= \case
+                            Just eid ->
+                              field @(OutOfPlayEntity 'SetAsideZone Enemy)
+                                (OutOfPlayEnemyField SetAsideZone EnemyDamage)
+                                eid
+                            Nothing -> getRecordCount TheHarbingerIsStillAlive
                 recordCount TheHarbingerIsStillAlive damage
 
           vengeance <- getTotalVengeanceInVictoryDisplay

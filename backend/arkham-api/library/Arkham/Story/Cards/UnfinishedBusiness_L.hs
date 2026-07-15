@@ -5,9 +5,9 @@ module Arkham.Story.Cards.UnfinishedBusiness_L (unfinishedBusiness_L) where
 import Arkham.Ability
 import Arkham.Card
 import Arkham.Enemy.Cards qualified as Enemies
-import Arkham.I18n (ikey', withI18n)
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
+import Arkham.Scenarios.TheWagesOfSin.Helpers (sendBanished)
 import Arkham.Story.Cards qualified as Cards
 import Arkham.Story.Import.Lifted
 import Arkham.Window qualified as Window
@@ -29,7 +29,7 @@ instance RunMessage UnfinishedBusiness_L where
         then do
           batched \_ -> do
             checkWhen $ Window.ScenarioEvent "wouldBanish" (Just iid) (toJSON card)
-            withI18n $ send $ format card <> " " <> ikey' "log.wasBanished"
+            sendBanished $ format card
             addToVictory iid attrs
           pure . UnfinishedBusiness_L $ attrs & flippedL .~ True
         else do

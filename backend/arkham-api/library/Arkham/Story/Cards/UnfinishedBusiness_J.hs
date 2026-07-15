@@ -9,10 +9,10 @@ import Arkham.GameValue
 import Arkham.Helpers.Modifiers
 import Arkham.Helpers.Query (getInvestigators)
 import Arkham.Helpers.Ref
-import Arkham.I18n (ikey', withI18n)
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Source
+import Arkham.Scenarios.TheWagesOfSin.Helpers (sendBanished)
 import Arkham.Story.Cards qualified as Cards
 import Arkham.Story.Import.Lifted
 import Arkham.Trait (Trait (Spectral))
@@ -35,7 +35,7 @@ instance RunMessage UnfinishedBusiness_J where
           let card = lookupCard Enemies.heretic_I (toCardId attrs)
           batched \_ -> do
             checkWhen $ Window.ScenarioEvent "wouldBanish" (Just iid) (toJSON card)
-            withI18n $ send $ format card <> " " <> ikey' "log.wasBanished"
+            sendBanished $ format card
             for_ mEnemy (push . RemoveEnemy)
             push $ ReplaceCard attrs.cardId (flipCard $ toCard attrs)
             addToVictory iid attrs
