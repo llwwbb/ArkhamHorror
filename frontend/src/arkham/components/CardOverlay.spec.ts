@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import CardOverlay from './CardOverlay.vue'
 import { useDbCardStore, type ArkhamDBCard } from '@/stores/dbCards'
 import { _resetForTests } from '@/arkham/composables/useDeviceLayout'
+import { checkImageExists } from '@/arkham/helpers'
 
 let pinia: ReturnType<typeof createPinia>
 
@@ -134,6 +135,39 @@ describe('CardOverlay language toggle', () => {
     expect(document.querySelector('.card-language-toggle')?.textContent).toContain('EN')
     expect(document.querySelector('.card-data')?.textContent).toContain('罗兰·班克斯')
     expect(document.querySelector('.card-data')?.textContent).toContain('中文描述')
+
+    app.unmount()
+  })
+
+  it('shows selected-language text by default even when a localized image exists', async () => {
+    await checkImageExists('zh')
+    const target = document.createElement('img')
+    target.className = 'card'
+    target.src = '/img/arkham/cards/01001.avif'
+    document.body.appendChild(target)
+
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const app = createApp(CardOverlay)
+    app.use(pinia)
+    app.use(createI18n({ legacy: false, locale: 'zh', messages: { zh: {} } }))
+    app.mount(host)
+
+    target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: 1, clientY: 1 }))
+    await flushOverlay()
+
+    expect(document.querySelector('.card-data')?.textContent).toContain('罗兰·班克斯')
+    expect(document.querySelector('.card-data')?.textContent).toContain('中文描述')
+
+    const englishButton = document.querySelector<HTMLButtonElement>('.card-data-language-toggle')
+    expect(englishButton?.textContent).toContain('EN')
+    expect(englishButton?.title).toBe('Show English card text')
+    pressAndClick(englishButton!)
+    await flushOverlay()
+
+    expect(document.querySelector('.card-data-language-toggle')?.textContent).toContain('ZH')
+    expect(document.querySelector('.card-data')?.textContent).toContain('Roland Banks')
+    expect(document.querySelector('.card-data')?.textContent).toContain('English text')
 
     app.unmount()
   })

@@ -36,8 +36,6 @@ const languageToggleLabel = computed(() => activeDescriptionLanguage.value === '
 const shouldShowCurrentLanguageDescription = computed(() =>
   currentLanguage.value !== 'en'
     && !!cardCode.value
-    && !!image.value
-    && (selectedDescriptionLanguage.value === 'current' || !image.value.includes(currentLanguage.value))
 )
 
 const TOKEN_MAP: Record<string, string> = {

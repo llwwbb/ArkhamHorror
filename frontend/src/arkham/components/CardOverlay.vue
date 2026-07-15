@@ -602,6 +602,7 @@ const cardCode = computed<string | null>(() => cardImageParts.value?.code ?? nul
 
 const canToggleEnglishDescription = computed<boolean>(() => currentLanguage.value !== 'en' && !!cardCode.value)
 const languageToggleLabel = computed<string>(() => activeDescriptionLanguage.value === 'english' ? currentLanguage.value.toUpperCase() : 'EN')
+const languageToggleTitle = computed<string>(() => activeDescriptionLanguage.value === 'english' ? 'Show selected language card text' : 'Show English card text')
 
 const toggleEnglishDescription = async () => {
   if (!canToggleEnglishDescription.value) return
@@ -1042,13 +1043,11 @@ watchEffect(() => {
   const language = currentLanguage.value
   if (language !== 'en') void store.initEnglishDbCards()
   const useEnglish = activeDescriptionLanguage.value === 'english'
-  const forceCurrent = selectedDescriptionLanguage.value === 'current'
-  if (!useEnglish && !forceCurrent && imgsrc(`cards/${code}${tabooSuffix}.avif`).includes(language)) return
 
   const dbCard = useEnglish ? store.getEnglishDbCard(code) : store.getDbCard(code)
   if (!dbCard) return
   const needBack = dbCard.code !== code
-  const force = useEnglish || forceCurrent
+  const force = useEnglish || language !== 'en'
 
   const name = getCardName(dbCard, needBack, force)
   const type = getCardTypeName(dbCard, force)
@@ -1243,7 +1242,7 @@ watchEffect(() => {
         v-if="canToggleEnglishDescription"
         class="card-language-toggle"
         type="button"
-        :title="activeDescriptionLanguage === 'english' ? 'Show selected language card text' : 'Show English card text'"
+        :title="languageToggleTitle"
         @click.stop="toggleEnglishDescription"
       >
         <font-awesome-icon :icon="['fas', 'language']" aria-hidden="true" />
@@ -1262,7 +1261,7 @@ watchEffect(() => {
           v-if="canToggleEnglishDescription"
           class="card-data-language-toggle"
           type="button"
-          :title="activeDescriptionLanguage === 'english' ? 'Show selected language card text' : 'Show English card text'"
+          :title="languageToggleTitle"
           @click.stop="toggleEnglishDescription"
         >
           <font-awesome-icon :icon="['fas', 'language']" aria-hidden="true" />

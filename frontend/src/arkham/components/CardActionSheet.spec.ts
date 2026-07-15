@@ -3,6 +3,7 @@ import { createApp, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import CardActionSheet from './CardActionSheet.vue'
 import { useDbCardStore, type ArkhamDBCard } from '@/stores/dbCards'
+import { getCardImage } from '@/arkham/cardImageLookup'
 
 vi.mock('@/arkham/cardImageLookup', () => ({
   getCardImage: vi.fn(() => '/img/arkham/cards/01001.avif'),
@@ -66,6 +67,28 @@ describe('CardActionSheet', () => {
 
     expect(document.querySelector('.sheet-card-data')?.textContent).toContain('罗兰·班克斯')
     expect(document.querySelector('.sheet-card-data')?.textContent).toContain('中文描述')
+
+    app.unmount()
+  })
+
+  it('shows current-language card text by default when mobile sheet previews a localized image', async () => {
+    vi.mocked(getCardImage).mockReturnValueOnce('/img/arkham/zh/cards/01001.avif')
+    localStorage.setItem('language', 'zh')
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const app = createApp(CardActionSheet, {
+      target: document.createElement('img'),
+      actionable: false,
+    })
+    app.config.globalProperties.$t = (key: string) => key
+    app.use(pinia)
+
+    app.mount(host)
+    await nextTick()
+
+    expect(document.querySelector('.sheet-card-data')?.textContent).toContain('罗兰·班克斯')
+    expect(document.querySelector('.sheet-card-data')?.textContent).toContain('中文描述')
+    expect(document.querySelector('.sheet-language-toggle')?.textContent).toContain('EN')
 
     app.unmount()
   })

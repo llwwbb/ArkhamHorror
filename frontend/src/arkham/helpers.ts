@@ -26,13 +26,16 @@ const digestLoaders: Record<string, () => Promise<{ default: string[] }>> = {
   zh: () => import('@/digests/zh.json'),
 }
 
-export async function checkImageExists(language: string = localStorage.getItem('language') || 'en') {
-  if (language === 'en' || !imgHelper.has(language)) return
+const imageLanguage = (language: string): string => language === 'zh-cn' ? 'zh' : language
 
-  const helper = imgHelper.get(language) || defaultHelper
+export async function checkImageExists(language: string = localStorage.getItem('language') || 'en') {
+  const localizedLanguage = imageLanguage(language)
+  if (localizedLanguage === 'en' || !imgHelper.has(localizedLanguage)) return
+
+  const helper = imgHelper.get(localizedLanguage) || defaultHelper
   if (!helper.root || helper.loaded.value) return
 
-  const digest = await digestLoaders[language]?.()
+  const digest = await digestLoaders[localizedLanguage]?.()
   if (!digest) return
 
   helper.digests = new Set(digest.default)
@@ -83,7 +86,7 @@ export function isLocalized(src: string) {
   // Always return true for English since all base images are English
   if (language === 'en') return true
 
-  const helper = imgHelper.get(language) || defaultHelper
+  const helper = imgHelper.get(imageLanguage(language)) || defaultHelper
   const path = src.replace(/^\//, '')
   const exists = helper.digests.has(path)
 
@@ -102,7 +105,7 @@ export function imgsrc(src: string) {
   const fullPath = `${store.assetHost}/img/arkham/${path}`
 
   if (isLocalized(src)) {
-    const helper = imgHelper.get(language) || defaultHelper
+    const helper = imgHelper.get(imageLanguage(language)) || defaultHelper
     const exists = helper.digests.has(path)
 
     if (exists && helper.root && helper.loaded.value) {
