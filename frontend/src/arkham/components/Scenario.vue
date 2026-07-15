@@ -2856,11 +2856,13 @@ async function addChaosToken(face: any){
   z-index: var(--z-index-1);
   width: 100%;
   flex: 1;
+  min-height: 0;
   inset: 0;
   position: relative;
+  overflow: hidden;
 
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 
   &.scenario-body--notifier-overlays {
     z-index: auto;
@@ -3266,6 +3268,7 @@ async function addChaosToken(face: any){
   width: 100%;
   height: 100%;
   flex: 1;
+  min-height: 0;
 }
 
 .active-phase {

@@ -226,6 +226,7 @@ function debugExport(exportType: ExportType) {
 <style lang="scss" scoped>
 .game-bar {
   display: flex;
+  flex: 0 0 auto;
   margin: 0;
   padding: 0;
   background: var(--background-mid);

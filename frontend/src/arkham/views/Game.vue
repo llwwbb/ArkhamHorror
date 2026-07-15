@@ -721,9 +721,9 @@ onUnmounted(() => {
 
 .game-main {
   width: 100vw;
-  height: calc(100vh - 80px - var(--epic-bar-height, 0px));
   display: flex;
   flex: 1;
+  min-height: 0;
 }
 
 .epic-bar-slot {
