@@ -105,6 +105,11 @@ const swarmTooltip = computed(() => `Swarm cards (${swarmCards.value.length}) â€
 const swarmBackImage = imgsrc('player_back.jpg')
 const swarmEnemyDamage = (enemy: typeof props.enemy) => (enemy.tokens[TokenType.Damage] || 0) + enemy.assignedDamage
 
+function shouldAutoHideSwarm(event: Event): boolean {
+  const target = event.target
+  return !(target instanceof Element && target.closest('.card-action-sheet'))
+}
+
 const isSwarm = computed(() => props.enemy.placement.tag === 'AsSwarm')
 
 const referenceCards = computed(() => props.enemy.referenceCards)
@@ -529,7 +534,7 @@ function onDrop(event: DragEvent) {
       <Dropdown
         v-model:shown="swarmCardsShown"
         :triggers="['click']"
-        :auto-hide="true"
+        :auto-hide="shouldAutoHideSwarm"
         :distance="8"
         placement="bottom"
         theme="cards-under-popover"
