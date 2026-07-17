@@ -33,12 +33,7 @@ async function flushOverlay() {
   await nextTick()
 }
 
-function pressAndClick(button: HTMLButtonElement) {
-  button.dispatchEvent(new Event('pointerup', { bubbles: true }))
-  button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-}
-
-describe('CardOverlay language toggle', () => {
+describe('CardOverlay translated card text', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     localStorage.clear()
@@ -69,7 +64,7 @@ describe('CardOverlay language toggle', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows and preserves the desktop language toggle for back-side cache-busted images', async () => {
+  it('shows selected-language text for back-side cache-busted images without an English toggle', async () => {
     const target = document.createElement('img')
     target.className = 'card'
     target.src = '/img/arkham/cards/01001b.avif?digest=abc'
@@ -85,26 +80,15 @@ describe('CardOverlay language toggle', () => {
     target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: 1, clientY: 1 }))
     await flushOverlay()
 
-    expect(document.querySelector('.card-language-toggle')?.textContent).toContain('EN')
-
-    document.querySelector<HTMLButtonElement>('.card-language-toggle')?.click()
-    await flushOverlay()
-
-    expect(document.querySelector('.card-data-language-toggle')?.textContent).toContain('ZH')
-    expect(document.querySelector('.card-data')?.textContent).toContain('Roland Banks')
-    expect(document.querySelector('.card-data')?.textContent).toContain('English text')
-
-    document.querySelector<HTMLButtonElement>('.card-data-language-toggle')?.click()
-    await flushOverlay()
-
-    expect(document.querySelector('.card-data-language-toggle')?.textContent).toContain('EN')
     expect(document.querySelector('.card-data')?.textContent).toContain('罗兰·班克斯')
     expect(document.querySelector('.card-data')?.textContent).toContain('中文描述')
+    expect(document.querySelector('.card-language-toggle')).toBeNull()
+    expect(document.querySelector('.card-data-language-toggle')).toBeNull()
 
     app.unmount()
   })
 
-  it('keeps the desktop overlay open when toggling English back to the selected language', async () => {
+  it('hides translated card text immediately when the pointer leaves the card', async () => {
     const target = document.createElement('img')
     target.className = 'card'
     target.src = '/img/arkham/cards/01001.avif'
@@ -120,21 +104,12 @@ describe('CardOverlay language toggle', () => {
     target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: 1, clientY: 1 }))
     await flushOverlay()
 
-    const englishButton = document.querySelector<HTMLButtonElement>('.card-language-toggle')
-    expect(englishButton?.textContent).toContain('EN')
+    expect(document.querySelector('.card-data')).not.toBeNull()
 
-    pressAndClick(englishButton!)
-    await flushOverlay()
+    host.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: 500, clientY: 500 }))
+    await nextTick()
 
-    const selectedLanguageButton = document.querySelector<HTMLButtonElement>('.card-language-toggle')
-    expect(selectedLanguageButton?.textContent).toContain('ZH')
-
-    pressAndClick(selectedLanguageButton!)
-    await flushOverlay()
-
-    expect(document.querySelector('.card-language-toggle')?.textContent).toContain('EN')
-    expect(document.querySelector('.card-data')?.textContent).toContain('罗兰·班克斯')
-    expect(document.querySelector('.card-data')?.textContent).toContain('中文描述')
+    expect(document.querySelector('.card-data')).toBeNull()
 
     app.unmount()
   })
@@ -158,16 +133,6 @@ describe('CardOverlay language toggle', () => {
 
     expect(document.querySelector('.card-data')?.textContent).toContain('罗兰·班克斯')
     expect(document.querySelector('.card-data')?.textContent).toContain('中文描述')
-
-    const englishButton = document.querySelector<HTMLButtonElement>('.card-data-language-toggle')
-    expect(englishButton?.textContent).toContain('EN')
-    expect(englishButton?.title).toBe('Show English card text')
-    pressAndClick(englishButton!)
-    await flushOverlay()
-
-    expect(document.querySelector('.card-data-language-toggle')?.textContent).toContain('ZH')
-    expect(document.querySelector('.card-data')?.textContent).toContain('Roland Banks')
-    expect(document.querySelector('.card-data')?.textContent).toContain('English text')
 
     app.unmount()
   })

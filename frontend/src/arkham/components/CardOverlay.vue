@@ -173,10 +173,7 @@ watch(hoveredElement, (el) => {
 
 const CARD_SELECTOR = '.card,[data-image-id],[data-target],[data-image]'
 const OVERLAY_BLOCKER_SELECTOR = '.draggable,.intro-text,.choice-modal-wrapper,.no-card-overlay'
-const HOVER_CLEAR_DELAY_MS = 80
-const HOVER_BRIDGE_PADDING = 18
 let hoverTimer: number | null = null
-let hideTimer: number | null = null
 let pressTimer: number | null = null
 let canDisablePress = false
 let currentPointerType = 'mouse'
@@ -193,50 +190,8 @@ const withinRect = (x: number, y: number, rect: DOMRect): boolean =>
     && y >= rect.top
     && y <= rect.bottom
 
-const withinOverlayBridge = (e: MouseEvent): boolean => {
-  if (!cardOverlay.value || !hoveredElement.value) return false
-
-  const overlayRect = cardOverlay.value.getBoundingClientRect()
-  if (withinRect(e.clientX, e.clientY, overlayRect)) return true
-
-  const cardRect = hoveredElement.value.getBoundingClientRect()
-  const horizontalGap =
-    overlayRect.left > cardRect.right
-      ? { left: cardRect.right, right: overlayRect.left }
-      : cardRect.left > overlayRect.right
-        ? { left: overlayRect.right, right: cardRect.left }
-        : null
-  if (horizontalGap) {
-    const top = Math.max(cardRect.top, overlayRect.top) - HOVER_BRIDGE_PADDING
-    const bottom = Math.min(cardRect.bottom, overlayRect.bottom) + HOVER_BRIDGE_PADDING
-    return e.clientX >= horizontalGap.left
-      && e.clientX <= horizontalGap.right
-      && e.clientY >= top
-      && e.clientY <= bottom
-  }
-
-  const verticalGap =
-    overlayRect.top > cardRect.bottom
-      ? { top: cardRect.bottom, bottom: overlayRect.top }
-      : cardRect.top > overlayRect.bottom
-        ? { top: overlayRect.bottom, bottom: cardRect.top }
-        : null
-  if (!verticalGap) return false
-
-  const left = Math.max(cardRect.left, overlayRect.left) - HOVER_BRIDGE_PADDING
-  const right = Math.min(cardRect.right, overlayRect.right) + HOVER_BRIDGE_PADDING
-  return e.clientX >= left
-    && e.clientX <= right
-    && e.clientY >= verticalGap.top
-    && e.clientY <= verticalGap.bottom
-}
-
 const targetFromEvent = (e: Event): HTMLElement | null => {
   const raw = e.target as HTMLElement | null
-  if (raw?.closest('.card-overlay')) return hoveredElement.value
-
-  if (e instanceof MouseEvent && withinOverlayBridge(e)) return hoveredElement.value
-
   const closest = raw ? (raw.closest(CARD_SELECTOR) as HTMLElement | null) : null
   if (closest) return closest
 
@@ -263,20 +218,11 @@ const targetFromEvent = (e: Event): HTMLElement | null => {
 
 const queueHover = (el: HTMLElement) => {
   hoverTimer = clearTimer(hoverTimer)
-  hideTimer = clearTimer(hideTimer)
   const delay = el.dataset.delay ? parseInt(el.dataset.delay, 10) : 0
   hoverTimer = window.setTimeout(() => {
     hoveredElement.value = el
     canDisablePress = true
   }, delay)
-}
-
-const queueHide = () => {
-  hideTimer = clearTimer(hideTimer)
-  hideTimer = window.setTimeout(() => {
-    hoveredElement.value = null
-    hideTimer = null
-  }, HOVER_CLEAR_DELAY_MS)
 }
 
 const onMouseOver = (e: MouseEvent) => {
@@ -285,20 +231,16 @@ const onMouseOver = (e: MouseEvent) => {
   const el = targetFromEvent(e)
   hoverTimer = clearTimer(hoverTimer)
   if (!el || el.classList.contains('dragging') || el.classList.contains('no-overlay')) {
-    if (hoveredElement.value) queueHide()
+    hoveredElement.value = null
     return
   }
-  if (el === hoveredElement.value) {
-    hideTimer = clearTimer(hideTimer)
-    return
-  }
+  if (el === hoveredElement.value) return
   queueHover(el)
 }
 
 const onMouseLeave = () => {
   if (currentPointerType === 'touch') return
   hoverTimer = clearTimer(hoverTimer)
-  hideTimer = clearTimer(hideTimer)
   hoveredElement.value = null
 }
 
@@ -323,9 +265,7 @@ const onPointerMove = (e: PointerEvent) => {
   }
 }
 
-const onPointerUp = (e?: PointerEvent) => {
-  const target = e?.target as HTMLElement | null
-  if (target?.closest('.card-overlay')) return
+const onPointerUp = () => {
   if (canDisablePress) {
     canDisablePress = false
   } else {
@@ -336,7 +276,6 @@ const onPointerUp = (e?: PointerEvent) => {
 
 const clearOverlay = () => {
   hoverTimer = clearTimer(hoverTimer)
-  hideTimer = clearTimer(hideTimer)
   pressTimer = clearTimer(pressTimer)
   playabilityTimer = clearTimer(playabilityTimer)
   cosmicEmissaryTimer = clearTimer(cosmicEmissaryTimer)
@@ -397,9 +336,6 @@ const currentLanguage = computed<string>(() => {
   const language = localStorage.getItem('language') || 'en'
   return storeLanguage === language ? storeLanguage : language
 })
-type DescriptionLanguage = 'current' | 'english'
-const selectedDescriptionLanguage = ref<DescriptionLanguage | null>(null)
-const activeDescriptionLanguage = computed<DescriptionLanguage>(() => selectedDescriptionLanguage.value ?? 'current')
 const overlayCardCode = computed<string | null>(() => {
   const el = hoveredElement.value
   if (!el) return null
@@ -455,10 +391,7 @@ const sideways = computed<boolean>(() => {
   return el.matches('.card, [data-image-id], [data-target]') && el.offsetWidth > el.offsetHeight
 })
 
-watch(card, (src) => {
-  selectedDescriptionLanguage.value = null
-  if (src) loadAR(src)
-})
+watch(card, (src) => { if (src) loadAR(src) })
 
 /* =============================================================================
  * Overlay positioning
@@ -629,17 +562,6 @@ const isSpirit = computed<boolean>(() => {
 
 const cardImageParts = computed(() => cardImagePartsFromImage(card.value))
 const cardCode = computed<string | null>(() => cardImageParts.value?.code ?? null)
-
-const canToggleEnglishDescription = computed<boolean>(() => currentLanguage.value !== 'en' && !!cardCode.value)
-const languageToggleLabel = computed<string>(() => activeDescriptionLanguage.value === 'english' ? currentLanguage.value.toUpperCase() : 'EN')
-const languageToggleTitle = computed<string>(() => activeDescriptionLanguage.value === 'english' ? 'Show selected language card text' : 'Show English card text')
-
-const toggleEnglishDescription = async () => {
-  if (!canToggleEnglishDescription.value) return
-  const next: DescriptionLanguage = activeDescriptionLanguage.value === 'english' ? 'current' : 'english'
-  selectedDescriptionLanguage.value = next
-  if (next === 'english') await store.initEnglishDbCards()
-}
 
 const customizationVariant = computed<string>(() => {
   const chained = hoveredElement.value?.dataset?.chained
@@ -1071,13 +993,11 @@ watchEffect(() => {
   const { code } = parts
   const tabooSuffix = parts.suffix
   const language = currentLanguage.value
-  if (language !== 'en') void store.initEnglishDbCards()
-  const useEnglish = activeDescriptionLanguage.value === 'english'
 
-  const dbCard = useEnglish ? store.getEnglishDbCard(code) : store.getDbCard(code)
+  const dbCard = store.getDbCard(code)
   if (!dbCard) return
   const needBack = dbCard.code !== code
-  const force = useEnglish || language !== 'en'
+  const force = language !== 'en'
 
   const name = getCardName(dbCard, needBack, force)
   const type = getCardTypeName(dbCard, force)
@@ -1269,16 +1189,6 @@ watchEffect(() => {
       </svg>
 
       <div v-for="entry in crossedOff" :key="entry" class="crossed-off" :class="{ [toCamelCase(entry)]: true }"></div>
-      <button
-        v-if="canToggleEnglishDescription"
-        class="card-language-toggle"
-        type="button"
-        :title="languageToggleTitle"
-        @click.stop="toggleEnglishDescription"
-      >
-        <font-awesome-icon :icon="['fas', 'language']" aria-hidden="true" />
-        <span>{{ languageToggleLabel }}</span>
-      </button>
       <p v-if="cardErrata" class="card-errata">Errata: {{ cardErrata }}</p>
     </div>
 
@@ -1289,16 +1199,6 @@ watchEffect(() => {
     >
       <div class="card-data-header">
         <p v-if="dbCardName"><b>{{ dbCardName }}</b></p>
-        <button
-          v-if="canToggleEnglishDescription"
-          class="card-data-language-toggle"
-          type="button"
-          :title="languageToggleTitle"
-          @click.stop="toggleEnglishDescription"
-        >
-          <font-awesome-icon :icon="['fas', 'language']" aria-hidden="true" />
-          <span>{{ languageToggleLabel }}</span>
-        </button>
       </div>
       <div class="card-data-body">
         <div class="card-info">
@@ -1447,7 +1347,6 @@ watchEffect(() => {
   box-shadow: 1px 1px 6px rgba(0, 0, 0, 0.75);
   display: flex;
   flex-direction: column;
-  pointer-events: auto;
   --panel-color: #808080;
   --border-color: var(--panel-color);
 }
@@ -1485,51 +1384,6 @@ watchEffect(() => {
   padding: 3% 15px;
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.card-data-header p {
-  margin: 0;
-}
-
-.card-language-toggle,
-.card-data-language-toggle {
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  background: rgba(0, 0, 0, 0.68);
-  color: #fff;
-  cursor: pointer;
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-family: Arial, sans-serif;
-  font-size: 12px;
-  line-height: 1;
-  min-width: 42px;
-  min-height: 28px;
-}
-
-.card-language-toggle {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: var(--z-index-3);
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
-}
-
-.card-data-language-toggle {
-  border-radius: 4px;
-  flex: 0 0 auto;
-}
-
-.card-language-toggle:hover,
-.card-data-language-toggle:hover {
-  background: rgba(0, 0, 0, 0.82);
 }
 
 .card-data-body {
