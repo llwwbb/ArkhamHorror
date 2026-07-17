@@ -161,6 +161,7 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
     <div v-if="viewOnly" class="waiting-banner">
       {{ t('waitingForPlayer', { name: viewerInvestigatorName }) }}
     </div>
+    <template v-else>
     <template v-if="question && question.tag === QuestionType.READ">
       <StoryEntry
         :game="game"
@@ -293,6 +294,7 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
       v-else
       @choose="choose"
     />
+    </template>
   </div>
 </template>
 
