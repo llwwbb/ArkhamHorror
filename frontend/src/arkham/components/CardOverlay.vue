@@ -23,7 +23,7 @@ import { type ArkhamKey, keyToId } from '@/arkham/types/Key'
 import PoolItem from '@/arkham/components/PoolItem.vue'
 import { useDbCardStore, ArkhamDBCard } from '@/stores/dbCards'
 import { useI18n } from 'vue-i18n'
-import { cardImagePartsFromImage } from '@/arkham/cardLanguage'
+import { cardDefinitionCodeFromImage, cardImagePartsFromImage } from '@/arkham/cardLanguage'
 
 /* =============================================================================
  * Constants, basic helpers, and caches
@@ -341,8 +341,7 @@ const overlayCardCode = computed<string | null>(() => {
   if (!el) return null
   const direct = normalizedCardCode(el.dataset.cardCode ?? el.dataset.imageId)?.replace(/b$/, '')
   if (direct) return direct
-  const match = card.value?.match(/\/cards\/c?(\d+)b?\.(?:avif|jpg|jpeg|png|webp)(?:\?.*)?$/i)
-  return match?.[1] ?? null
+  return cardDefinitionCodeFromImage(card.value)
 })
 const cardErrata = computed<string | null>(() => overlayCardDef.value?.errata ?? null)
 
