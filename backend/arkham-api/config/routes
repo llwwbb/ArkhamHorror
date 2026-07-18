@@ -12,6 +12,7 @@
     /account ApiV1AccountR DELETE
     /site-settings ApiV1SiteSettingsR GET
     /notifications ApiV1NotificationsR GET
+    /push-subscriptions ApiV1PushSubscriptionsR GET POST DELETE
     /arkham ApiV1ArkhamP:
       /cards ApiV1ArkhamCardsR GET
       /homebrew/cards ApiV1ArkhamHomebrewCardsR GET

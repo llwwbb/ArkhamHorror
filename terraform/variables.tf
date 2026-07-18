@@ -136,6 +136,19 @@ variable "asset_host" {
   default     = "https://assets.arkhamhorror.app"
 }
 
+variable "fcm_web_origin" {
+  description = "Public HTTPS origin used by FCM notification links. Empty disables the worker."
+  type        = string
+  default     = ""
+}
+
+variable "firebase_service_account_json" {
+  description = "Firebase service-account JSON mounted into the app container."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "app_secrets" {
   description = "Free-form app secrets to mount as env. Keys become env var names."
   type        = map(string)

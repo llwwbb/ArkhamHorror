@@ -64,6 +64,7 @@ import { cardImg, imgsrc } from '@/arkham/helpers'
 import { handleEmbeddedI18n } from '@/arkham/i18n'
 import { getGameLocalStorageItem, setGameLocalStorageItem } from '@/arkham/localStorage'
 import { useTurnNotification } from '@/arkham/composables/useTurnNotification'
+import { remotePushEnabled } from '@/pushNotifications'
 import * as Arkham from '@/arkham/types/Game'
 import * as ArkhamGame from '@/arkham/types/Game'
 import {
@@ -430,7 +431,10 @@ const choices = computed(() => {
   if (!playerId.value) return []
   return choicesByPlayer.value.get(playerId.value) ?? []
 })
-useTurnNotification({ pendingChoices: computed(() => choices.value.length) })
+useTurnNotification({
+  pendingChoices: computed(() => choices.value.length),
+  remotePushEnabled,
+})
 
 const gameOver = computed(() => game.value?.gameState.tag === 'IsOver')
 const question = computed(() => (playerId.value ? game.value?.question[playerId.value] : null))

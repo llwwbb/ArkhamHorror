@@ -56,6 +56,13 @@ services:
       context: .
       args:
         - GHC_VERSION=9.12.2
+        - FIREBASE_API_KEY=${FIREBASE_API_KEY:-}
+        - FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN:-}
+        - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-}
+        - FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET:-}
+        - FIREBASE_MESSAGING_SENDER_ID=${FIREBASE_MESSAGING_SENDER_ID:-}
+        - FIREBASE_APP_ID=${FIREBASE_APP_ID:-}
+        - FIREBASE_VAPID_KEY=${FIREBASE_VAPID_KEY:-}
     # ASSET_HOST is auto-detected by web-entrypoint.sh:
     #   unset (default): uses local images if present, CDN otherwise
     # To override, uncomment one of the lines below:

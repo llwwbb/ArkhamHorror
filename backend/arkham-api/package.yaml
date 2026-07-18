@@ -75,6 +75,7 @@ library:
     - containers
     - cryptohash-sha256
     - crypton-x509-store
+    - crypton-x509
     - data-default-class
     - dependent-map
     - dependent-sum
@@ -106,6 +107,7 @@ library:
     - opentelemetry
     - parsec
     - path-pieces
+    - pem
     - persistent
     - persistent-postgresql
     - pretty-simple

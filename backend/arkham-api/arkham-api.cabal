@@ -26,6 +26,8 @@ library
       Api.Arkham.Export
       Api.Arkham.Helpers
       Api.Arkham.Types.MultiplayerVariant
+      Api.Push.Notifications
+      Api.Push.Worker
       Api.Handler.Arkham.Achievements
       Api.Handler.Arkham.Admin.Metrics
       Api.Handler.Arkham.Cards
@@ -6726,6 +6728,7 @@ library
       Base.Api.Handler.CurrentUser
       Base.Api.Handler.Notifications
       Base.Api.Handler.PasswordReset
+      Base.Api.Handler.PushSubscriptions
       Base.Api.Handler.Registration
       Base.Api.Handler.Settings
       Base.Util
@@ -6744,6 +6747,8 @@ library
       Entity.Arkham.Step
       Entity.Notification
       Entity.PasswordReset
+      Entity.PushNotificationOutbox
+      Entity.PushSubscription
       Entity.User
       Foundation
       GHCI
@@ -6809,6 +6814,7 @@ library
     , containers
     , cryptohash-sha256
     , crypton-x509-store
+    , crypton-x509
     , data-default-class
     , dependent-map
     , dependent-sum
@@ -6840,6 +6846,7 @@ library
     , opentelemetry
     , parsec
     , path-pieces
+    , pem
     , persistent
     , persistent-postgresql
     , pretty-simple
@@ -7125,6 +7132,7 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Api.Push.NotificationsSpec
       Arkham.Achievements.ReturnToNightOfTheZealotSpec
       Arkham.Achievements.ReturnToTheCircleUndoneSpec
       Arkham.Achievements.ReturnToTheDunwichLegacySpec
