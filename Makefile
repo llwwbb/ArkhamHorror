@@ -41,6 +41,14 @@ V2_DO_CLUSTER  ?= arkham-horror-doks
 V2_CACHE_DIR   ?= $(CURDIR)/.buildx-cache/v2
 V2_CACHE_NEXT  ?= $(V2_CACHE_DIR).new
 V2_CACHE_PREV  ?= $(V2_CACHE_DIR).prev
+FIREBASE_API_KEY ?=
+FIREBASE_AUTH_DOMAIN ?=
+FIREBASE_PROJECT_ID ?=
+FIREBASE_STORAGE_BUCKET ?=
+FIREBASE_MESSAGING_SENDER_ID ?=
+FIREBASE_APP_ID ?=
+FIREBASE_VAPID_KEY ?=
+V2_FIREBASE_BUILD_ARGS = --build-arg FIREBASE_API_KEY="$(FIREBASE_API_KEY)" --build-arg FIREBASE_AUTH_DOMAIN="$(FIREBASE_AUTH_DOMAIN)" --build-arg FIREBASE_PROJECT_ID="$(FIREBASE_PROJECT_ID)" --build-arg FIREBASE_STORAGE_BUCKET="$(FIREBASE_STORAGE_BUCKET)" --build-arg FIREBASE_MESSAGING_SENDER_ID="$(FIREBASE_MESSAGING_SENDER_ID)" --build-arg FIREBASE_APP_ID="$(FIREBASE_APP_ID)" --build-arg FIREBASE_VAPID_KEY="$(FIREBASE_VAPID_KEY)"
 V2_CACHE_SETUP = CACHE_ARGS="--cache-to type=local,dest=$(V2_CACHE_NEXT),mode=max"; rm -rf "$(V2_CACHE_NEXT)"; if [ -d "$(V2_CACHE_DIR)" ]; then CACHE_ARGS="--cache-from type=local,src=$(V2_CACHE_DIR) $$CACHE_ARGS"; fi
 V2_CACHE_PROMOTE = if [ -d "$(V2_CACHE_NEXT)" ]; then rm -rf "$(V2_CACHE_PREV)"; if [ -d "$(V2_CACHE_DIR)" ]; then mv "$(V2_CACHE_DIR)" "$(V2_CACHE_PREV)"; fi; if mv "$(V2_CACHE_NEXT)" "$(V2_CACHE_DIR)"; then rm -rf "$(V2_CACHE_PREV)"; else if [ -d "$(V2_CACHE_PREV)" ]; then mv "$(V2_CACHE_PREV)" "$(V2_CACHE_DIR)"; fi; exit 1; fi; fi
 
@@ -69,7 +77,7 @@ v2-deploy: v2-buildx-setup v2-kubeconfig-ensure
 	  if [ -n "$$DIRTY" ]; then TAG="$$TAG-dirty"; fi; \
 	  $(V2_CACHE_SETUP); \
 	  echo ">> building $(V2_IMAGE):$$TAG ($(V2_PLATFORM))"; \
-	  docker buildx build --builder $(V2_BUILDER) --platform $(V2_PLATFORM) $$CACHE_ARGS \
+	  docker buildx build --builder $(V2_BUILDER) --platform $(V2_PLATFORM) $$CACHE_ARGS $(V2_FIREBASE_BUILD_ARGS) \
 	    --tag $(V2_IMAGE):$$TAG \
 	    --tag $(V2_IMAGE):latest \
 	    --push . ; \
@@ -95,7 +103,7 @@ v2-deploy-committed: v2-buildx-setup v2-kubeconfig-ensure
 	  TAG=$$(git rev-parse --short "$$REF"); \
 	  $(V2_CACHE_SETUP); \
 	  echo ">> building $(V2_IMAGE):$$TAG ($(V2_PLATFORM)) from committed ref $$REF"; \
-	  git archive --format=tar "$$REF" | docker buildx build --builder $(V2_BUILDER) --platform $(V2_PLATFORM) $$CACHE_ARGS \
+	  git archive --format=tar "$$REF" | docker buildx build --builder $(V2_BUILDER) --platform $(V2_PLATFORM) $$CACHE_ARGS $(V2_FIREBASE_BUILD_ARGS) \
 	    --tag $(V2_IMAGE):$$TAG \
 	    --tag $(V2_IMAGE):latest \
 	    --file Dockerfile \
@@ -121,7 +129,7 @@ v2-push-multiarch: v2-buildx-setup
 	  if [ -n "$$DIRTY" ]; then TAG="$$TAG-dirty"; fi; \
 	  $(V2_CACHE_SETUP); \
 	  echo ">> building $(V2_IMAGE):$$TAG (linux/amd64,linux/arm64)"; \
-	  docker buildx build --builder $(V2_BUILDER) --platform linux/amd64,linux/arm64 $$CACHE_ARGS \
+	  docker buildx build --builder $(V2_BUILDER) --platform linux/amd64,linux/arm64 $$CACHE_ARGS $(V2_FIREBASE_BUILD_ARGS) \
 	    --tag $(V2_IMAGE):$$TAG \
 	    --tag $(V2_IMAGE):latest \
 	    --push . ; \

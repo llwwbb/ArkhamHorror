@@ -17,4 +17,6 @@ import Entity.Arkham.Game as X
 import Entity.Arkham.MlDecision as X
 import Entity.Arkham.Player as X
 import Entity.PasswordReset as X
+import Entity.PushNotificationOutbox as X
+import Entity.PushSubscription as X
 import Entity.User as X

@@ -86,6 +86,7 @@ import Api.Handler.Arkham.Admin.Metrics
 import Api.Handler.Arkham.Cards
 import Api.Handler.Arkham.Decks
 import Api.Handler.Arkham.Events
+import Api.Push.Worker (pushNotificationWorker)
 import Api.Handler.Arkham.Game.Bug
 import Api.Handler.Arkham.Game.Debug
 import Api.Handler.Arkham.Games
@@ -100,6 +101,7 @@ import Base.Api.Handler.Authentication
 import Base.Api.Handler.CurrentUser
 import Base.Api.Handler.Notifications
 import Base.Api.Handler.PasswordReset
+import Base.Api.Handler.PushSubscriptions
 import Base.Api.Handler.Registration
 import Base.Api.Handler.Settings
 import Control.Concurrent (forkIO)
@@ -174,6 +176,7 @@ makeFoundation appSettings = do
   -- serving, so admin counts age out automatically when a pod crashes.
   -- No-op when no Redis broker is configured.
   _ <- forkIO (roomHeartbeat foundation)
+  _ <- forkIO (pushNotificationWorker foundation)
 
   pure foundation
 

@@ -547,6 +547,7 @@ const spadeInjury = computed(() => {
             <button
             :class="{ active: endTurnAction !== -1 && investigator.remainingActions === 0 }"
             :disabled="endTurnAction == -1"
+            :data-game-actionable="endTurnAction !== -1 || undefined"
             @click="$emit('choose', endTurnAction)"
             >{{ isMobile ? $t('investigator.endTurnShort') : $t('investigator.endTurn') }}</button>
 
@@ -558,6 +559,7 @@ const spadeInjury = computed(() => {
             <span class="skip-triggers-group" :class="{ 'skip-triggers-group--paired': showSkipAll }">
               <button
                 :disabled="!canSkipTriggers || skipAllInProgress"
+                :data-game-actionable="canSkipTriggers && !skipAllInProgress || undefined"
                 @click="skipTriggers"
                 class="skip-triggers-button"
               >{{ isMobile ? t('skip') : $t('investigator.skipTriggers') }}</button>

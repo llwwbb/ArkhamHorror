@@ -435,6 +435,16 @@
     "projectBody": "此应用程序由 <a href=\"https://github.com/halogenandtoast\">halogenandtoast</a> 及贡献者创建，旨在支持 Arkham Horror: The Card Game 社区。此项目的源代码可在 <a href=\"https://github.com/halogenandtoast/ArkhamHorror\">Github</a> 获取。欢迎通过 Github 提议或 Mythos Busters discord 服务器上的专用频道提供反馈和错误报告。"
   },
   "settingsForm": {
+    "turnNotifications": "回合通知",
+    "turnNotificationsHelp": "当游戏等待你作出选择时，即使游戏标签页已经关闭，也在此设备上接收通知。",
+    "enableTurnNotifications": "启用通知",
+    "disableTurnNotifications": "在此设备上关闭",
+    "turnNotificationsError": "无法启用通知，请检查浏览器支持、站点配置及通知权限。",
+    "turnNotificationsStatus": {
+      "enabled": "此设备已启用通知。",
+      "disabled": "此设备未启用通知。",
+      "denied": "浏览器已阻止通知，请先在站点设置中允许通知。"
+    },
     "languageHelp": "这将更改卡牌和应用的语言。如果所选语言中没有可用的卡牌或文本，将默认显示英语。（译者：中文相关bug，请在QQ群里反馈）",
     "enrollInBeta": "加入测试版",
     "betaWarning": "测试版功能可能存在严重错误，游戏可能无法恢复，请仅在愿意提供反馈的情况下启用此功能。",

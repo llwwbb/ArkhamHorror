@@ -27,6 +27,7 @@ import { useGameUndo } from '@/arkham/composables/useGameUndo'
 import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
 import { useBugReport } from '@/arkham/composables/useBugReport'
 import { useTurnNotification } from '@/arkham/composables/useTurnNotification'
+import { remotePushEnabled } from '@/pushNotifications'
 import { useAiDriver } from '@/arkham/composables/useAiDriver'
 import { useEventTimer } from '@/arkham/composables/useEventTimer'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
@@ -238,7 +239,10 @@ const choices = computed(() => {
   if (!playerId.value) return []
   return choicesByPlayer.value.get(playerId.value) ?? []
 })
-useTurnNotification({ pendingChoices: computed(() => choices.value.length) })
+useTurnNotification({
+  pendingChoices: computed(() => choices.value.length),
+  remotePushEnabled,
+})
 
 const realityAcidLightActive = computed(() => {
   const scenario = game.value?.scenario

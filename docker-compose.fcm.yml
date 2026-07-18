@@ -1,0 +1,11 @@
+services:
+  web:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase_service_account
+      FCM_WEB_ORIGIN: ${FCM_WEB_ORIGIN:?set FCM_WEB_ORIGIN to the public HTTPS origin}
+    secrets:
+      - firebase_service_account
+
+secrets:
+  firebase_service_account:
+    file: ${FIREBASE_SERVICE_ACCOUNT_FILE:?set FIREBASE_SERVICE_ACCOUNT_FILE to the service-account JSON path}

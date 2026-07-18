@@ -1,13 +1,19 @@
 <script lang="ts" setup>
-import { computed, ref } from 'vue';
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import type { User } from '@/types';
+import type { User } from '@/types'
 import { useDbCardStore } from '@/stores/dbCards'
 import { useSettings } from '@/stores/settings'
 import { checkImageExists } from '@/arkham/helpers'
 import { isDevBuild } from '@/arkham/displayRules'
 import { loadLocaleMessages, normalizeLocale } from '@/locales/messages'
+import {
+  disableRemotePush,
+  enableRemotePush,
+  refreshRemotePush,
+  remotePushEnabled,
+} from '@/pushNotifications'
 
 const props = defineProps<{
   user: User
@@ -21,10 +27,43 @@ const { epicMultiplayerStored, aiInvestigatorsStored } = storeToRefs(settings)
 const dev = isDevBuild()
 const { availableLocales, locale, setLocaleMessage } = useI18n({ useScope: 'global' })
 const language = ref(localStorage.getItem('language') || locale.value)
-const beta = ref(props.user.beta ? "On" : "Off")
+const beta = ref(props.user.beta ? 'On' : 'Off')
 const showDeleteConfirm = ref(false)
+const pushBusy = ref(false)
+const pushError = ref(false)
 
-const betaUpdate = async () => props.updateBeta(beta.value == "On")
+const pushStatus = computed(() => {
+  if (remotePushEnabled.value) return 'enabled'
+  if ('Notification' in window && Notification.permission === 'denied') return 'denied'
+  return 'disabled'
+})
+
+const enablePush = async () => {
+  pushBusy.value = true
+  pushError.value = false
+  try {
+    const status = await enableRemotePush(normalizeLocale(language.value))
+    pushError.value = status !== 'enabled'
+  } catch {
+    pushError.value = true
+  } finally {
+    pushBusy.value = false
+  }
+}
+
+const disablePush = async () => {
+  pushBusy.value = true
+  pushError.value = false
+  try {
+    await disableRemotePush(normalizeLocale(language.value))
+  } catch {
+    pushError.value = true
+  } finally {
+    pushBusy.value = false
+  }
+}
+
+const betaUpdate = async () => props.updateBeta(beta.value == 'On')
 
 // Dev-only Epic Multiplayer flag, bound to the persisted store value via On/Off.
 const epicMultiplayer = computed({
@@ -39,7 +78,7 @@ const aiInvestigators = computed({
 })
 
 const updateLanguage = async (a: Event) => {
-  const target = a.target as HTMLSelectElement;
+  const target = a.target as HTMLSelectElement
   const selectedLanguage = target.value
   const uiLocale = normalizeLocale(selectedLanguage)
 
@@ -51,6 +90,7 @@ const updateLanguage = async (a: Event) => {
   language.value = selectedLanguage
   locale.value = uiLocale
   localStorage.setItem('language', selectedLanguage)
+  await refreshRemotePush(uiLocale).catch(() => {})
   await store.initDbCards()
   await checkImageExists()
 }
@@ -59,10 +99,10 @@ const updateLanguage = async (a: Event) => {
 <template>
   <div class="page-container">
     <div class="page-content column">
-      <h2 class="title">{{$t('settings')}}</h2>
+      <h2 class="title">{{ $t('settings') }}</h2>
 
       <section class="box column">
-        <h3>{{$t('language')}}</h3>
+        <h3>{{ $t('language') }}</h3>
         <p>{{ $t('settingsForm.languageHelp') }}</p>
         <select :value="language" @change="updateLanguage">
           <option value="de">Deutsch/German</option>
@@ -95,9 +135,27 @@ const updateLanguage = async (a: Event) => {
         </div>
       </section>
 
+      <section class="box column">
+        <h3>{{ $t('settingsForm.turnNotifications') }}</h3>
+        <p>{{ $t('settingsForm.turnNotificationsHelp') }}</p>
+        <p>{{ $t(`settingsForm.turnNotificationsStatus.${pushStatus}`) }}</p>
+        <p v-if="pushError" class="warning">{{ $t('settingsForm.turnNotificationsError') }}</p>
+        <div>
+          <button v-if="!remotePushEnabled" :disabled="pushBusy" @click="enablePush">
+            {{ $t('settingsForm.enableTurnNotifications') }}
+          </button>
+          <button v-else :disabled="pushBusy" @click="disablePush">
+            {{ $t('settingsForm.disableTurnNotifications') }}
+          </button>
+        </div>
+      </section>
+
       <section class="box column danger-zone">
         <h3 class="danger-title">{{ $t('settingsForm.dangerZone') }}</h3>
-        <p>{{ $t('settingsForm.dangerZoneDescription') }} <strong>{{ $t('settingsForm.cannotBeUndone') }}</strong></p>
+        <p>
+          {{ $t('settingsForm.dangerZoneDescription') }}
+          <strong>{{ $t('settingsForm.cannotBeUndone') }}</strong>
+        </p>
 
         <div v-if="dev" class="dev-flag">
           <h4>{{ $t('settingsForm.epicMultiplayer') }}</h4>
@@ -130,12 +188,16 @@ const updateLanguage = async (a: Event) => {
         </div>
 
         <div v-if="!showDeleteConfirm">
-          <button class="btn-danger" @click="showDeleteConfirm = true">{{ $t('settingsForm.deleteAccount') }}</button>
+          <button class="btn-danger" @click="showDeleteConfirm = true">
+            {{ $t('settingsForm.deleteAccount') }}
+          </button>
         </div>
         <div v-else class="column">
           <p class="warning">{{ $t('settingsForm.deleteConfirm') }}</p>
           <div class="row">
-            <button class="btn-danger" @click="props.deleteAccount()">{{ $t('settingsForm.confirmPermanentDelete') }}</button>
+            <button class="btn-danger" @click="props.deleteAccount()">
+              {{ $t('settingsForm.confirmPermanentDelete') }}
+            </button>
             <button @click="showDeleteConfirm = false">{{ $t('cancel') }}</button>
           </div>
         </div>
@@ -169,7 +231,7 @@ select {
   width: fit-content;
 }
 
-input[type="radio"] {
+input[type='radio'] {
   display: unset;
   accent-color: var(--spooky-green);
 }

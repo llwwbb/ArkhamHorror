@@ -62,6 +62,18 @@ resource "kubernetes_secret" "app" {
   )
 }
 
+resource "kubernetes_secret" "firebase" {
+  metadata {
+    name      = "${local.app_name}-firebase"
+    namespace = kubernetes_namespace.arkham.metadata[0].name
+  }
+
+  type = "Opaque"
+  data = {
+    "firebase-service-account.json" = var.firebase_service_account_json
+  }
+}
+
 # DigitalOcean's managed Valkey serves a public Let's Encrypt cert
 # (CN=*.f.db.ondigitalocean.com), NOT the "Project CA" their API returns.
 # Application.hs pins the rediss:// trust store to whatever is in this file
@@ -156,6 +168,9 @@ resource "kubernetes_deployment" "app" {
         labels = {
           app = local.app_name
         }
+        annotations = {
+          "arkham/fcm-secret-checksum" = sha256(var.firebase_service_account_json)
+        }
       }
 
       spec {
@@ -207,6 +222,14 @@ resource "kubernetes_deployment" "app" {
           env {
             name  = "ASSET_HOST"
             value = var.asset_host
+          }
+          env {
+            name  = "FCM_WEB_ORIGIN"
+            value = var.fcm_web_origin
+          }
+          env {
+            name  = "GOOGLE_APPLICATION_CREDENTIALS"
+            value = "/var/run/secrets/arkham/firebase-service-account.json"
           }
 
           env_from {
@@ -272,6 +295,12 @@ resource "kubernetes_deployment" "app" {
             sub_path   = "digital-ocean.crt"
             read_only  = true
           }
+          volume_mount {
+            name       = "firebase-service-account"
+            mount_path = "/var/run/secrets/arkham/firebase-service-account.json"
+            sub_path   = "firebase-service-account.json"
+            read_only  = true
+          }
         }
 
         volume {
@@ -281,6 +310,16 @@ resource "kubernetes_deployment" "app" {
             items {
               key  = "digital-ocean.crt"
               path = "digital-ocean.crt"
+            }
+          }
+        }
+        volume {
+          name = "firebase-service-account"
+          secret {
+            secret_name = kubernetes_secret.firebase.metadata[0].name
+            items {
+              key  = "firebase-service-account.json"
+              path = "firebase-service-account.json"
             }
           }
         }

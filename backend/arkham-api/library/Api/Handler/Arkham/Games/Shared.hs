@@ -13,6 +13,7 @@ import Api.Arkham.Epic (
  )
 import Api.Arkham.Helpers
 import Api.Arkham.Types.MultiplayerVariant
+import Api.Push.Notifications (newlyPendingPlayers)
 import Arkham.Achievement.Types (Achievement, achievementChecklist, achievementName)
 import Arkham.Ai.Decision (
   choiceFeatures,
@@ -78,6 +79,7 @@ import Data.Aeson.Types (parse)
 import Data.ByteString.Lazy qualified as BSL
 import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict qualified as Map
+import Data.Maybe qualified as Maybe
 import Data.String.Conversions.Monomorphic (toStrictByteString)
 import Data.Text qualified as T
 import Data.These
@@ -461,6 +463,32 @@ updateGame response gameId mRoom = do
             [ ArkhamStepChoice =. Choice diffDown updatedQueue
             , ArkhamStepActionDiff =. ActionDiff (view actionDiffL ge)
             ]
+
+        -- Durable, per-user turn notifications. The unique outbox key makes
+        -- action retries and multi-instance processing idempotent. FCM delivery
+        -- happens after commit in the worker, never while holding the game lock.
+        let newlyPending =
+              filter (Maybe.isNothing . (`lookupAiPlayer` ge.gameSettings))
+                $ newlyPendingPlayers gameQuestion ge.gameQuestion
+        unless (null newlyPending) do
+          pendingPlayers <-
+            P.selectList [ArkhamPlayerId P.<-. map (coerce @PlayerId) newlyPending] []
+          let pendingUserIds = ordNub $ map (arkhamPlayerUserId . entityVal) pendingPlayers
+          for_ pendingUserIds \uid ->
+            void
+              $ P.insertUnique
+              $ PushNotificationOutbox
+                uid
+                gameId
+                (arkhamGameStep + 1)
+                "your_turn"
+                (object ["gameId" .= gameId, "gameStep" .= (arkhamGameStep + 1)])
+                "pending"
+                0
+                now
+                now
+                Nothing
+                Nothing
 
         -- Imitation-learning capture (gated off by default; human-only;
         -- multi-choice only). Runs against gameJson = the PARKED state S_{k-1}

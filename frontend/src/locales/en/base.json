@@ -484,6 +484,16 @@
     "projectBody": "This application was created by <a href=\"https://github.com/halogenandtoast\">halogenandtoast</a> and contributors to support the Arkham Horror: The Card Game community. The source code of this project is available at <a href=\"https://github.com/halogenandtoast/ArkhamHorror\">Github</a>. Feedback and bug reports are welcome via Github issues or the dedicated channel on the Mythos Busters discord server."
   },
   "settingsForm": {
+    "turnNotifications": "Turn notifications",
+    "turnNotificationsHelp": "Receive a notification on this device when the game is waiting for your choice, even after the game tab is closed.",
+    "enableTurnNotifications": "Enable notifications",
+    "disableTurnNotifications": "Disable on this device",
+    "turnNotificationsError": "Notifications could not be enabled. Check browser support, site configuration, and notification permission.",
+    "turnNotificationsStatus": {
+      "enabled": "Notifications are enabled on this device.",
+      "disabled": "Notifications are disabled on this device.",
+      "denied": "Notifications are blocked by the browser. Allow them in the site settings before trying again."
+    },
     "languageHelp": "This will change the language of the cards and app, but will default to English if a card or text is not available in the selected language.",
     "enrollInBeta": "Enroll in beta",
     "betaWarning": "Beta features are likely very broken and games may be unrecoverable, please only enable this if you are willing to provide feedback.",
