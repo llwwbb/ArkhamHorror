@@ -10,8 +10,9 @@ import {
   onUnmounted,
   type VNodeRef,
 } from 'vue'
-import { cardImg, imgsrc, isLocalized, toCamelCase } from '@/arkham/helpers'
+import { cardImg, imgsrc, isLocalized } from '@/arkham/helpers'
 import { getCardImage } from '@/arkham/cardImageLookup'
+import CardCrossedOffOverlay from '@/arkham/components/CardCrossedOffOverlay.vue'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
 import { homebrewTokenMap } from '@/arkham/homebrewAssets'
 import { BugAntIcon } from '@heroicons/vue/20/solid'
@@ -1187,7 +1188,7 @@ watchEffect(() => {
         </g>
       </svg>
 
-      <div v-for="entry in crossedOff" :key="entry" class="crossed-off" :class="{ [toCamelCase(entry)]: true }"></div>
+      <CardCrossedOffOverlay v-if="crossedOff" :entries="crossedOff" />
       <p v-if="cardErrata" class="card-errata">Errata: {{ cardErrata }}</p>
     </div>
 
@@ -1492,27 +1493,6 @@ watchEffect(() => {
 }
 
 @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-
-.crossed-off {
-  position: absolute;
-  margin-inline: auto;
-  inset-inline: 0;
-  border-top: 2px solid red;
-  width: 33%;
-}
-
-.brianBurnham { top: 31.8%; }
-.otheraGilman { top: 36.0%; }
-.joyceLittle { top: 40.4%; }
-.barnabasMarsh { top: 44.2%; }
-.zadokAllen { top: 48.5%; }
-.robertFriendly { top: 53%; }
-.innsmouthJail { top: 65.4%; }
-.shorewardSlums { top: 69.5%; }
-.sawboneAlley { top: 73.9%; }
-.theHouseOnWaterStreet { top: 78%; width: 50%; }
-.esotericOrderOfDagon { top: 82.2%; width: 50%; }
-.newChurchGreen { top: 86.7%; }
 
 .spent-keys {
   position: absolute;

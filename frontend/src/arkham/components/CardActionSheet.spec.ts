@@ -129,4 +129,25 @@ describe('CardActionSheet', () => {
 
     app.unmount()
   })
+
+  it('shows crossed-off entries over the enlarged mobile card', async () => {
+    vi.mocked(getCardImage).mockReturnValueOnce('/img/arkham/cards/07062.avif')
+    const target = document.createElement('img')
+    target.dataset.crossedOff = JSON.stringify(['Brian Burnham'])
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const app = createApp(CardActionSheet, {
+      target,
+      actionable: false,
+    })
+    app.config.globalProperties.$t = (key: string) => key
+    app.use(pinia)
+
+    app.mount(host)
+    await nextTick()
+
+    expect(document.querySelector('.sheet-card-preview .crossed-off.brianBurnham')).not.toBeNull()
+
+    app.unmount()
+  })
 })

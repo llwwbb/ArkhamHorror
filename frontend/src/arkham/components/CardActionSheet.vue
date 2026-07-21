@@ -4,6 +4,7 @@ import { getCardImage } from '@/arkham/cardImageLookup'
 import OverlayDrawer from '@/components/OverlayDrawer.vue'
 import { useDbCardStore, type ArkhamDBCard } from '@/stores/dbCards'
 import { cardImagePartsFromImage } from '@/arkham/cardLanguage'
+import CardCrossedOffOverlay from '@/arkham/components/CardCrossedOffOverlay.vue'
 
 const props = defineProps<{
   target: HTMLElement
@@ -17,6 +18,14 @@ const emit = defineEmits<{
 
 const store = useDbCardStore()
 const image = computed(() => getCardImage(props.target))
+const crossedOff = computed<string[]>(() => {
+  try {
+    const entries = JSON.parse(props.target.dataset.crossedOff ?? '[]')
+    return Array.isArray(entries) && entries.every((entry) => typeof entry === 'string') ? entries : []
+  } catch {
+    return []
+  }
+})
 type DescriptionLanguage = 'current' | 'english'
 const selectedDescriptionLanguage = ref<DescriptionLanguage | null>(null)
 const activeDescriptionLanguage = computed<DescriptionLanguage>(() => selectedDescriptionLanguage.value ?? 'current')
@@ -142,6 +151,7 @@ watch(image, () => {
     <div class="card-action-sheet no-overlay">
       <div class="sheet-card-preview">
         <img v-if="image" :src="image" class="sheet-card" />
+        <CardCrossedOffOverlay v-if="crossedOff.length > 0" :entries="crossedOff" />
         <button
           v-if="canToggleEnglishDescription"
           class="sheet-language-toggle"

@@ -136,4 +136,26 @@ describe('CardOverlay translated card text', () => {
 
     app.unmount()
   })
+
+  it('keeps crossed-off entries in the desktop hover preview', async () => {
+    const target = document.createElement('img')
+    target.className = 'card'
+    target.src = '/img/arkham/cards/07062.avif'
+    target.dataset.crossedOff = JSON.stringify(['Brian Burnham'])
+    document.body.appendChild(target)
+
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const app = createApp(CardOverlay)
+    app.use(pinia)
+    app.use(createI18n({ legacy: false, locale: 'zh', messages: { zh: {} } }))
+    app.mount(host)
+
+    target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: 1, clientY: 1 }))
+    await flushOverlay()
+
+    expect(document.querySelector('.card-overlay .crossed-off.brianBurnham')).not.toBeNull()
+
+    app.unmount()
+  })
 })
