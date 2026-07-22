@@ -189,11 +189,10 @@ const searchedCards = computed<SearchedCardGroup[]>(() => {
 })
 
 const focusedCards = computed(() => {
-  if (searchedCards.value.length > 0) {
-    return []
-  }
-
-  return props.game.focusedCards
+  const searchedCardIds = new Set(
+    searchedCards.value.flatMap((group) => group.cards.map((card) => toCardContents(card).id)),
+  )
+  return props.game.focusedCards.filter((card) => !searchedCardIds.has(toCardContents(card).id))
 })
 
 function zoneTag(zone: unknown): string | null {
@@ -323,6 +322,7 @@ function targetLabelHandledElsewhere(choice: TargetLabel) {
       case 'SkillTarget': return contents in props.game.skills
       case 'InvestigatorTarget': return contents in props.game.investigators || contents in props.game.otherInvestigators
       case 'ScarletKeyTarget': return contents in props.game.scarletKeys
+      case 'ConcealedCardTarget':
       case 'ConcealedTarget': return contents in props.game.concealed
       case 'CardIdTarget': return visibleCardIds.value.has(contents)
       case 'ChaosTokenFaceTarget': return props.game.focusedChaosTokens.some((token) => token.face === contents)

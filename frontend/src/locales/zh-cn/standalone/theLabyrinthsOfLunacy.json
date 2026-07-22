@@ -7,6 +7,7 @@
       "miniCampaignMode": "游玩三局小型剧本"
     },
     "chooseGroup": "<p>哪一组被困在迷宫的这一区域？</p>",
+    "chooseGroupSingle": "<p class='basic'>作为单场独立冒险游玩时，你可以扮演A组、B组或C组。按照所选小组的冒险设置说明设置游戏。</p><p class='basic'>哪一组被困在迷宫的这一区域？</p>",
     "groupA": "<p>你醒来时，发现自己身处陌生之地，完全不记得是如何来到这里的。你的肌肉虚弱无力，难以使唤；视野一片模糊。仅仅站起身来就要耗尽全力，双腿摇摇晃晃，几乎撑不住身体的重量。</p><p>醒来后你第一次仔细观察周围。你被封在一间没有窗户的密室里，里面布满铜管。四面八方都是泄气时隐约的嘶鸣声。你是这里的囚徒，无路可逃。附近地上放着一张便条。</p>",
     "groupB": "<p>你醒来时，发现自己身处陌生之地，完全不记得是如何来到这里的。你的肌肉虚弱无力，难以使唤；视野一片模糊。仅仅站起身来就要耗尽全力，双腿摇摇晃晃，几乎撑不住身体的重量。</p><p>醒来后你第一次仔细观察周围。你被封在一座高大的玻璃槽中，积水已漫到脚踝。透过黯淡的玻璃，你能看见许多和你所在之处相似、笼罩在雾气里的水槽。你是这里的囚徒，无路可逃。水槽外的地上放着一张便条。</p>",
     "groupC": "<p>你醒来时，发现自己身处陌生之地，完全不记得是如何来到这里的。你的肌肉虚弱无力，难以使唤；视野一片模糊。仅仅站起身来就要耗尽全力，双腿摇摇晃晃，几乎撑不住身体的重量。</p><p>醒来后你第一次仔细观察周围。你身在一间黑暗的密室里，只有几支蜡烛照明。狭窄的房间堆满旧桶、木箱和腐朽的储物架。你看不见任何通向外面的窗或门。你是这里的囚徒，无路可逃。附近地上放着一张便条。</p>",
@@ -25,6 +26,7 @@
     "decayDiagram": {
       "cluesToFlip": "要翻面的线索数量"
     },
+    "satisfyDoomThreshold": "在当前密谋上放置毁灭标记，直到达到其毁灭阈值。",
     "groupA": "团队A",
     "groupB": "团队B",
     "groupC": "团队C"
@@ -32,7 +34,25 @@
   "remembered": {
     "pulledTheLeftLever": "{name}拉下了左侧拉杆",
     "pulledTheMiddleLever": "{name}拉下了中间拉杆",
-    "pulledTheRightLever": "{name}拉下了右侧拉杆"
+    "pulledTheRightLever": "{name}拉下了右侧拉杆",
+    "beenInjected": "{name}已被注射"
+  },
+  "act2Setup": {
+    "title": "阶段2设置",
+    "shuffleEncounterDeck": "将每名放在一边的无面掳掠者和遭遇弃牌堆混洗进遭遇牌库。",
+    "labyrinthineHalls": "将3张放在一边的迷宫大厅放置入场。",
+    "chamberOfDecay": "将放在一边的腐朽密室放置入场。",
+    "chambersOfRotAndPoison": "将放在一边的腐烂密室和毒之密室放置入场。",
+    "chamberOfHunger": "将放在一边的饥饿密室放置入场。",
+    "eixodolonsPet": "将放在一边的艾克索多隆的宠物放置入场，置于饥饿密室附近，但不在任何地点。只要它不在任何地点，就视为其被“关了起来”。",
+    "removeDoom": "移除场上的所有毁灭标记，然后进入阶段2a和密谋2a。"
+  },
+  "act3Setup": {
+    "title": "阶段3设置",
+    "abandonedWarehouse": "将放在一边的废弃仓库放置入场。",
+    "moveInvestigators": "让所有与调查员交战的敌人解除交战，并将每位存活的调查员移动到废弃仓库。",
+    "eixodolon": "将放在一边的艾克索多隆敌人放置入场，位于废弃仓库。",
+    "removeDoom": "移除场上的所有毁灭标记，然后进入阶段3a和密谋3a。"
   },
   "setup": {
     "gatherSets": "找出《疯狂迷宫》遭遇组中的所有卡牌。该遭遇组以此图标表示：<section class='encounter-sets'><img src='{setImgPath}/in-the-labyrinths-of-lunacy.png'></section>",
@@ -118,6 +138,10 @@
     "label": {
       "endScenario": "在此结束冒险",
       "playAnotherGroup": "以另一组继续小型剧本"
+    },
+    "noResolution": {
+      "title": "无结局",
+      "body": "<p>_如果未达成任何结局（每位调查员均被击败）_：进入_结局1_。</p>"
     },
     "resolution1": {
       "title": "结局1",

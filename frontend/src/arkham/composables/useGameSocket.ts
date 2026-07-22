@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { useWebSocket } from '@vueuse/core'
 import confetti from '@/effects/confetti'
 import { fetchGame } from '@/arkham/api'
@@ -110,6 +110,37 @@ export function useGameSocket(opts: UseGameSocketOptions) {
   let decoding = false
   let pendingUpdate: string | null = null
 
+  function entitiesMoved(previous: Arkham.Game, current: Arkham.Game) {
+    const placementChanged = (
+      previousEntities: Record<string, { placement: unknown }> | undefined,
+      currentEntities: Record<string, { placement: unknown }> | undefined,
+    ) => Object.entries(currentEntities ?? {}).some(([id, entity]) => {
+      const previousEntity = previousEntities?.[id]
+      return previousEntity && JSON.stringify(previousEntity.placement) !== JSON.stringify(entity.placement)
+    })
+
+    return placementChanged(previous.investigators, current.investigators)
+      || placementChanged(previous.enemies, current.enemies)
+  }
+
+  function applyGameUpdate(updatedGame: Arkham.Game, locked: boolean) {
+    const nextGame = locked ? { ...updatedGame, question: {} } : updatedGame
+    const previousGame = game.value
+    const apply = async () => {
+      game.value = nextGame
+      await nextTick()
+    }
+    const transitionDocument = document as Document & {
+      startViewTransition?: (callback: () => Promise<void>) => unknown
+    }
+
+    if (previousGame && entitiesMoved(previousGame, nextGame) && transitionDocument.startViewTransition) {
+      transitionDocument.startViewTransition(apply)
+    } else {
+      void apply()
+    }
+  }
+
   function scheduleApplyUpdate(payload: string) {
     if (decoding) {
       pendingUpdate = payload
@@ -120,20 +151,20 @@ export function useGameSocket(opts: UseGameSocketOptions) {
       .decodePromise(payload)
       .then((updatedGame) => {
         const locked = modals.uiLock.value
-        game.value = locked ? { ...updatedGame, question: {} } : updatedGame
+        applyGameUpdate(updatedGame, locked)
         updateGameLog(updatedGame.log)
         preloadGameImages(updatedGame)
-        if (!locked && solo.value === true && Object.keys(game.value.question).length > 0) {
-          if (Object.keys(game.value.question).length == 1) {
-            playerId.value = Object.keys(game.value.question)[0]
-          } else if (game.value.activePlayerId !== playerId.value) {
-            if (playerId.value && Object.keys(game.value.question).includes(playerId.value)) {
-              playerId.value = game.value.activePlayerId
+        if (!locked && solo.value === true && Object.keys(updatedGame.question).length > 0) {
+          if (Object.keys(updatedGame.question).length == 1) {
+            playerId.value = Object.keys(updatedGame.question)[0]
+          } else if (updatedGame.activePlayerId !== playerId.value) {
+            if (playerId.value && Object.keys(updatedGame.question).includes(playerId.value)) {
+              playerId.value = updatedGame.activePlayerId
             } else {
-              playerId.value = Object.keys(game.value.question)[0]
+              playerId.value = Object.keys(updatedGame.question)[0]
             }
-          } else if (playerId.value && !Object.keys(game.value.question).includes(playerId.value)) {
-            playerId.value = Object.keys(game.value.question)[0]
+          } else if (playerId.value && !Object.keys(updatedGame.question).includes(playerId.value)) {
+            playerId.value = Object.keys(updatedGame.question)[0]
           }
         }
         if (!locked) continueSkipAll()
