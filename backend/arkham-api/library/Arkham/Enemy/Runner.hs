@@ -803,8 +803,13 @@ instance RunMessage EnemyAttrs where
             -- ability fires in the enter window and removes it) the `Do EnemyMove`
             -- / `EnemyEntered` guards abort the placement instead of dragging the
             -- removed enemy back into play.
+            -- The destination is always rewritten to *this* move's target. A move
+            -- nested inside an outer move's enter-window (e.g. Elusive fleeing an
+            -- enemy that was just attacked in its own after-enters window) would
+            -- otherwise leave the outer destination recorded, and the outer move's
+            -- deferred `Do EnemyMove` below could not tell it had been superseded.
             mMovement <- case enemyMovement of
-              Just _ -> pure enemyMovement
+              Just m -> pure $ Just m {moveDestination = ToLocation lid}
               Nothing -> do
                 m <- move (toSource eid) (toTarget eid) lid
                 pure $ Just m {moveFromInPlay = isInPlayPlacement enemyPlacement}
@@ -844,7 +849,12 @@ instance RunMessage EnemyAttrs where
             isNothing enemySpawnDetails
               && maybe False moveFromInPlay enemyMovement
               && isOutOfPlayPlacement enemyPlacement
-      if current == Just lid || leftPlayMidMove
+      -- The enemy moved again while this move's enter-windows were open (e.g.
+      -- Elusive fled it elsewhere during the after-enters reaction window).
+      -- `enemyMovement` describes that newer move, so this stale placement write
+      -- must not drag the enemy back to the superseded destination.
+      let supersededMidMove = maybe False ((/= ToLocation lid) . moveDestination) enemyMovement
+      if current == Just lid || leftPlayMidMove || supersededMidMove
         then pure a
         else pure $ a & placementL .~ AtLocation lid
     After (EndTurn _) | not enemyDefeated -> a <$ push (EnemyCheckEngagement $ toId a)
@@ -1116,6 +1126,10 @@ instance RunMessage EnemyAttrs where
               CannotBeAttacked -> pure False
               _ -> pure True
         when (iid `elem` iids) do
+          keywords <- getModifiedKeywords a
+          phase <- getPhase
+          let attackCount :: Int
+              attackCount = if phase == #enemy && Keyword.Relentless `elem` keywords then 2 else 1
           case iids of
             [] -> do
               whenAny (locationWithEnemy enemyId <> LocationWithModifier CountsAsInvestigatorForHunterEnemies) do
@@ -1123,21 +1137,25 @@ instance RunMessage EnemyAttrs where
                 scenarioSpecific "enemyAttacked" enemyId
               pure ()
             [x] ->
-              push
-                $ EnemyWillAttack
-                $ (enemyAttack enemyId a x)
-                  { attackDamageStrategy = enemyDamageStrategy
-                  , attackExhaustsEnemy = True
-                  }
+              pushAll
+                [ EnemyWillAttack
+                    $ (enemyAttack enemyId a x)
+                      { attackDamageStrategy = enemyDamageStrategy
+                      , attackExhaustsEnemy = attackNumber == attackCount
+                      }
+                | attackNumber <- [1 .. attackCount]
+                ]
             (x : xs) ->
-              push
-                $ EnemyWillAttack
-                $ (enemyAttack enemyId a x)
-                  { attackDamageStrategy = enemyDamageStrategy
-                  , attackExhaustsEnemy = True
-                  , attackTarget = MassiveAttackTargets (map toTarget $ x : xs)
-                  , attackOriginalTarget = MassiveAttackTargets (map toTarget $ x : xs)
-                  }
+              pushAll
+                [ EnemyWillAttack
+                    $ (enemyAttack enemyId a x)
+                      { attackDamageStrategy = enemyDamageStrategy
+                      , attackExhaustsEnemy = attackNumber == attackCount
+                      , attackTarget = MassiveAttackTargets (map toTarget $ x : xs)
+                      , attackOriginalTarget = MassiveAttackTargets (map toTarget $ x : xs)
+                      }
+                | attackNumber <- [1 .. attackCount]
+                ]
       pure a
     Do EnemiesAttack | not enemyExhausted && not enemyDefeated -> do
       mods <- getModifiers (EnemyTarget enemyId)
@@ -1151,6 +1169,10 @@ instance RunMessage EnemyAttrs where
               CannotBeAttackedBy matcher -> notElem enemyId <$> select matcher
               CannotBeAttacked -> pure False
               _ -> pure True
+        keywords <- getModifiedKeywords a
+        phase <- getPhase
+        let attackCount :: Int
+            attackCount = if phase == #enemy && Keyword.Relentless `elem` keywords then 2 else 1
         case iids of
           [] -> do
             whenAny (locationWithEnemy enemyId <> LocationWithModifier CountsAsInvestigatorForHunterEnemies) do
@@ -1158,21 +1180,25 @@ instance RunMessage EnemyAttrs where
               scenarioSpecific "enemyAttacked" enemyId
             pure ()
           [x] ->
-            push
-              $ EnemyWillAttack
-              $ (enemyAttack enemyId a x)
-                { attackDamageStrategy = enemyDamageStrategy
-                , attackExhaustsEnemy = True
-                }
+            pushAll
+              [ EnemyWillAttack
+                  $ (enemyAttack enemyId a x)
+                    { attackDamageStrategy = enemyDamageStrategy
+                    , attackExhaustsEnemy = attackNumber == attackCount
+                    }
+              | attackNumber <- [1 .. attackCount]
+              ]
           (x : xs) ->
-            push
-              $ EnemyWillAttack
-              $ (enemyAttack enemyId a x)
-                { attackDamageStrategy = enemyDamageStrategy
-                , attackExhaustsEnemy = True
-                , attackTarget = MassiveAttackTargets (map toTarget $ x : xs)
-                , attackOriginalTarget = MassiveAttackTargets (map toTarget $ x : xs)
-                }
+            pushAll
+              [ EnemyWillAttack
+                  $ (enemyAttack enemyId a x)
+                    { attackDamageStrategy = enemyDamageStrategy
+                    , attackExhaustsEnemy = attackNumber == attackCount
+                    , attackTarget = MassiveAttackTargets (map toTarget $ x : xs)
+                    , attackOriginalTarget = MassiveAttackTargets (map toTarget $ x : xs)
+                    }
+              | attackNumber <- [1 .. attackCount]
+              ]
       pure a
     AttackEnemy eid choose | eid == enemyId -> do
       let iid = choose.investigator
@@ -1726,6 +1752,9 @@ instance RunMessage EnemyAttrs where
               CanOnlyBeDefeatedBy source' -> First (Just source')
               _ -> First Nothing
             mOnlyBeDefeatedByModifier = getFirst $ foldMap canOnlyBeDefeatedByModifier modifiers'
+          when (amount' > 0) do
+            let (before, _, after) = frame $ Window.PlacedDamage source (toTarget a) amount'
+            pushAll [before, after]
           validDefeat <-
             ( ( canBeDefeated
                   && not hasSwarm
@@ -1868,7 +1897,13 @@ instance RunMessage EnemyAttrs where
           n <- selectCount $ SwarmOf eid'
           when (n <= 1) $ push $ CheckDefeated source (toTarget eid')
         _ -> pure ()
-      pure a
+      -- Mark defeated here rather than on `After`: disposal above is what takes the enemy
+      -- out of play, and anything that reacts to it can push another `CheckDefeated` at us
+      -- (Smite the Wicked (Advanced) and friends re-check their host when their health
+      -- modifier goes away). Those land before `After`, so leaving the flag until then let
+      -- the whole defeat pipeline — and every "after an enemy is defeated" trigger — run a
+      -- second time. See issue #5242.
+      pure $ a & defeatedL .~ True
     After (Arkham.Message.Defeated (EnemyTarget eid) _ _source _) | eid == toId a -> do
       pure $ a & defeatedL .~ True
     EnemySpawnFromOutOfPlay _ miid lid eid | eid == a.id -> do

@@ -407,6 +407,7 @@ withTreacheryMetadata a = do
       _ -> Keyword.Peril `member` card.keywords
   tmModifiers <- getModifiers' (toTarget a)
   pure $ a `with` TreacheryMetadata {..}
+
 withEnemyMetadata :: (HasGame m, Tracing m) => Enemy -> m (With Enemy EnemyMetadata)
 withEnemyMetadata a = do
   emModifiers <- getModifiers' (toTarget a)
@@ -637,10 +638,28 @@ instance ToJSON WithDeckSize where
     Object o -> Object $ KeyMap.insert "deckSize" (toJSON $ length $ investigatorDeck $ toAttrs i) o
     _ -> error "failed to serialize investigator"
 
-withSkillTestModifiers :: (HasGame m, Targetable a) => a -> m (With a ModifierData)
-withSkillTestModifiers a = do
-  modifiers' <- getModifiers' (toTarget a)
-  pure $ a `with` ModifierData modifiers'
+withSkillTestModifiers :: HasGame m => ChaosToken -> m (With ChaosToken Value)
+withSkillTestModifiers token = do
+  modifiers' <- getModifiers' (toTarget token)
+  tokenFaces <- getModifiedChaosTokenFace token
+  game <- getGame
+  let investigatorModifiers = case token.revealedBy of
+        Nothing -> []
+        Just iid -> map modifierType $ Map.findWithDefault [] (toTarget iid) (gameModifiers game)
+      modifiedFaces =
+        if tokenFaces == [token.face]
+          then foldl' applyForcedTokenChange tokenFaces investigatorModifiers
+          else tokenFaces
+  pure
+    $ token
+    `with` object
+      [ "modifiers" .= modifiers'
+      , "modifiedFaces" .= modifiedFaces
+      ]
+ where
+  applyForcedTokenChange [face] (ForcedChaosTokenChange original faces)
+    | face == original = faces
+  applyForcedTokenChange faces _ = faces
 
 data PublicGame gid = PublicGame gid Text [Text] Game | FailedToLoadGame Text
   deriving stock Show
@@ -1930,6 +1949,7 @@ abilityMatches a@Ability {..} = \case
       , abilitySource `sourceMatches` M.EncounterCardSource
       ]
   AbilityOnCard cardMatcher -> sourceMatches abilitySource (M.SourceWithCard cardMatcher)
+  AbilityOnExtendedCard _ | abilityBasic -> pure False
   AbilityOnExtendedCard extendedCardMatcher -> do
     ecards <- select extendedCardMatcher
     sourceMatches abilitySource (M.SourceWithCard $ mapOneOf (CardWithId . toCardId) ecards)
@@ -2025,7 +2045,9 @@ getAbilitiesMatching matcher = guardYourLocation $ \_ -> do
     AbilityOnCard cardMatcher -> filterM (\a -> a.source `sourceMatches` M.SourceWithCard cardMatcher) as
     AbilityOnExtendedCard extendedCardMatcher -> do
       ecards <- select extendedCardMatcher
-      as & filterM \a -> a.source `sourceMatches` M.SourceWithCard (mapOneOf (CardWithId . toCardId) ecards)
+      as
+        & filter (not . abilityBasic)
+        & filterM \a -> a.source `sourceMatches` M.SourceWithCard (mapOneOf (CardWithId . toCardId) ecards)
 
 getGameAbilities :: (HasGame m, Tracing m) => m [Ability]
 getGameAbilities = do
@@ -4560,7 +4582,9 @@ instance Projection Location where
       LocationHorror -> pure $ locationHorror attrs
       LocationDamage -> pure $ locationDamage attrs
       LocationDoom -> pure $ locationDoom attrs
-      LocationPrintedShroud -> pure locationShroud
+      LocationPrintedShroud -> case locationShroud of
+        Just ValueX -> Just . Static <$> getModifiedShroudValueFor attrs
+        shroud -> pure shroud
       LocationShroud ->
         if isRevealed l && isJust locationShroud
           then Just <$> getModifiedShroudValueFor attrs
@@ -4880,6 +4904,7 @@ getEnemyField f e = do
     EnemyClues -> pure $ enemyClues attrs
     EnemyDamage -> pure $ enemyDamage attrs
     EnemyName -> pure $ toName $ toCardDef attrs
+    EnemyMeta -> pure enemyMeta
     EnemySpawnDetails -> pure enemySpawnDetails
     EnemyRemainingHealth -> do
       mTotalHealth <- field EnemyHealth (toId e)
@@ -5289,6 +5314,12 @@ instance Query ChaosTokenMatcher where
           ChaosTokenValue _ (NegativeModifier _) -> True
           ChaosTokenValue _ (DoubleNegativeModifier _) -> True
           _ -> False
+      WithNonNegativeModifier -> \t -> do
+        iid' <- toId <$> getActiveInvestigator
+        ChaosTokenValue _ modifier <- getChaosTokenValue iid' t.face ()
+        case modifier of
+          NoModifier -> pure False
+          _ -> maybe False (>= 0) <$> chaosTokenModifierToInt modifier
       WithAutoFailModifier -> \t -> do
         iid' <- toId <$> getActiveInvestigator
         getChaosTokenValue iid' t.face () <&> \case

@@ -19,45 +19,99 @@ laBellaLunaTheDrownedCity =
 -- The Western Wall
 treacherousPathSlickSteps :: CardDef
 treacherousPathSlickSteps =
-  location_ "11521" ("Treacherous Path" <:> "Slick Steps") [Rlyeh, Walkway] TheWesternWall
+  locationWithUnrevealed_
+    "11521"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    ("Treacherous Path" <:> "Slick Steps")
+    [Rlyeh, Walkway]
+    TheWesternWall
 
 treacherousPathErodedShelf :: CardDef
 treacherousPathErodedShelf =
-  location_ "11522" ("Treacherous Path" <:> "Eroded Shelf") [Rlyeh, Walkway] TheWesternWall
+  locationWithUnrevealed_
+    "11522"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    ("Treacherous Path" <:> "Eroded Shelf")
+    [Rlyeh, Walkway]
+    TheWesternWall
 
 treacherousPathPrecariousClimb :: CardDef
 treacherousPathPrecariousClimb =
-  location_ "11523" ("Treacherous Path" <:> "Precarious Climb") [Rlyeh, Walkway] TheWesternWall
+  locationWithUnrevealed_
+    "11523"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    ("Treacherous Path" <:> "Precarious Climb")
+    [Rlyeh, Walkway]
+    TheWesternWall
 
 treacherousPathDeadlyPass :: CardDef
 treacherousPathDeadlyPass =
-  location_ "11524" ("Treacherous Path" <:> "Deadly Pass") [Rlyeh, Walkway] TheWesternWall
+  locationWithUnrevealed_
+    "11524"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    ("Treacherous Path" <:> "Deadly Pass")
+    [Rlyeh, Walkway]
+    TheWesternWall
 
 treacherousPathShallowDen :: CardDef
 treacherousPathShallowDen =
-  location_ "11525" ("Treacherous Path" <:> "Shallow Den") [Rlyeh, Walkway] TheWesternWall
+  locationWithUnrevealed_
+    "11525"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    ("Treacherous Path" <:> "Shallow Den")
+    [Rlyeh, Walkway]
+    TheWesternWall
 
 sunkenStairway :: CardDef
 sunkenStairway =
-  location_ "11526" "Sunken Stairway" [Rlyeh, Walkway] TheWesternWall
+  locationWithUnrevealed_
+    "11526"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    "Sunken Stairway"
+    [Rlyeh, Walkway]
+    TheWesternWall
 
 drownedShanty :: CardDef
 drownedShanty =
-  location_ "11527" "Drowned Shanty" [Rlyeh, Walkway] TheWesternWall
+  locationWithUnrevealed_
+    "11527"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    "Drowned Shanty"
+    [Rlyeh, Walkway]
+    TheWesternWall
 
 shatteredRuins :: CardDef
 shatteredRuins =
-  victory 1 $ location_ "11528" "Shattered Ruins" [Rlyeh, Walkway, Glyph] TheWesternWall
+  victory 1
+    $ locationWithUnrevealed_
+      "11528"
+      "Treacherous Paths"
+      [Rlyeh, Walkway]
+      "Shattered Ruins"
+      [Rlyeh, Walkway, Glyph]
+      TheWesternWall
 
 obsidianFoundations :: CardDef
 obsidianFoundations =
-  location_ "11529" "Obsidian Foundations" [Rlyeh] TheWesternWall
+  locationWithUnrevealed_
+    "11529"
+    "Treacherous Paths"
+    [Rlyeh, Walkway]
+    "Obsidian Foundations"
+    [Rlyeh]
+    TheWesternWall
 
 westernWall_11530 :: CardDef
 westernWall_11530 =
   location_ "11530" "Western Wall" [Rlyeh] TheWesternWall
 
--- TODO: back side of double-sided card (11532b)
 underseaVault :: CardDef
 underseaVault =
   storyOnBack' "11532b"
@@ -65,46 +119,54 @@ underseaVault =
     $ location_ "11532" "Undersea Vault" [Vault, Glyph] TheWesternWall
 
 -- The Drowned Quarter
--- TODO: back side of double-sided card (11540b)
+
+-- | Every Sea Floor location shares the same unrevealed back, "Sea Floor".
+seaFloor :: CardCode -> Name -> CardDef
+seaFloor cardCode name =
+  locationWithUnrevealed_ cardCode "Sea Floor" [Seafloor] name [Seafloor] TheDrownedQuarter
+
+-- Barrier Core has no unrevealed side; it flips between (Inactive) and (Active).
 barrierCoreInactive :: CardDef
 barrierCoreInactive =
-  location_ "11540" ("Barrier Core" <:> "Inactive") [Seafloor, Central] TheDrownedQuarter
+  otherSideIs "11540b"
+    $ location_ "11540" ("Barrier Core" <:> "Inactive") [Seafloor, Central] TheDrownedQuarter
 
 barrierCoreActive :: CardDef
 barrierCoreActive =
-  location_ "11540b" ("Barrier Core" <:> "Active") [Seafloor, Central] TheDrownedQuarter
+  otherSideIs "11540"
+    $ location_ "11540b" ("Barrier Core" <:> "Active") [Seafloor, Central] TheDrownedQuarter
 
 abyssalTrench :: CardDef
 abyssalTrench =
-  location_ "11541" "Abyssal Trench" [Seafloor] TheDrownedQuarter
+  seaFloor "11541" "Abyssal Trench"
 
 drownedAcropolisEphemeralRuins :: CardDef
 drownedAcropolisEphemeralRuins =
-  location_ "11542" ("Drowned Acropolis" <:> "Ephemeral Ruins") [Seafloor] TheDrownedQuarter
+  seaFloor "11542" ("Drowned Acropolis" <:> "Ephemeral Ruins")
 
 drownedAcropolisCollapsedRuins :: CardDef
 drownedAcropolisCollapsedRuins =
-  location_ "11543" ("Drowned Acropolis" <:> "Collapsed Ruins") [Seafloor] TheDrownedQuarter
+  seaFloor "11543" ("Drowned Acropolis" <:> "Collapsed Ruins")
 
 blastedRuinsSunkenCircle :: CardDef
 blastedRuinsSunkenCircle =
-  location_ "11544" ("Blasted Ruins" <:> "Sunken Circle") [Seafloor] TheDrownedQuarter
+  seaFloor "11544" ("Blasted Ruins" <:> "Sunken Circle")
 
 blastedRuinsCrumblingEdifices :: CardDef
 blastedRuinsCrumblingEdifices =
-  location_ "11545" ("Blasted Ruins" <:> "Crumbling Edifices") [Seafloor] TheDrownedQuarter
+  seaFloor "11545" ("Blasted Ruins" <:> "Crumbling Edifices")
 
 coralReefStatuaryGarden :: CardDef
 coralReefStatuaryGarden =
-  victory 1 $ location_ "11546" ("Coral Reef" <:> "Statuary Garden") [Seafloor] TheDrownedQuarter
+  victory 1 $ seaFloor "11546" ("Coral Reef" <:> "Statuary Garden")
 
 coralReefFeedingGrounds :: CardDef
 coralReefFeedingGrounds =
-  victory 1 $ location_ "11547" ("Coral Reef" <:> "Feeding Grounds") [Seafloor] TheDrownedQuarter
+  victory 1 $ seaFloor "11547" ("Coral Reef" <:> "Feeding Grounds")
 
 ancientGallery :: CardDef
 ancientGallery =
-  victory 1 $ location_ "11548" "Ancient Gallery" [Seafloor] TheDrownedQuarter
+  victory 1 $ seaFloor "11548" "Ancient Gallery"
 
 -- The Apiary
 -- TODO: back side of double-sided card (11559b)

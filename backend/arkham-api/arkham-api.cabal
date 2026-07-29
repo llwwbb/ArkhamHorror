@@ -851,6 +851,7 @@ library
       Arkham.Asset.Assets.AliceLuxley
       Arkham.Asset.Assets.AliceLuxley2
       Arkham.Asset.Assets.AlienDevice
+      Arkham.Asset.Assets.AlienTabletPrehistoricWritings
       Arkham.Asset.Assets.AlikiZoniUperetriaTheMaidWithTheScarletSash
       Arkham.Asset.Assets.AltonOConnellGhostHunter
       Arkham.Asset.Assets.AlyssaGraham
@@ -1110,6 +1111,7 @@ library
       Arkham.Asset.Assets.Divination1
       Arkham.Asset.Assets.Divination4
       Arkham.Asset.Assets.DivingSuit
+      Arkham.Asset.Assets.DivingSuitTheDrownedCity
       Arkham.Asset.Assets.DoNoHarm
       Arkham.Asset.Assets.DoNoHarmReliableSupport
       Arkham.Asset.Assets.DorothySimmonsStraightAStudent
@@ -1192,6 +1194,7 @@ library
       Arkham.Asset.Assets.EsotericFormula
       Arkham.Asset.Assets.EvanescentAscensionTheMorningStar
       Arkham.Asset.Assets.ExpeditedTicket
+      Arkham.Asset.Assets.ExpeditionGearToughButReliable
       Arkham.Asset.Assets.ExpeditionJournal
       Arkham.Asset.Assets.ExperimentalPsychology
       Arkham.Asset.Assets.ExtraRations1
@@ -1417,6 +1420,7 @@ library
       Arkham.Asset.Assets.LadyEsprit
       Arkham.Asset.Assets.Lantern
       Arkham.Asset.Assets.Lantern2
+      Arkham.Asset.Assets.LaudanumDesperateMeasures
       Arkham.Asset.Assets.LawrenceCarlisleSculptingHisDreams
       Arkham.Asset.Assets.LeahAtwoodTheValeCook
       Arkham.Asset.Assets.LeatherCoat
@@ -5865,6 +5869,7 @@ library
       Arkham.Story.Cards.RuthlessCharge
       Arkham.Story.Cards.SaveTheCivilians
       Arkham.Story.Cards.ScoutingTheVale
+      Arkham.Story.Cards.SeafloorFrieze
       Arkham.Story.Cards.SeismicStomp
       Arkham.Story.Cards.SickeningReality_65
       Arkham.Story.Cards.SickeningReality_66
@@ -5910,6 +5915,7 @@ library
       Arkham.Story.Cards.TheSyndicateRival
       Arkham.Story.Cards.TheTrialOfKamanThah
       Arkham.Story.Cards.TheTrialOfNasht
+      Arkham.Story.Cards.TheUnderseaVault
       Arkham.Story.Cards.TheUnsealing
       Arkham.Story.Cards.TheUnveiling
       Arkham.Story.Cards.TheWayOut
@@ -5919,6 +5925,7 @@ library
       Arkham.Story.Cards.ToTheDreamlands
       Arkham.Story.Cards.TriumphAndSubjugation
       Arkham.Story.Cards.UnattainableDesires
+      Arkham.Story.Cards.UnderseaParasite
       Arkham.Story.Cards.UneasyAlliance
       Arkham.Story.Cards.UnfinishedBusiness_B
       Arkham.Story.Cards.UnfinishedBusiness_D
@@ -7169,6 +7176,7 @@ test-suite spec
       Arkham.Asset.Assets.DigDeep2Spec
       Arkham.Asset.Assets.DigDeepSpec
       Arkham.Asset.Assets.DiscOfItzamna2Spec
+      Arkham.Asset.Assets.DreamersChronicleSpec
       Arkham.Asset.Assets.DrHenryArmitage_SpreadingFlamesSpec
       Arkham.Asset.Assets.DrMilanChristopherSpec
       Arkham.Asset.Assets.DukeSpec
@@ -7250,7 +7258,9 @@ test-suite spec
       Arkham.ChaosTokenFaceSpec
       Arkham.DecklistSpec
       Arkham.EncounterSetSpec
+      Arkham.Enemy.Cards.BatHorrorSpec
       Arkham.Enemy.Cards.DagonsBroodSpec
+      Arkham.Enemy.Cards.ElderDeepOneSpec
       Arkham.Enemy.Cards.GuardianOfTheCrystallizerSpec
       Arkham.Enemy.Cards.JeanDevereuxSeekingClosureSpec
       Arkham.Enemy.Cards.MobEnforcerSpec
@@ -7274,6 +7284,7 @@ test-suite spec
       Arkham.Event.Events.BountySpec
       Arkham.Event.Events.BuryThemDeepSpec
       Arkham.Event.Events.CloseCall2Spec
+      Arkham.Event.Events.Counterespionage1Spec
       Arkham.Event.Events.CrypticResearch4Spec
       Arkham.Event.Events.CunningDistractionSpec
       Arkham.Event.Events.DarkMemorySpec
@@ -7286,6 +7297,7 @@ test-suite spec
       Arkham.Event.Events.EvidenceSpec
       Arkham.Event.Events.ExtraAmmunition1Spec
       Arkham.Event.Events.FickleFortune3Spec
+      Arkham.Event.Events.GuerrillaTactics2Spec
       Arkham.Event.Events.GuerrillaTacticsSpec
       Arkham.Event.Events.HiddenPocketSpec
       Arkham.Event.Events.HotStreak4Spec
@@ -7322,6 +7334,7 @@ test-suite spec
       Arkham.HomebrewRegistrySpec
       Arkham.Investigator.Cards.AgnesBakerSpec
       Arkham.Investigator.Cards.AshcanPeteSpec
+      Arkham.Investigator.Cards.CarolynFern2Spec
       Arkham.Investigator.Cards.CarsonSinclairSpec
       Arkham.Investigator.Cards.DaisyWalkerSpec
       Arkham.Investigator.Cards.DianaStanleySpec
@@ -7345,6 +7358,7 @@ test-suite spec
       Arkham.Location.Cards.DreamGatePointlessRealitySpec
       Arkham.Location.Cards.DreamGateWondrousJourneySpec
       Arkham.Location.Cards.EnchantedWoodsVillageOfZoogsSpec
+      Arkham.Location.TypesSpec
       Arkham.Matcher.CoveredByAnyInPlayEnemySpec
       Arkham.Matcher.NearestLocationToMostSpec
       Arkham.Matcher.OutOfPlayEnemySpec
@@ -7375,6 +7389,7 @@ test-suite spec
       Arkham.Treachery.Cards.AmnesiaSpec
       Arkham.Treachery.Cards.BetweenWorldsSpec
       Arkham.Treachery.Cards.BloodlustSpec
+      Arkham.Treachery.Cards.CaughtInTheCrossfireSpec
       Arkham.Treachery.Cards.ClawsOfSteamSpec
       Arkham.Treachery.Cards.CoverUpSpec
       Arkham.Treachery.Cards.DetachedFromRealitySpec
@@ -7397,7 +7412,9 @@ test-suite spec
       Arkham.Treachery.Cards.RookieMistakeSpec
       Arkham.Treachery.Cards.SearchingForIzzieSpec
       Arkham.Treachery.Cards.ShockingDiscoverySpec
+      Arkham.Treachery.Cards.SmiteTheWickedAdvancedSpec
       Arkham.Treachery.Cards.SmiteTheWickedSpec
+      Arkham.Treachery.Cards.StillBehindYouSpec
       Arkham.Treachery.Cards.WordsOfPowerSpec
       Arkham.Treachery.Cards.WrackedByNightmaresSpec
       Arkham.UltimatumsAndBoons.BoonOfAthenaSpec

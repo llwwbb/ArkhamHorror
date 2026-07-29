@@ -118,6 +118,15 @@ export default defineComponent({
   margin: 0 auto;
   object-fit: contain;
 }
+
+.interlude-banner, :deep(.interlude-banner) {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+
 .columns, :deep(.columns) {
   display: flex;
   flex-direction: row;
@@ -461,6 +470,11 @@ p.billenia, :deep(p.billenia) {
     background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"%3E%3Cpath d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636l4.95 4.95z"/%3E%3C/svg%3E');
   }
 
+  /* Red entries add outer spacing; align only their invalid marker with the first line. */
+  &:not(li):has(> div > .red:first-child)::before {
+    margin-top: 20px;
+  }
+
   &:has(> .composite),
   &:has(> ul) {
     display: grid;
@@ -541,6 +555,12 @@ h3, :deep(h3) {
     background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"%3E%3Cpath d="M9 19l-6-6 1.414-1.414L9 16.172l10.586-10.586L21 7.586z"/%3E%3C/svg%3E');
   }
 
+  /* Red entries add outer spacing; keep their marker aligned with the first line.
+     Excluding list items preserves the marker position used by normal list entries. */
+  &:not(li):has(> div > .red:first-child)::before {
+    margin-top: 20px;
+  }
+
   &:has(> .composite),
   &:has(> ul) {
     display: grid;
@@ -573,6 +593,15 @@ h3, :deep(h3) {
     opacity: 0.7;
     background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"%3E%3Cpath d="M9 19l-6-6 1.414-1.414L9 16.172l10.586-10.586L21 7.586z"/%3E%3C/svg%3E');
   }
+}
+
+/* Keep prose and adjacent lists visually distinct without adding outer list
+   margins that would offset valid/invalid status markers. */
+p + ul, :deep(p + ul),
+div + ul, :deep(div + ul),
+ul + p, :deep(ul + p),
+ul + div, :deep(ul + div) {
+  margin-block-start: 10px;
 }
 
 ul, :deep(ul) {

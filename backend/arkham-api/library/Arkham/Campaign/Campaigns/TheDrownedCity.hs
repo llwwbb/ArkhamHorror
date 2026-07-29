@@ -4,10 +4,12 @@ import Arkham.Asset.Cards qualified as Assets
 import Arkham.Campaign.Import.Lifted
 import Arkham.Campaigns.TheDrownedCity.CampaignSteps
 import Arkham.Campaigns.TheDrownedCity.Import
-import Arkham.Card.CardDef (CardDef)
+import Arkham.Card (genPlayerCard)
 import Arkham.Helpers.FlavorText
+import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Message.Lifted.Log
+import Arkham.Trait (Trait (Agency, Criminal, Detective))
 import Data.Text qualified as T
 
 newtype TheDrownedCity = TheDrownedCity CampaignAttrs
@@ -26,19 +28,6 @@ instance IsCampaign TheDrownedCity where
     -- that interlude's handler via setNextCampaignStep.
     other -> defaultNextStep other
 
--- Each Task: campaign-log key, the story-asset card, and its i18n label.
-tasks :: [(TheDrownedCityKey, CardDef, Text)]
-tasks =
-  [ (WalkInFaith, Assets.walkInFaith, "walkInFaith")
-  , (ToeTheLine, Assets.toeTheLine, "toeTheLine")
-  , (NoPlaceLikeHome, Assets.noPlaceLikeHome, "noPlaceLikeHome")
-  , (GoodMoney, Assets.goodMoney, "goodMoney")
-  , (DoNoHarm, Assets.doNoHarm, "doNoHarm")
-  , (ProveYourWorth, Assets.proveYourWorth, "proveYourWorth")
-  , (DreamsOfDestruction, Assets.dreamsOfDestruction, "dreamsOfDestruction")
-  , (PlumbTheDepths, Assets.plumbTheDepths, "plumbTheDepths")
-  ]
-
 instance RunMessage TheDrownedCity where
   runMessage msg c = runQueueT $ campaignI18n $ case msg of
     CampaignStep PrologueStep -> do
@@ -55,7 +44,13 @@ instance RunMessage TheDrownedCity where
       nextCampaignStep
       pure c
     CampaignStep (InterludeStep 1 _) -> scope "anOfferYouCantRefuse" do
-      flavor $ setTitle "title" >> p "interlude1"
+      agencyDetectiveOrCriminal <-
+        selectAny $ mapOneOf InvestigatorWithTrait [Agency, Detective, Criminal]
+      flavor do
+        setTitle "title"
+        p "interlude1"
+        p.validate agencyDetectiveOrCriminal "agencyDetectiveOrCriminal"
+        p "interlude1Continued"
       eachInvestigator (`forInvestigator` msg)
       doStep 2 msg
       pure c
@@ -90,7 +85,7 @@ instance RunMessage TheDrownedCity where
               li "andyVanNortwick"
               li "westernChaosTokens"
               li "proceedToTheWesternWall"
-          addCampaignCardToDeckChoice_ Assets.andyVanNortwick
+          addCampaignCardToDeckChoice_ =<< genPlayerCard Assets.andyVanNortwick
           setNextCampaignStep TheWesternWall
         labeled' "east" do
           record TheExpeditionHeadedEast
@@ -101,7 +96,7 @@ instance RunMessage TheDrownedCity where
               li "theExpeditionHeadedEast"
               li "rubyStandish"
               li "proceedToObsidianCanyons"
-          addCampaignCardToDeckChoice_ Assets.rubyStandish
+          addCampaignCardToDeckChoice_ =<< genPlayerCard Assets.rubyStandish
           -- TODO: swap a chaos token (remove 1 / add 1) for the remainder of the
           -- campaign, per the Eastern Expedition setup.
           setNextCampaignStep ObsidianCanyons
