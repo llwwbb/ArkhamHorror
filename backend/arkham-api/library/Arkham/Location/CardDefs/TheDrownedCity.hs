@@ -169,73 +169,86 @@ ancientGallery =
   victory 1 $ seaFloor "11548" "Ancient Gallery"
 
 -- The Apiary
--- TODO: back side of double-sided card (11559b)
 apiaryEntranceBeckoningLight :: CardDef
 apiaryEntranceBeckoningLight =
-  location_ "11559" ("Apiary Entrance" <:> "Beckoning Light") [Apiary, Central] TheApiary
+  otherSideIs "11559b"
+    $ location
+      "11559"
+      ("Apiary Entrance" <:> "Beckoning Light")
+      [Apiary, Central]
+      Diamond
+      [Moon, Equals, Spade, Circle, Square]
+      TheApiary
 
 apiaryEntranceDangerousExit :: CardDef
 apiaryEntranceDangerousExit =
-  location_ "11559b" ("Apiary Entrance" <:> "Dangerous Exit") [Apiary, Central] TheApiary
+  otherSideIs "11559"
+    $ location
+      "11559b"
+      ("Apiary Entrance" <:> "Dangerous Exit")
+      [Apiary, Central]
+      Diamond
+      [Moon, Equals, Spade, Circle, Square]
+      TheApiary
 
 fleshyPathsEasternBurrows :: CardDef
 fleshyPathsEasternBurrows =
   singleSided
-    $ location_ "11560" ("Fleshy Paths" <:> "Eastern Burrows") [Apiary] TheApiary
+    $ location "11560" ("Fleshy Paths" <:> "Eastern Burrows") [Apiary] Moon [Diamond] TheApiary
 
 fleshyPathsWesternBurrows :: CardDef
 fleshyPathsWesternBurrows =
   singleSided
     $ victory 1
-    $ location_ "11561" ("Fleshy Paths" <:> "Western Burrows") [Apiary, Glyph] TheApiary
+    $ location "11561" ("Fleshy Paths" <:> "Western Burrows") [Apiary, Glyph] Equals [Diamond] TheApiary
 
 growingFields :: CardDef
 growingFields =
   singleSided
-    $ location_ "11562" "Growing Fields" [Apiary] TheApiary
+    $ location "11562" "Growing Fields" [Apiary] Spade [Diamond, Star] TheApiary
 
 churningChasm :: CardDef
 churningChasm =
   singleSided
-    $ location_ "11563" "Churning Chasm" [Apiary] TheApiary
+    $ location "11563" "Churning Chasm" [Apiary] Droplet [Heart] TheApiary
 
 corruptedVault :: CardDef
 corruptedVault =
   singleSided
     $ victory 1
-    $ location_ "11564" "Corrupted Vault" [Apiary, Glyph] TheApiary
+    $ location "11564" "Corrupted Vault" [Apiary, Glyph] Triangle [Circle] TheApiary
 
 luminousTunnels :: CardDef
 luminousTunnels =
   singleSided
-    $ location_ "11565" "Luminous Tunnels" [Apiary, Enclave] TheApiary
+    $ location "11565" "Luminous Tunnels" [Apiary, Enclave] Circle [Diamond, Heart, Triangle] TheApiary
 
 spawningGrounds :: CardDef
 spawningGrounds =
   singleSided
-    $ location_ "11566" "Spawning Grounds" [Apiary, Enclave] TheApiary
+    $ location "11566" "Spawning Grounds" [Apiary, Enclave] Heart [Circle, Square, Droplet] TheApiary
 
 lostCampsite :: CardDef
 lostCampsite =
   singleSided
     $ victory 1
-    $ location_ "11567" "Lost Campsite" [Apiary, Enclave, Sanctum] TheApiary
+    $ location "11567" "Lost Campsite" [Apiary, Enclave, Sanctum] Square [Heart] TheApiary
 
 graspingCorridor :: CardDef
 graspingCorridor =
   singleSided
-    $ location_ "11569" "Grasping Corridor" [Apiary, Nest] TheApiary
+    $ location "11569" "Grasping Corridor" [Apiary, Nest] Circle [Diamond, Heart, Triangle] TheApiary
 
 starvingCorridor :: CardDef
 starvingCorridor =
   singleSided
-    $ location_ "11570" "Starving Corridor" [Apiary, Nest] TheApiary
+    $ location "11570" "Starving Corridor" [Apiary, Nest] Heart [Circle, Square, Droplet] TheApiary
 
 acidicCoelom :: CardDef
 acidicCoelom =
   singleSided
     $ victory 1
-    $ location_ "11571" "Acidic Coelom" [Apiary, Nest, Sanctum] TheApiary
+    $ location "11571" "Acidic Coelom" [Apiary, Nest, Sanctum] Square [Heart, Diamond] TheApiary
 
 centralChamber :: CardDef
 centralChamber =
@@ -246,7 +259,7 @@ hiddenVault :: CardDef
 hiddenVault =
   storyOnBack' "11579b"
     $ victory 1
-    $ location_ "11579" "Hidden Vault" [Apiary, Glyph] TheApiary
+    $ location "11579" "Hidden Vault" [Apiary, Glyph] Star [Spade] TheApiary
 
 -- The Grand Vault
 theGreatStair :: CardDef
@@ -265,95 +278,147 @@ coreOfTheVaultHeartOfTheMachine =
     [Rlyeh, Sanctum, Glyph]
     TheGrandVault
 
+{- | Every Vault Chamber location shares the same unrevealed back, "Vault Chamber".
+Setup shuffles them together facedown, so the unrevealed side keeps the @Vault@
+trait that the scenario's flood and activation effects select on.
+-}
+vaultChamber :: CardCode -> Name -> [Trait] -> CardDef
+vaultChamber cardCode name traits =
+  locationWithUnrevealed_ cardCode "Vault Chamber" [Rlyeh, Vault] name traits TheGrandVault
+
 shroudedCistern :: CardDef
 shroudedCistern =
-  location_ "11596" "Shrouded Cistern" [Rlyeh, Vault] TheGrandVault
+  quantity 2 $ vaultChamber "11596" "Shrouded Cistern" [Rlyeh, Vault]
 
 chamberOfRecordsArm :: CardDef
 chamberOfRecordsArm =
-  victory 1 $ location_ "11598" "Chamber of Records" [Rlyeh, Vault, Glyph] TheGrandVault
+  victory 1 $ vaultChamber "11598" "Chamber of Records" [Rlyeh, Vault, Glyph]
 
 chamberOfRecordsEarth :: CardDef
 chamberOfRecordsEarth =
-  victory 1 $ location_ "11599" "Chamber of Records" [Rlyeh, Vault, Glyph] TheGrandVault
+  victory 1 $ vaultChamber "11599" "Chamber of Records" [Rlyeh, Vault, Glyph]
 
 otherworldlyMechanismsObsidianBulwark :: CardDef
 otherworldlyMechanismsObsidianBulwark =
-  location_ "11600" ("Otherworldly Mechanisms" <:> "Obsidian Bulwark") [Rlyeh, Vault] TheGrandVault
+  vaultChamber "11600" ("Otherworldly Mechanisms" <:> "Obsidian Bulwark") [Rlyeh, Vault]
 
 otherworldlyMechanismsSluiceControl :: CardDef
 otherworldlyMechanismsSluiceControl =
-  location_ "11601" ("Otherworldly Mechanisms" <:> "Sluice Control") [Rlyeh, Vault] TheGrandVault
+  vaultChamber "11601" ("Otherworldly Mechanisms" <:> "Sluice Control") [Rlyeh, Vault]
 
 otherworldlyMechanismsGrimeCoveredGears :: CardDef
 otherworldlyMechanismsGrimeCoveredGears =
-  location_ "11602" ("Otherworldly Mechanisms" <:> "Grime-Covered Gears") [Rlyeh, Vault] TheGrandVault
+  vaultChamber "11602" ("Otherworldly Mechanisms" <:> "Grime-Covered Gears") [Rlyeh, Vault]
 
 otherworldlyMechanismsInscrutableApparatus :: CardDef
 otherworldlyMechanismsInscrutableApparatus =
-  location_
-    "11603"
-    ("Otherworldly Mechanisms" <:> "Inscrutable Apparatus")
-    [Rlyeh, Vault]
-    TheGrandVault
+  vaultChamber "11603" ("Otherworldly Mechanisms" <:> "Inscrutable Apparatus") [Rlyeh, Vault]
 
+-- | Enters play on its unrevealed "Sealed Chamber" side; the act flips it.
 chamberOfTheTabletUnsealed :: CardDef
 chamberOfTheTabletUnsealed =
-  location_ "11604" ("Chamber of the Tablet" <:> "Unsealed") [Rlyeh] TheGrandVault
+  locationWithUnrevealed_
+    "11604"
+    "Sealed Chamber"
+    [Rlyeh]
+    ("Chamber of the Tablet" <:> "Unsealed")
+    [Rlyeh]
+    TheGrandVault
 
 -- Court of the Ancients
 westAntechamber :: CardDef
 westAntechamber =
   location_ "11619" "West Antechamber" [Rlyeh] CourtOfTheAncients
 
+-- East Antechamber and Ancient Altar are the only Court locations with connection
+-- icons; every other location in the scenario is reachable only via the Great
+-- Lift or a card effect.
 eastAntechamber :: CardDef
 eastAntechamber =
-  location_ "11620" "East Antechamber" [Rlyeh] CourtOfTheAncients
+  location "11620" "East Antechamber" [Rlyeh] Heart [Plus] CourtOfTheAncients
 
 twistingCatwalks :: CardDef
 twistingCatwalks =
   location_ "11621" ("Twisting Catwalks" <:> "Western Rise") [Rlyeh] CourtOfTheAncients
 
--- TODO: back side of double-sided card (11622b)
 greatLiftInactive :: CardDef
 greatLiftInactive =
-  location_ "11622" ("Great Lift" <:> "Inactive") [Rlyeh, Lift] CourtOfTheAncients
+  otherSideIs "11622b"
+    $ location_ "11622" ("Great Lift" <:> "Inactive") [Rlyeh, Lift] CourtOfTheAncients
 
 greatLiftActive :: CardDef
 greatLiftActive =
-  location_ "11622b" ("Great Lift" <:> "Active") [Rlyeh, Lift] CourtOfTheAncients
+  otherSideIs "11622"
+    $ location_ "11622b" ("Great Lift" <:> "Active") [Rlyeh, Lift] CourtOfTheAncients
 
 ancientAltar :: CardDef
 ancientAltar =
-  victory 1 $ location_ "11623" "Ancient Altar" [Rlyeh] CourtOfTheAncients
+  victory 1 $ location "11623" "Ancient Altar" [Rlyeh] Plus [Heart] CourtOfTheAncients
+
+-- The six archives all share the "Crumbling Archives" unrevealed back; setup
+-- shuffles them, removes one at random, and places the rest face down.
+crumblingArchives :: Name
+crumblingArchives = "Crumbling Archives"
 
 ringLibraryArchiveOfTheStars :: CardDef
 ringLibraryArchiveOfTheStars =
-  location_ "11624" ("Ring Library" <:> "Archive of the Stars") [Rlyeh, Passageway] CourtOfTheAncients
+  locationWithUnrevealed_
+    "11624"
+    crumblingArchives
+    [Rlyeh]
+    ("Ring Library" <:> "Archive of the Stars")
+    [Rlyeh, Passageway]
+    CourtOfTheAncients
 
 ringLibraryArchiveOfTheAncients :: CardDef
 ringLibraryArchiveOfTheAncients =
-  location_ "11625" ("Ring Library" <:> "Archive of the Ancients") [Rlyeh] CourtOfTheAncients
+  locationWithUnrevealed_
+    "11625"
+    crumblingArchives
+    [Rlyeh]
+    ("Ring Library" <:> "Archive of the Ancients")
+    [Rlyeh]
+    CourtOfTheAncients
 
 loftyWalkwayArchiveOfDreams :: CardDef
 loftyWalkwayArchiveOfDreams =
-  location_ "11626" ("Lofty Walkway" <:> "Archive of Dreams") [Rlyeh, Passageway] CourtOfTheAncients
+  locationWithUnrevealed_
+    "11626"
+    crumblingArchives
+    [Rlyeh]
+    ("Lofty Walkway" <:> "Archive of Dreams")
+    [Rlyeh, Passageway]
+    CourtOfTheAncients
 
 loftyWalkwayArchiveOfConflict :: CardDef
 loftyWalkwayArchiveOfConflict =
-  location_ "11627" ("Lofty Walkway" <:> "Archive of Conflict") [Rlyeh] CourtOfTheAncients
+  locationWithUnrevealed_
+    "11627"
+    crumblingArchives
+    [Rlyeh]
+    ("Lofty Walkway" <:> "Archive of Conflict")
+    [Rlyeh]
+    CourtOfTheAncients
 
 luminousArchivesArchiveOfHistory :: CardDef
 luminousArchivesArchiveOfHistory =
-  location_
+  locationWithUnrevealed_
     "11628"
+    crumblingArchives
+    [Rlyeh]
     ("Luminous Archives" <:> "Archive of History")
     [Rlyeh, Passageway]
     CourtOfTheAncients
 
 luminousArchivesArchiveOfMemory :: CardDef
 luminousArchivesArchiveOfMemory =
-  location_ "11629" ("Luminous Archives" <:> "Archive of Memory") [Rlyeh] CourtOfTheAncients
+  locationWithUnrevealed_
+    "11629"
+    crumblingArchives
+    [Rlyeh]
+    ("Luminous Archives" <:> "Archive of Memory")
+    [Rlyeh]
+    CourtOfTheAncients
 
 -- Obsidian Canyons
 rlyehStreets :: CardDef

@@ -76,7 +76,14 @@ allStoryCards =
       , theSentry
       , seafloorFrieze
       , theUnderseaVault
+      , hiddenVault
+      , ancientRelic
+      , squamousParasite
       , underseaParasite
+      , obsidianRelic
+      , ancientVaultO
+      , ancientVaultN
+      , ancientVaultP
       , anotherPath
       , aStrangeGhoul
       , scoutingTheVale
@@ -412,10 +419,55 @@ seafloorFrieze = doubleSided $ story "11531b" "Seafloor Frieze" TheWesternWall
 theUnderseaVault :: CardDef
 theUnderseaVault = doubleSided $ story "11532b" "The Undersea Vault" TheWesternWall
 
+hiddenVault :: CardDef
+hiddenVault = doubleSided $ story "11579b" "Hidden Vault" TheApiary
+
+-- | Victory 1 is printed on this side, not on the asset front (11581).
+ancientRelic :: CardDef
+ancientRelic =
+  (doubleSided $ story "11581b" "Ancient Relic" TheApiary)
+    { cdVictoryPoints = Just 1
+    }
+
+-- | Victory 1 is printed on this side, not on the enemy front (11580).
+squamousParasite :: CardDef
+squamousParasite =
+  (doubleSided $ story "11580b" "Squamous Parasite" TheApiary)
+    { cdVictoryPoints = Just 1
+    }
+
 -- | Victory 1 is printed on this side, not on the enemy front (11549).
 underseaParasite :: CardDef
 underseaParasite =
   (doubleSided $ story "11549b" "Undersea Parasite" TheDrownedQuarter)
+    { cdVictoryPoints = Just 1
+    }
+
+-- | Victory 1 is printed on this side, not on the asset front (11550).
+obsidianRelic :: CardDef
+obsidianRelic =
+  (doubleSided $ story "11550b" "Obsidian Relic" TheDrownedQuarter)
+    { cdVictoryPoints = Just 1
+    }
+
+-- | Victory 1 is printed on this side, not on the treachery front (11608).
+ancientVaultO :: CardDef
+ancientVaultO =
+  (doubleSided $ story "11608b" "Ancient Vault" TheGrandVault)
+    { cdVictoryPoints = Just 1
+    }
+
+-- | Victory 1 is printed on this side, not on the treachery front (11609).
+ancientVaultN :: CardDef
+ancientVaultN =
+  (doubleSided $ story "11609b" "Ancient Vault" TheGrandVault)
+    { cdVictoryPoints = Just 1
+    }
+
+-- | Victory 1 is printed on this side, not on the treachery front (11610).
+ancientVaultP :: CardDef
+ancientVaultP =
+  (doubleSided $ story "11610b" "Ancient Vault" TheGrandVault)
     { cdVictoryPoints = Just 1
     }
 

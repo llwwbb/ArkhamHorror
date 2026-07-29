@@ -82,7 +82,7 @@ contribute self act amount = do
   case abilities of
     (ability : _) -> do
       run $ UseAbility (toId self) ability ws
-      resolveAmount self "Clues" amount
+      resolveAmount self "$clues" amount
     [] ->
       liftIO
         $ expectationFailure

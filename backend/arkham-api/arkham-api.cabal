@@ -5759,6 +5759,10 @@ library
       Arkham.Story.Cards.AlaskanWilds
       Arkham.Story.Cards.ALostMemento
       Arkham.Story.Cards.AMomentsRest
+      Arkham.Story.Cards.AncientRelic
+      Arkham.Story.Cards.AncientVaultN
+      Arkham.Story.Cards.AncientVaultO
+      Arkham.Story.Cards.AncientVaultP
       Arkham.Story.Cards.ANobleLegacyFuture
       Arkham.Story.Cards.ANobleLegacyPast
       Arkham.Story.Cards.ANobleLegacyPresent
@@ -5815,6 +5819,7 @@ library
       Arkham.Story.Cards.HastursEnd
       Arkham.Story.Cards.HastursLastStand
       Arkham.Story.Cards.HedgeMaze
+      Arkham.Story.Cards.HiddenVault
       Arkham.Story.Cards.HopeFades
       Arkham.Story.Cards.HurricaneForce
       Arkham.Story.Cards.IfTheUniformFits
@@ -5845,6 +5850,7 @@ library
       Arkham.Story.Cards.NightOne
       Arkham.Story.Cards.NightThree
       Arkham.Story.Cards.NightTwo
+      Arkham.Story.Cards.ObsidianRelic
       Arkham.Story.Cards.OffTheGalley
       Arkham.Story.Cards.OttomanFront
       Arkham.Story.Cards.PackageDelivery
@@ -5882,6 +5888,7 @@ library
       Arkham.Story.Cards.SomethingBelow
       Arkham.Story.Cards.SongsThatTheHyadesShallSing
       Arkham.Story.Cards.SpiderInfestedWaters
+      Arkham.Story.Cards.SquamousParasite
       Arkham.Story.Cards.StandingStones
       Arkham.Story.Cards.StarsOfAldebaran
       Arkham.Story.Cards.StepsOfThePalace
@@ -7184,6 +7191,7 @@ test-suite spec
       Arkham.Asset.Assets.EmbezzledTreasureSpec
       Arkham.Asset.Assets.Encyclopedia2Spec
       Arkham.Asset.Assets.FavorOfTheMoon1Spec
+      Arkham.Asset.Assets.FieldAgent2Spec
       Arkham.Asset.Assets.FireAxeSpec
       Arkham.Asset.Assets.FirstAidSpec
       Arkham.Asset.Assets.FlashlightSpec
@@ -7213,6 +7221,7 @@ test-suite spec
       Arkham.Asset.Assets.MedicalTextsSpec
       Arkham.Asset.Assets.MiguelsKnapsackSpec
       Arkham.Asset.Assets.MitchBrownSpec
+      Arkham.Asset.Assets.NoPlaceLikeHomeSpec
       Arkham.Asset.Assets.OldBookOfLoreSpec
       Arkham.Asset.Assets.OldCompass2Spec
       Arkham.Asset.Assets.OnTheirHeels5Spec
@@ -7247,6 +7256,7 @@ test-suite spec
       Arkham.Asset.Assets.ThirtyFiveWinchesterSpec
       Arkham.Asset.Assets.Tonys38LongColtSpec
       Arkham.Asset.Assets.TrueMagickReworkingReality5Spec
+      Arkham.Asset.Assets.ValeLanternExtinguishedLightSpec
       Arkham.Asset.Assets.WendysAmuletSpec
       Arkham.Asset.Assets.ZoeysCrossSpec
       Arkham.Campaign.NightOfTheZealot.ScenariosSpec
@@ -7273,6 +7283,7 @@ test-suite spec
       Arkham.Enemy.Cards.TonysQuarrySpec
       Arkham.Enemy.Cards.WatcherFromAnotherDimensionSpec
       Arkham.Epic.EpicMultiplayerSpec
+      Arkham.Event.Events.ActOfDesperationSpec
       Arkham.Event.Events.AstoundingRevelationSpec
       Arkham.Event.Events.AtACrossroads1Spec
       Arkham.Event.Events.BackstabSpec
@@ -7302,6 +7313,7 @@ test-suite spec
       Arkham.Event.Events.HiddenPocketSpec
       Arkham.Event.Events.HotStreak4Spec
       Arkham.Event.Events.LieInWaitSpec
+      Arkham.Event.Events.LiveAndLearnSpec
       Arkham.Event.Events.LookWhatIFoundSpec
       Arkham.Event.Events.Lucky2Spec
       Arkham.Event.Events.LuckySpec
@@ -7318,6 +7330,7 @@ test-suite spec
       Arkham.Event.Events.ScrapeBy1Spec
       Arkham.Event.Events.SearchForTheTruthSpec
       Arkham.Event.Events.SeekingAnswersSpec
+      Arkham.Event.Events.ShedALightSpec
       Arkham.Event.Events.SneakAttackSpec
       Arkham.Event.Events.SureGamble3Spec
       Arkham.Event.Events.ToeToToeSpec
@@ -7325,6 +7338,7 @@ test-suite spec
       Arkham.Event.Events.TrapLimitSpec
       Arkham.Event.Events.WardOfProtectionSpec
       Arkham.Event.Events.WillToSurvive3Spec
+      Arkham.Event.Events.WorkingAHunch2Spec
       Arkham.Event.Events.WorkingAHunchSpec
       Arkham.Game.ChooseDecksSpec
       Arkham.Game.DiffSpec
@@ -7360,11 +7374,14 @@ test-suite spec
       Arkham.Location.Cards.EnchantedWoodsVillageOfZoogsSpec
       Arkham.Location.TypesSpec
       Arkham.Matcher.CoveredByAnyInPlayEnemySpec
+      Arkham.Matcher.LegacyJSONSpec
       Arkham.Matcher.NearestLocationToMostSpec
       Arkham.Matcher.OutOfPlayEnemySpec
       Arkham.Modifier.CannotAttackDuringEnemyPhaseSpec
       Arkham.Modifier.SearchAllInvestigatorsSpec
       Arkham.Scenario.DancingMadSpec
+      Arkham.Scenario.Scenarios.DealingsInTheDarkSpec
+      Arkham.Scenario.Scenarios.FateOfTheValeSpec
       Arkham.Scenario.Scenarios.TheThingInTheDepthsSpec
       Arkham.Scenario.SpecHelpers
       Arkham.Scenario.TheMidwinterGalaSpec
@@ -7408,6 +7425,7 @@ test-suite spec
       Arkham.Treachery.Cards.PrismaticPhenomenonSpec
       Arkham.Treachery.Cards.PsychosisSpec
       Arkham.Treachery.Cards.PsychotropicSporesSpec
+      Arkham.Treachery.Cards.PursuedSpec
       Arkham.Treachery.Cards.RexsCurseSpec
       Arkham.Treachery.Cards.RookieMistakeSpec
       Arkham.Treachery.Cards.SearchingForIzzieSpec
