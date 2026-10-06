@@ -26,12 +26,9 @@ instance HasAbilities SwordCaneDesignedByTheCouncilOfPolls2 where
         x
         1
         ( oneOf
-            [ any_
-                [ CanEvadeEnemy (x.ability 2)
-                , CanFightEnemy (x.ability 2)
-                , EnemyIsEngagedWith You <> EnemyCanBeDamagedBySource (x.ability 2)
-                ]
-            , exists $ YourLocation <> LocationWithConcealedCard
+            [ canFightSomething (x.ability 2)
+            , canEvadeSomething (x.ability 2)
+            , exists $ EnemyIsEngagedWith You <> EnemyCanBeDamagedBySource (x.ability 2)
             ]
         )
         $ freeReaction
@@ -47,7 +44,7 @@ instance RunMessage SwordCaneDesignedByTheCouncilOfPolls2 where
       enemies <- select $ enemyEngagedWith iid <> EnemyCanBeDamagedBySource (attrs.ability 2)
 
       chooseOneM iid do
-        (cardI18n $ labeled' "swordCaneDesignedByTheCouncilOfPolls2.doNotDealDamage") nothing
+        (cardI18n $ labeled "swordCaneDesignedByTheCouncilOfPolls2.doNotDealDamage") nothing
         targets enemies (nonAttackEnemyDamage (Just iid) (attrs.ability 2) 1)
 
       push $ UseCardAbility iid (toSource attrs) 2 windows' payments

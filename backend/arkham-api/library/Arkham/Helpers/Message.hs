@@ -6,6 +6,7 @@ import Arkham.Classes.HasQueue as X hiding (push, pushAll)
 import Arkham.Helpers.Message.Discard as X
 import Arkham.Message as X
 
+import Arkham.Ability.Types (Ability, abilitySource)
 import Arkham.Capability
 import Arkham.Card
 import Arkham.Classes.HasGame
@@ -34,7 +35,6 @@ import Arkham.Source
 import Arkham.Target
 import Arkham.Timing qualified as Timing
 import Arkham.Token qualified as Token
-import Arkham.Tracing
 import Arkham.Window (Window (..), WindowType, defaultWindows, mkAfter, mkWindow)
 import Arkham.Window qualified as Window
 import Control.Monad.Trans
@@ -67,7 +67,7 @@ drawEncounterCardsEdit
 drawEncounterCardsEdit = drawEncounterCardsWith
 
 drawCardsIfCan
-  :: (MonadRandom m, Sourceable source, HasGame m, Tracing m, ToId investigator InvestigatorId)
+  :: (MonadRandom m, Sourceable source, HasGame m, ToId investigator InvestigatorId)
   => investigator
   -> source
   -> Int
@@ -77,7 +77,7 @@ drawCardsIfCan i source n = do
   pure $ guard canDraw $> drawCards (asId i) source n
 
 drawCardsIfCanWith
-  :: (MonadRandom m, Sourceable source, HasGame m, Tracing m, ToId investigator InvestigatorId)
+  :: (MonadRandom m, Sourceable source, HasGame m, ToId investigator InvestigatorId)
   => investigator
   -> source
   -> Int
@@ -282,17 +282,17 @@ placeLocationWith_ :: MonadRandom m => Card -> Update Location -> m Message
 placeLocationWith_ card update = snd <$> placeLocationWith card update
 
 placeSetAsideLocation
-  :: (HasCallStack, MonadRandom m, HasGame m, Tracing m) => CardDef -> m (LocationId, Message)
+  :: (HasCallStack, MonadRandom m, HasGame m) => CardDef -> m (LocationId, Message)
 placeSetAsideLocation = placeLocation <=< getSetAsideCard
 
-placeSetAsideLocation_ :: (MonadRandom m, HasGame m, Tracing m) => CardDef -> m Message
+placeSetAsideLocation_ :: (MonadRandom m, HasGame m) => CardDef -> m Message
 placeSetAsideLocation_ = placeLocation_ <=< getSetAsideCard
 
 placeSetAsideLocationWith_
-  :: (MonadRandom m, HasGame m, Tracing m) => CardDef -> Update Location -> m Message
+  :: (MonadRandom m, HasGame m) => CardDef -> Update Location -> m Message
 placeSetAsideLocationWith_ def update = (`placeLocationWith_` update) =<< getSetAsideCard def
 
-placeSetAsideLocations :: (MonadRandom m, HasGame m, Tracing m) => [CardDef] -> m [Message]
+placeSetAsideLocations :: (MonadRandom m, HasGame m) => [CardDef] -> m [Message]
 placeSetAsideLocations = traverse placeSetAsideLocation_
 
 placeLocationCard :: (CardGen m, HasGame m) => CardDef -> m (LocationId, Message)
@@ -427,7 +427,7 @@ findEncounterCard
 findEncounterCard iid (toTarget -> target) zones (toCardMatcher -> cardMatcher) =
   FindEncounterCard iid target zones cardMatcher LeadChooses
 
-placeLabeledLocationCards_ :: (HasGame m, Tracing m, CardGen m) => Text -> [CardDef] -> m [Message]
+placeLabeledLocationCards_ :: (HasGame m, CardGen m) => Text -> [CardDef] -> m [Message]
 placeLabeledLocationCards_ lbl cards = do
   startIndex <- getStartIndex 1
   concatForM (withIndexN startIndex cards) $ \(idx, card) -> do
@@ -446,7 +446,7 @@ placeLabeledLocationCards lbl cards = fmap fold
     (location, placement) <- placeLocationCard card
     pure [([location], [placement, SetLocationLabel location (lbl <> tshow idx)])]
 
-placeLabeledLocations_ :: (HasGame m, Tracing m, CardGen m) => Text -> [Card] -> m [Message]
+placeLabeledLocations_ :: (HasGame m, CardGen m) => Text -> [Card] -> m [Message]
 placeLabeledLocations_ lbl cards = do
   startIndex <- getStartIndex 1
   concatForM (withIndexN startIndex cards) $ \(idx, card) -> do
@@ -487,7 +487,7 @@ putCardIntoPlayWithAdditionalCostsAndWindows
 putCardIntoPlayWithAdditionalCostsAndWindows iid (toCard -> card) ws = PutCardIntoPlayWithAdditionalCosts iid card Nothing NoPayment ws
 
 placeLabeledLocation
-  :: (MonadRandom m, HasGame m, Tracing m) => Text -> Card -> m (LocationId, Message)
+  :: (MonadRandom m, HasGame m) => Text -> Card -> m (LocationId, Message)
 placeLabeledLocation lbl card = do
   idx <- getStartIndex (1 :: Int)
   (location, placement) <- placeLocation card
@@ -582,7 +582,7 @@ takeResources :: Sourceable source => InvestigatorId -> source -> Int -> Message
 takeResources iid (toSource -> source) n = TakeResources iid n source False
 
 gainResourcesIfCan
-  :: (HasGame m, Tracing m, Sourceable source, ToId a InvestigatorId)
+  :: (HasGame m, Sourceable source, ToId a InvestigatorId)
   => a
   -> source
   -> Int
@@ -649,8 +649,8 @@ cancelDoom target n = do
       Window.PlacedDoom source' target' _ -> Window.PlacedDoom source' target' m
       _ -> error "mismatched"
 
-    replaceWindowDoomAmount m Window {..} =
-      Window {windowTiming, windowBatchId, windowType = replaceWindowTypeDoomAmount m windowType}
+    replaceWindowDoomAmount m w =
+      w {windowType = replaceWindowTypeDoomAmount m (windowType w)}
 
     replaceDoomAmount m = \case
       CheckWindows ws -> CheckWindows (map (replaceWindowDoomAmount m) ws)
@@ -701,7 +701,10 @@ handleSkillTestNesting sid msg a action = do
   if inSkillTestWindow
     then do
       lift do
-        msgs <- popMessagesMatching \case
+        -- nested-aware: a suspended window effect ('pendingWindowEffect') can sit inside
+        -- a Simultaneously batch, out of a flat scan's reach. Already-glued messages are
+        -- inside MovedWithSkillTest, which is not a group, so they stay with their test.
+        msgs <- popMessagesMatchingNested \case
           MoveWithSkillTest _ -> True
           _ -> False
         insertAfterMatching (msg : map (MovedWithSkillTest sid) msgs) (== EndSkillTestWindow)
@@ -720,6 +723,151 @@ handleSkillTestNesting_
   -> t m ()
 handleSkillTestNesting_ sid msg action = handleSkillTestNesting sid msg () action
 
+{- | Sources of every ability a queued 'ResolveWindowInitiations' still has to resolve.
+The ResolvedAbility sweep keeps their parked entities alive: a materialised
+initiation is an in-flight ability, and its source must still be able to claim
+'UseAbility' after leaving play (Caught in the Crossfire discards itself on its
+first resolution). #5743
+-}
+queuedInitiationSources :: HasQueue Message m => m [Source]
+queuedInitiationSources = fromQueue (concatMap go)
+ where
+  go = \case
+    Priority inner -> go inner
+    Retain inner -> go inner
+    MoveWithSkillTest inner -> go inner
+    MovedWithSkillTest _ inner -> go inner
+    Simultaneously inner -> concatMap go inner
+    Run inner -> concatMap go inner
+    ResolveWindowInitiations _ _ pending -> [abilitySource ability | (ability, _, _) <- pending]
+    _ -> []
+
+{- | The initiations a question's 'ResolveWindowInitiations' marker still owes.
+
+Walks exactly where 'initiationsAsk' parks the marker (an 'AbilityLabel' follow-up under a
+window choose) rather than generically: 'WindowAsk' is hot, and a window ask with hundreds
+of choices is a shape this engine has produced before.
+-}
+pendingInitiations :: Question Message -> [(Ability, [Window], [Message])]
+pendingInitiations = goQuestion
+ where
+  goQuestion = \case
+    QuestionLabel _ _ q -> goQuestion q
+    PayCostQuestion _ q -> goQuestion q
+    QuestionWithSource _ _ q -> goQuestion q
+    WindowChooseOne cs -> fromChoices cs
+    ChooseOne cs -> fromChoices cs
+    PlayerWindowChooseOne cs -> fromChoices cs
+    _ -> []
+  fromChoices = concatMap \case
+    AbilityLabel _ _ _ before msgs -> concatMap go (before <> msgs)
+    _ -> []
+  go = \case
+    Priority inner -> go inner
+    Retain inner -> go inner
+    MoveWithSkillTest inner -> go inner
+    MovedWithSkillTest _ inner -> go inner
+    Simultaneously inner -> concatMap go inner
+    Run inner -> concatMap go inner
+    ResolveWindowInitiations _ _ pending -> pending
+    _ -> []
+
+{- | Whether this question is the ONLY place some in-flight effect still exists.
+
+'ResolveWindowInitiations' pops the effect a When damage window stands in front of (the
+@Damaged@/@CheckDefeated@ behind it, see 'pendingWindowEffect') OUT of the queue and parks
+it in the marker it hands to 'initiationsAsk'. 'ClearUI' wipes @gameQuestion@ ahead of every
+answer, so from then until the initiation is used that ask is the last copy: discarding it
+destroys the effect, and re-deriving the set cannot bring it back because its own pop now
+finds nothing. Such a window therefore re-checks ITSELF -- nobody else may queue a
+@Do (CheckWindows ws)@ for it, and no other seat answering may drop it. #5798
+
+Deliberately NOT true of every initiation ask. Only damage windows hold anything, and a
+Forced ability in any other window (Rex's Curse on a would-be success, Dream Gate at the end
+of the phase) still wants the ordinary trailing re-check -- suppressing it there changes the
+flow of every Forced window ability in the game.
+-}
+holdsPendingWindowEffects :: Question Message -> Bool
+holdsPendingWindowEffects = any (\(_, _, effects) -> notNull effects) . pendingInitiations
+
+{- | Windows the queue still owes a check. A window's 'EndCheckWindow' can fire while one
+of its initiations is still in flight -- 'handleSkillTestNesting' glues the continuation
+behind 'EndSkillTestWindow', but not the window's close -- and that close depth-filters
+the recorded use away, so the trailing @Do (CheckWindows ws)@ re-derives a Forced ability
+that already initiated (Evil Past asked for its 2 horror twice, #5772).
+-}
+queuedWindowChecks :: HasQueue Message m => m [Window]
+queuedWindowChecks = fromQueue (concatMap go)
+ where
+  go = \case
+    Priority inner -> go inner
+    Retain inner -> go inner
+    MoveWithSkillTest inner -> go inner
+    MovedWithSkillTest _ inner -> go inner
+    Simultaneously inner -> concatMap go inner
+    Run inner -> concatMap go inner
+    CheckWindows ws -> ws
+    Do (CheckWindows ws) -> ws
+    ResolveWindowInitiations _ ws _ -> ws
+    _ -> []
+
+{- | Consume this initiation out of the queued 'ResolveWindowInitiations' marker and
+give the pending effects it was holding back to the queue.
+
+Removing the entry is what marks the initiation as done -- the recorded ability use
+cannot be relied on for that, because the continuation fires after the window has
+closed, where the use is depth-filtered away. The marker may already be glued to a test
+('MoveWithSkillTest'/'MovedWithSkillTest') or travelling in an ordinary transport
+wrapper; the rewrite preserves whatever carries it. Does nothing when no marker holds
+this initiation -- initiations outside a materialised queue keep their effects in the
+queue itself. #5743
+
+Where they go back depends on whether the marker still owes initiations. While others
+remain they resolve right behind this use, so each initiation resolves IN FULL before the
+next is offered (Caught in the Crossfire reduces each enemy's damage behind its own
+test). On the last one they go behind the marker instead: a window holding a Forced
+ability is worked through in two rounds, and the marker's @Do (CheckWindows ws)@ still
+owes the OPTIONAL reactions a look. Releasing there landed the damage first, so a
+reaction that changes the amount was ignored whenever the damaged entity also had a
+Forced trigger on the same window -- Nathaniel Cho's extra damage went missing against a
+Guardian Elder Thing (#5751).
+
+Either way they ride 'MoveWithSkillTest' so 'handleSkillTestNesting' keeps gluing them
+behind a nested test.
+-}
+releaseInitiationEffects
+  :: HasQueue Message m => InvestigatorId -> Ability -> [Window] -> m ()
+releaseInitiationEffects iid ability ws = pushAll . map MoveWithSkillTest =<< withQueue go
+ where
+  go [] = ([], [])
+  go (msg : rest) = case rewrite msg of
+    Just (msg', effects)
+      | exhausted msg' -> (msg' : map MoveWithSkillTest effects <> rest, [])
+      | otherwise -> (msg' : rest, effects)
+    Nothing -> let (rest', effects) = go rest in (msg : rest', effects)
+  exhausted = \case
+    Priority inner -> exhausted inner
+    Retain inner -> exhausted inner
+    MoveWithSkillTest inner -> exhausted inner
+    MovedWithSkillTest _ inner -> exhausted inner
+    ResolveWindowInitiations _ _ pending -> null pending
+    _ -> False
+  chosen (ability', ws', _) = ability' == ability && ws' == ws
+  rewrite = \case
+    Priority inner -> rewrap Priority inner
+    Retain inner -> rewrap Retain inner
+    MoveWithSkillTest inner -> rewrap MoveWithSkillTest inner
+    MovedWithSkillTest sid inner -> rewrap (MovedWithSkillTest sid) inner
+    ResolveWindowInitiations iid' initiationWindows pending
+      | iid == iid'
+      , any chosen pending ->
+          Just
+            ( ResolveWindowInitiations iid' initiationWindows (filter (not . chosen) pending)
+            , concat [effs | entry@(_, _, effs) <- pending, chosen entry]
+            )
+    _ -> Nothing
+  rewrap f inner = (\(inner', effects) -> (f inner', effects)) <$> rewrite inner
+
 createAssetAt :: MonadRandom m => Card -> Placement -> m (AssetId, Message)
 createAssetAt c placement = do
   assetId <- getRandom
@@ -735,3 +883,31 @@ createTreacheryAt c placement = do
 
 createTreacheryAt_ :: MonadRandom m => Card -> Placement -> m Message
 createTreacheryAt_ c placement = snd <$> createTreacheryAt c placement
+
+{- | The investigator an already-queued elimination is going to take out, if this
+message is one. X. qualified throughout, because "Arkham.Matcher" has window
+matchers by the same names.
+-}
+pendingElimination :: Message -> Maybe InvestigatorId
+pendingElimination = \case
+  X.InvestigatorDefeated _ iid -> Just iid
+  X.InvestigatorWhenDefeated _ iid -> Just iid
+  X.InvestigatorIsDefeated _ iid -> Just iid
+  X.InvestigatorKilled _ iid -> Just iid
+  X.InvestigatorWhenEliminated _ iid _ -> Just iid
+  X.InvestigatorEliminated iid -> Just iid
+  X.Resign iid -> Just iid
+  X.InvestigatorResigned iid -> Just iid
+  _ -> Nothing
+
+isPendingElimination :: Message -> Bool
+isPendingElimination = isJust . pendingElimination
+
+{- | Every investigator with an elimination still waiting in the queue.
+
+"Each investigator is defeated" queues one defeat per investigator, so the first
+one to resolve still sees the others as candidates for anything that asks who is
+left standing.
+-}
+getPendingEliminations :: HasQueue Message m => m [InvestigatorId]
+getPendingEliminations = mapMaybe (pendingElimination . stripQueueWrappers) <$> peekQueue

@@ -38,12 +38,17 @@ data SkillTest = SkillTest
   , skillTestBaseValue :: SkillTestBaseValue
   , skillTestDifficulty :: SkillTestDifficulty
   , skillTestOriginalDifficulty :: Maybe SkillTestDifficulty
+  , skillTestDifficultyIncrease :: Int
   , skillTestSetAsideChaosTokens :: [ChaosToken]
   , skillTestRevealedChaosTokens :: [ChaosToken] -- tokens may change from physical representation
   , skillTestAdditionalRevealedChaosTokens :: [ChaosToken] -- tokens may change from physical representation
   , skillTestResolvedChaosTokens :: [ChaosToken]
   , skillTestToResolveChaosTokens :: [ChaosToken]
   , skillTestResult :: SkillTestResult
+  , skillTestResultForced :: Bool
+  {- ^ A "you succeed by N instead" result overrides the tested values entirely,
+  so it must not be recalculated from them.
+  -}
   , skillTestCommittedCards :: Map InvestigatorId [Card]
   , skillTestSource :: Source
   , skillTestTarget :: Target
@@ -97,6 +102,9 @@ instance HasField "chaosTokens" SkillTest [ChaosToken] where
 
 instance HasField "step" SkillTest SkillTestStep where
   getField = skillTestStep
+
+instance HasField "difficultyIncrease" SkillTest Int where
+  getField = skillTestDifficultyIncrease
 
 setIsRevelation :: SkillTest -> SkillTest
 setIsRevelation st = st {skillTestIsRevelation = True}
@@ -161,12 +169,14 @@ buildSkillTest sid iid (toSource -> source) (toTarget -> target) stType bValue d
     , skillTestBaseValue = bValue
     , skillTestDifficulty = difficulty
     , skillTestOriginalDifficulty = Just difficulty
+    , skillTestDifficultyIncrease = 0
     , skillTestSetAsideChaosTokens = mempty
     , skillTestRevealedChaosTokens = mempty
     , skillTestAdditionalRevealedChaosTokens = mempty
     , skillTestResolvedChaosTokens = mempty
     , skillTestToResolveChaosTokens = mempty
     , skillTestResult = Unrun
+    , skillTestResultForced = False
     , skillTestCommittedCards = mempty
     , skillTestSource = source
     , skillTestTarget = target
@@ -198,6 +208,7 @@ resetSkillTest sid skillTest =
     , skillTestResolvedChaosTokens = mempty
     , skillTestToResolveChaosTokens = mempty
     , skillTestResult = Unrun
+    , skillTestResultForced = False
     , skillTestCommittedCards = mempty
     , skillTestSubscribers = [toTarget $ skillTestInvestigator skillTest]
     , skillTestId = sid
@@ -218,12 +229,14 @@ instance FromJSON SkillTest where
     skillTestBaseValue <- o .: "baseValue"
     skillTestDifficulty <- o .: "difficulty"
     skillTestOriginalDifficulty <- o .:? "originalDifficulty"
+    skillTestDifficultyIncrease <- o .:? "difficultyIncrease" .!= 0
     skillTestSetAsideChaosTokens <- o .: "setAsideChaosTokens"
     skillTestRevealedChaosTokens <- o .: "revealedChaosTokens"
     skillTestAdditionalRevealedChaosTokens <- o .:? "additionalRevealedChaosTokens" .!= []
     skillTestResolvedChaosTokens <- o .: "resolvedChaosTokens"
     skillTestToResolveChaosTokens <- o .: "toResolveChaosTokens"
     skillTestResult <- o .: "result"
+    skillTestResultForced <- o .:? "resultForced" .!= False
     skillTestCommittedCards <- o .: "committedCards"
     skillTestSource <- o .: "source"
     skillTestTarget <- o .: "target"

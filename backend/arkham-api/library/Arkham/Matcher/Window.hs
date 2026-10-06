@@ -23,6 +23,7 @@ import Arkham.Matcher.Investigator
 import Arkham.Matcher.Key
 import Arkham.Matcher.Location
 import Arkham.Matcher.Phase
+import Arkham.Matcher.Placement
 import Arkham.Matcher.SkillTest
 import Arkham.Matcher.SkillType
 import Arkham.Matcher.Source
@@ -107,6 +108,11 @@ data WindowMatcher
   | InvestigatorWouldTakeDamage Timing Who SourceMatcher DamageTypeMatcher
   | InvestigatorWouldTakeHorror Timing Who SourceMatcher
   | EnemyWouldTakeDamage Timing SourceMatcher EnemyMatcher
+  | {- | As 'EnemyWouldTakeDamage', but only for a particular amount. The window
+    always carried the number; this is the way to ask about it, for cards that
+    react to "2 or more damage" rather than to any damage at all.
+    -}
+    EnemyWouldTakeDamageWithAmount Timing SourceMatcher EnemyMatcher ValueMatcher
   | WouldSearchDeck Timing Who DeckMatcher
   | WouldLookAtDeck Timing Who DeckMatcher
   | LookedAtDeck Timing Who DeckMatcher
@@ -166,6 +172,10 @@ data WindowMatcher
   | AssetDealtDamageOrHorror Timing SourceMatcher AssetMatcher
   | LastClueRemovedFromAsset Timing AssetMatcher
   | EnemyDealtDamage Timing DamageEffectMatcher EnemyMatcher SourceMatcher
+  | {- | The enemy DEALING damage, to any target. Contrast 'EnemyDealtDamage',
+    which is damage dealt TO the enemy.
+    -}
+    EnemyDealsDamage Timing EnemyMatcher
   | EnemyDealtExcessDamage Timing DamageEffectMatcher EnemyMatcher SourceMatcher
   | EnemyTakeDamage Timing DamageEffectMatcher EnemyMatcher ValueMatcher SourceMatcher
   | InvestigatorTakeDamage Timing Who SourceMatcher
@@ -186,20 +196,35 @@ data WindowMatcher
   | EnemyAttacked Timing Who SourceMatcher EnemyMatcher
   | EnemyAttackedSuccessfully Timing Who SourceMatcher EnemyMatcher
   | EnemyEvadedSuccessfully Timing Who SourceMatcher EnemyMatcher
+  | EnemyWouldBeEvaded Timing Who EnemyMatcher
   | RevealChaosToken Timing Who ChaosTokenMatcher
   | RevealChaosTokensDuringSkillTest Timing Who SkillTestMatcher ChaosTokenMatcher
   | TokensWouldBeRemovedFromChaosBag Timing ChaosTokenMatcher
   | ResolvesChaosToken Timing Who ChaosTokenMatcher
   | ChaosTokenSealed Timing Who ChaosTokenMatcher
+  | {- | A token being sealed ON an investigator, whoever sealed it. Contrast
+    'ChaosTokenSealed', which matches on the investigator doing the sealing.
+    -}
+    ChaosTokenSealedOn Timing Who ChaosTokenMatcher
+  | {- | A token released from an investigator's own card. Releases from any
+    other card (an enemy, asset, location, treachery or skill it was sealed on)
+    are 'ChaosTokenReleasedFrom'.
+    -}
+    ChaosTokenReleased Timing Who ChaosTokenMatcher
+  | -- | A token released from any card, whichever card type it was sealed on.
+    ChaosTokenReleasedFrom Timing TargetMatcher ChaosTokenMatcher
   | CancelChaosToken Timing Who ChaosTokenMatcher
   | IgnoreChaosToken Timing Who ChaosTokenMatcher
   | WouldRevealChaosToken Timing Who
   | WouldRevealChaosTokens Timing Who
   | Discarded Timing (Maybe Who) SourceMatcher ExtendedCardMatcher
   | DiscardedFromHand Timing Who SourceMatcher ExtendedCardMatcher
+  | DiscardedFromHandBatch Timing Who SourceMatcher
   | DiscardedFromDeck Timing Who SourceMatcher ExtendedCardMatcher
   | WouldDiscardFromHand Timing Who SourceMatcher
   | WouldDiscardFromDeck Timing Who SourceMatcher
+  | WouldDiscardTopOfEncounterDeck Timing Who SourceMatcher
+  | DiscardedTopOfEncounterDeckBatch Timing Who SourceMatcher
   | AssetHealed Timing DamageType AssetMatcher SourceMatcher
   | InvestigatorHealed Timing DamageType InvestigatorMatcher SourceMatcher
   | AssetWouldBeDiscarded Timing AssetMatcher
@@ -225,7 +250,7 @@ data WindowMatcher
   | SuccessfullyInvestigatedWithNoClues Timing Who Where
   | EnemyAttemptsToSpawnAt Timing EnemyMatcher LocationMatcher
   | EnemyWouldSpawnAt EnemyMatcher LocationMatcher
-  | EnemySpawns Timing Where EnemyMatcher
+  | EnemySpawns Timing PlacementMatcher EnemyMatcher
   | EnemyFlipped Timing EnemyMatcher
   | EnemyPlaced Timing Placement EnemyMatcher
   | EnemyEntersPlay Timing EnemyMatcher
@@ -238,16 +263,18 @@ data WindowMatcher
   | RoundBegins Timing
   | RoundEnds Timing
   | DuringTurn Who
-  | -- | "You have an action to take." Matches the @NonFast@ action-taking window
-    -- (present on your real turn AND during a granted "as if it were your turn"
-    -- action), unlike @DuringTurn@ which means it is genuinely your turn. Action
-    -- abilities default to this so they remain usable with a granted action,
-    -- while "during your turn" Fast cards stay on @DuringTurn@. See #4894.
+  | {- | "You have an action to take." Matches the @NonFast@ action-taking window
+    (present on your real turn AND during a granted "as if it were your turn"
+    action), unlike @DuringTurn@ which means it is genuinely your turn. Action
+    abilities default to this so they remain usable with a granted action,
+    while "during your turn" Fast cards stay on @DuringTurn@. See #4894.
+    -}
     DuringYourAction Who
   | Enters Timing Who Where
-  | -- | Matches the @EnteringLocationWithEnemy@ window: the investigator entered
-    -- a location that had 1+ enemies at the moment of entry, evaluated then (not
-    -- re-checked after engagement). See #4813.
+  | {- | Matches the @EnteringLocationWithEnemy@ window: the investigator entered
+    a location that had 1+ enemies at the moment of entry, evaluated then (not
+    re-checked after engagement). See #4813.
+    -}
     EntersLocationWithEnemy Timing Who
   | Leaves Timing Who Where
   | WouldMove Timing Who SourceMatcher FromWhere ToWhere
@@ -259,8 +286,15 @@ data WindowMatcher
   | DealtHorror Timing SourceMatcher Who
   | AssignedHorror Timing Who TargetListMatcher
   | DealtDamageOrHorror Timing SourceMatcher Who
+  | InvestigatorDealtDamageOrHorror Timing SourceMatcher Who
   | WouldDrawEncounterCard Timing Who PhaseMatcher
   | WouldDrawCard Timing Who DeckMatcher
+  | {- | 'WouldDrawCard', restricted by what caused the draw. The window itself
+    carries no source, so this reads the pending draw off
+    'Arkham.Investigator.Types.InvestigatorDrawing' -- which means it only
+    matches a draw the investigator has been given, never a bare encounter draw.
+    -}
+    WouldDrawCardFrom Timing Who DeckMatcher SourceMatcher
   | WouldDrawExactlyOneCard Timing Who DeckMatcher
   | DrawCard Timing Who ExtendedCardMatcher DeckMatcher
   | DrawsCards Timing Who CardListMatcher ValueMatcher
@@ -396,9 +430,38 @@ instance FromJSON WindowMatcher where
         case econtents of
           Left (a, b, c) -> pure $ EnemyAttackedSuccessfully a b AnySource c
           Right (a, b, c, d) -> pure $ EnemyAttackedSuccessfully a b c d
+      -- The window used to carry a LocationMatcher; a spawn that lands
+      -- nowhere (the shadows) needs the whole placement (#5649).
+      "EnemySpawns" -> do
+        econtents <- (Right <$> o .: "contents") <|> (Left <$> o .: "contents")
+        case econtents of
+          Left (a, b, c) -> pure $ EnemySpawns a (PlacementAt b) c
+          Right (a, b, c) -> pure $ EnemySpawns a b c
       "WouldAddChaosTokensToChaosBag" -> do
         econtents <- (Left <$> o .: "contents") <|> (Right <$> o .: "contents")
         case econtents of
           Left (a, b, c) -> pure $ WouldAddChaosTokensToChaosBag a Nothing b c
           Right (a, b, c, d) -> pure $ WouldAddChaosTokensToChaosBag a b c d
       _ -> genericParseJSON defaultOptions (Object o)
+
+{- | Does this window describe one event, or one per matching timing point?
+
+A forced ability initiates at every timing point it matches, and a check can carry
+several simultaneous ones -- `simultaneously` merges one `DealtDamage` window per enemy
+for Storm of Spirits, so "when damage is dealt to __a__ Criminal enemy" initiates once per
+enemy and the player chooses the order (Ritual Candles ruling).
+
+A few windows instead stand for a single event that the engine happens to raise once per
+sub-target. Those read "one or more" (or are singular by nature, like a skill test having
+exactly one result) and must collapse to one initiation that sees every window -- the
+ability's own body fans out over the targets. List them here; everything else initiates
+per window.
+-}
+windowIsSingleEvent :: WindowMatcher -> Bool
+windowIsSingleEvent = \case
+  -- a skill test has one result, even when it resolved against several targets
+  -- (Sixth Sense (4) investigating two locations -> Prismatic Phenomenon fires once)
+  SkillTestResult {} -> True
+  WouldHaveSkillTestResult {} -> True
+  OrWindowMatcher ms -> any windowIsSingleEvent ms
+  _ -> False

@@ -24,6 +24,7 @@ import Arkham.Field
 import Arkham.Id
 import Arkham.Json
 import Arkham.Keyword
+import Arkham.LocationSymbol (LocationSymbol)
 import Arkham.Matcher.Types
 import Arkham.Phase
 import {-# SOURCE #-} Arkham.Placement
@@ -50,6 +51,14 @@ data ModifierType
   | ActionCostOf ActionTarget Int -- TODO: Don't use this for anything than decreasing
   | ActionCostSetToModifier Int
   | ActionDoesNotCauseAttacksOfOpportunity Action
+  | {- | An action taken while this is on the investigator still counts as an
+    action they performed, but is invisible to the "same type of action" checks:
+    it opens no 'PerformedSameTypeOfAction' window of its own, and the next
+    action compares itself against the action before it instead. For "that
+    action ignores this card's forced effect", where the granted action would
+    otherwise become the thing the real action is measured against.
+    -}
+    ActionDoesNotCountAsRepeatedAction
   | ActionSkillModifier {action :: Action, skillType :: SkillType, value :: Int}
   | ActionsAreFree
   | AddChaosTokenValue ChaosTokenValue
@@ -66,6 +75,12 @@ data ModifierType
   | NoAdditionalCosts
   | AdditionalPlayCostOf ExtendedCardMatcher Cost
   | AdditionalCostToCommit InvestigatorId Cost
+  | {- | An extra cost to take a particular action while at the location that
+    carries this modifier (Dark Matter's Cold Wastes taxes the Scan action).
+    Gathered from the acting investigator's location, like
+    'AdditionalCostToResign'.
+    -}
+    AdditionalCostToPerformAction ActionTarget Cost
   | AdditionalCostToEnter Cost
   | AdditionalCostToEnterMatching LocationMatcher Cost
   | AdditionalCostToExplore Cost
@@ -73,6 +88,12 @@ data ModifierType
   | AdditionalCostToLeave Cost
   | AdditionalCostToResign Cost
   | AdditionalResources Int
+  | {- | "Resolve its revelation effect an additional time." Adds N extra copies
+    of the revelation itself; the surrounding @When@/@After (Revelation ...)@
+    pair still runs exactly once, so the card is still discarded once, marked
+    resolved once, and surges at most once.
+    -}
+    AdditionalRevelations Int
   | AdditionalSlot SlotType
   | AdditionalStartingCards [Card]
   | AdditionalStartingUses Int
@@ -87,6 +108,11 @@ data ModifierType
   | AnySkillValue Int
   | AnySkillValueCalculated GameCalculation
   | AsIfAt LocationId
+  | {- | "as if you were at that location in addition to your location". Unlike
+    'AsIfAt' this does not replace 'InvestigatorLocation'; both the physical
+    location and this one satisfy the @Here@ criterion.
+    -}
+    AsIfAlsoAt LocationId
   | CanBeAttackedAsIfEnemy
   | CanPlayUnderControlOf CardMatcher InvestigatorMatcher
   | AsIfEnemyFight Int
@@ -94,6 +120,8 @@ data ModifierType
   | AsIfNotEngagedWith EnemyId
   | AsIfInHand Card
   | AsIfInHandFor ForPlay CardId
+  | -- out-of-play effects only, never treated as in hand
+    AsIfInHandForEffects CardId
   | AsIfResourcePool AssetId
   | AsIfUnderControlOf InvestigatorId
   | AsIfTurn InvestigatorId
@@ -101,6 +129,7 @@ data ModifierType
   | AttackDealsEitherDamageOrHorror
   | AttacksCannotBeCancelled
   | Barricades [LocationId]
+  | BaseShroud Int
   | BaseSkill Int
   | BaseSkillOf {skillType :: SkillType, value :: Int}
   | BaseSkillOfCalculated {skillType :: SkillType, calculation :: GameCalculation}
@@ -197,6 +226,11 @@ data ModifierType
   | CannotDrawCardsFromPlayerCardEffects
   | CannotEngage InvestigatorId
   | CannotEnter LocationId
+  | {- | "You cannot enter X except by <source>". Unlike 'CannotEnter' this is
+    source-aware, so it is only honored by 'getCanMoveToLocations_', the one
+    move query that knows which effect is doing the moving.
+    -}
+    CannotEnterExcept LocationId SourceMatcher
   | CannotEnterVehicle AssetMatcher
   | CannotEvade EnemyMatcher
   | CannotExplore
@@ -229,6 +263,7 @@ data ModifierType
   | CannotReady
   | CannotReplaceWeaknesses
   | CannotRevealCards
+  | CannotSealChaosToken ChaosTokenFace
   | CannotSpawnIn LocationMatcher
   | CannotSpendClues
   | CannotSpendKeys
@@ -253,6 +288,14 @@ data ModifierType
   | CommitCost Cost
   | ConnectedToWhen LocationMatcher LocationMatcher
   | ForMovementConnectedToWhen LocationMatcher LocationMatcher
+  | {- | On the MOVER (investigator or enemy), not on a location: "while moving, treat
+    your location as if it were connected to ...". Connection queries read the start
+    location's modifiers, so a mover-scoped connection cannot be expressed as a
+    location modifier; the movement helpers inject this onto the mover's location for
+    the duration of the query, the way hunter movement already does for
+    'HunterConnectedTo'.
+    -}
+    MovesAsIfConnectedTo LocationMatcher
   | ControlledAssetsCannotReady
   | CountAllDoomInPlay
   | CountsAsInvestigatorForHunterEnemies
@@ -284,7 +327,15 @@ data ModifierType
   | DoubleDifficulty
   | DoubleNegativeModifiersOnChaosTokens
   | DoubleModifiersOnChaosTokens
+  | {- | Notify the card this many extra times when a chaos token it is waiting
+    on is revealed, so its "when/if/after you reveal" effect resolves again.
+    -}
+    ResolveEffectsAdditionalTimes Int
   | DoubleSkillIcons
+  | {- | Double only the listed icons on a committed card, leaving the rest
+    (notably @WildIcon@) counted once.
+    -}
+    DoubleSkillIconsOf [SkillIcon]
   | DoubleSuccess
   | DuringEnemyPhaseMustMoveToward Target
   | EffectsCannotBeCanceled
@@ -336,6 +387,11 @@ data ModifierType
   | IgnoreChaosToken
   | IgnoreChaosTokenEffects
   | IgnoreChaosTokenModifier
+  | {- | The symbol's revealed effects do not resolve, but the token's numeric
+    modifier is untouched, so a replacement value (see The Black Cat (5))
+    still applies. 'IgnoreChaosTokenEffects' would zero the value as well.
+    -}
+    IgnoreChaosTokenSymbolEffects
   | IgnoreCommitOneRestriction
   | IgnoreDoomOnThis Int
   | IgnoreEngagementRequirement
@@ -350,6 +406,13 @@ data ModifierType
   | IgnoreTextOnLocation LocationMatcher
   | InVictoryDisplayForCountingVengeance
   | IncreaseCostOf ExtendedCardMatcher Int
+  | {- | A composite enemy: several enemy cards that are a single enemy on the map
+    (Cthulhu and the facets on his Cthulhu Board). The card carrying this is never
+    itself fought or evaded; interacting with it means choosing one of the members.
+    Written with 'Arkham.Helpers.Modifiers.interactAsOneOf', which pairs it with the
+    @Cannot*@ modifiers that keep the card itself off every target list.
+    -}
+    InteractAsOneOf EnemyMatcher
   | InvestigateActionCriteria CriteriaOverride
   | IsEmptySpace
   | IsPointOfDamage
@@ -359,6 +422,7 @@ data ModifierType
   | LeaveCardWhereItIs
   | LookAtDepth Int
   | LosePatrol
+  | LosesConnectionSymbol LocationSymbol
   | ForcePatrol LocationMatcher
   | LoseVictory
   | MaxCluesDiscovered Int
@@ -370,6 +434,7 @@ data ModifierType
   | MayIgnoreLocationEffectsAndKeywords
   | MetaModifier Value
   | ModifierIfSucceededBy Int Modifier
+  | MovingToDoesNotProvokeAttacksOfOpportunity LocationMatcher
   | Mulligans Int
   | MustBeCommitted
   | MustChooseEnemy EnemyMatcher
@@ -425,6 +490,7 @@ data ModifierType
   | RevealChaosTokensBeforeCommittingCards
   | SanityModifier Int
   | CampaignModifier Text
+  | InvestigatorModifier Text
   | ScenarioModifier Text
   | ScenarioModifierValue Text Value
   | SearchDepth Int
@@ -484,6 +550,16 @@ data ModifierType
   | WillCancelHorror Int
   | XPModifier Text Int
   | TreatFullyFloodedAsPartiallyFlooded
+  | {- | On an INVESTIGATOR: their location counts as unflooded however flooded it is.
+    What carries a boat's occupants over open water; the sibling of
+    'TreatFullyFloodedAsPartiallyFlooded', which a diving suit grants.
+    -}
+    TreatLocationAsUnflooded
+  | {- | On an INVESTIGATOR: where a card would have them "choose one", they resolve
+    every option instead (via 'chooseOneAtATimeM'). Only read by the cards whose
+    wording calls for it, so it does not leak into unrelated choices.
+    -}
+    MustResolveAllOptions
   | UIModifier UIModifier
   | BecomeHomunculusWhenDefeated
   | BecomeInvestigator InvestigatorId
@@ -498,6 +574,7 @@ data UIModifier
   = Ethereal -- from Ethereal Form
   | Explosion -- from Dyanamite Blast
   | Locus -- from Prophesiae Profana
+  | OnFire -- from Fire!, and anything else that should look like it is burning
   | ImportantToScenario Text
   | OverlayCheckmark {left :: Double, top :: Double} -- See The Stakeout for example
   | Rotated Int
@@ -542,11 +619,18 @@ instance IsLabel "alert" ModifierType where
 instance IsLabel "aloof" ModifierType where
   fromLabel = AddKeyword Aloof
 
+instance IsLabel "hunter" ModifierType where
+  fromLabel = AddKeyword Arkham.Keyword.Hunter
+
 data Modifier = Modifier
   { modifierSource :: Source
   , modifierType :: ModifierType
   , modifierActiveDuringSetup :: Bool
   , modifierCard :: Maybe Card
+  , modifierEffect :: Maybe EffectId
+  {- ^ Stamped on by 'HasModifiersFor Effect', so the client can tell which
+  modifiers a 'DisableEffect' can take back off.
+  -}
   }
   deriving stock (Show, Eq, Ord, Data)
 
@@ -561,6 +645,9 @@ instance HasField "activeDuringSetup" Modifier Bool where
 
 instance HasField "card" Modifier (Maybe Card) where
   getField = modifierCard
+
+instance HasField "effect" Modifier (Maybe EffectId) where
+  getField = modifierEffect
 
 overModifierTypeM :: Monad m => (ModifierType -> m ModifierType) -> Modifier -> m Modifier
 overModifierTypeM f m = f (modifierType m) <&> \mt -> m {modifierType = mt}
@@ -627,7 +714,18 @@ mconcat
                 Right (s, n) -> pure $ XPModifier s n
             _ -> $(mkParseJSON defaultOptions ''ModifierType) (Object v)
       |]
-  , deriveJSON (aesonOptions $ Just "modifier") ''Modifier
+  , deriveToJSON (aesonOptions $ Just "modifier") ''Modifier
   , deriveJSON defaultOptions ''UIModifier
   , makePrisms ''ModifierType
   ]
+
+-- Hand-written so a payload from before `effect` existed -- a recorded game, or
+-- the debug client's `EffectModifiers` -- still parses.
+instance FromJSON Modifier where
+  parseJSON = withObject "Modifier" \o -> do
+    modifierSource <- o .: "source"
+    modifierType <- o .: "type"
+    modifierActiveDuringSetup <- o .: "activeDuringSetup"
+    modifierCard <- o .:? "card"
+    modifierEffect <- o .:? "effect"
+    pure Modifier {..}

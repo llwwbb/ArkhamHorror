@@ -1,11 +1,15 @@
 {
   "label": {
+    "abyssalTome2": {
+      "placeDoom": "Place 1 doom on Abyssal Tome",
+      "doNotPlaceDoom": "Do not place doom on Abyssal Tome"
+    },
     "acridMiasma": {
       "hunter": "Resolve the hunter keyword on each enemy in play"
     },
     "aethericCurrentYuggoth": {
-      "exhaust": "Exhaust Enemy and move it",
-      "skip": "Do not exhaust enemy"
+      "exhaustEnemyAndMove": "Exhaust Enemy and move it",
+      "doNotExhaustEnemy": "Do not exhaust enemy"
     },
     "agathaCrane": {
       "cancel": "Cancel this token and draw another. If you do, draw 1 card",
@@ -99,6 +103,10 @@
       "putBackInjuryIntoPlayInYourThreatArea": "Put Back Injury into play in your threat area",
       "take1DamageAndShuffleItIntoYourDeck": "Take 1 damage and shuffle it into your deck"
     },
+    "baitAndSwitch": {
+      "evadeAndMove": "Evade. If you succeed and the enemy is non-Elite, evade the enemy and move it to a connecting location.",
+      "evadeAndSwitch": "Evade. Use only on a non-Elite enemy at a connecting location. If you succeed, evade that enemy and switch locations with it."
+    },
     "baseballBat2": {
       "returnToHand": "Return baseball Bat to your hand after this attack",
       "extraDamage": "This attack deals an additional +1 damage. Discard Baseball Bat after this attack"
@@ -131,7 +139,7 @@
       "exhaust": "Exhaust Blessed Blade (4) to add 1 {'{'}bless{'}'} token | Exhaust Blessed Blade (4) to add {count} {'{'}bless{'}'} tokens"
     },
     "blessedBlade4": {
-      "exhaustForBless": "Exhaust Blessed Blade (4) to add 1 {'{'}bless{'}'} token | Exhaust Blessed Blade (4) to add {'{'}count{'}'} {'{'}bless{'}'} tokens"
+      "exhaustForBless": "Exhaust Blessed Blade (4) to add 1 {'{'}bless{'}'} token | Exhaust Blessed Blade (4) to add {count} {'{'}bless{'}'} tokens"
     },
     "bloodRite": {
       "gainResource": "Gain Resource",
@@ -155,6 +163,9 @@
       "resolveBlessToken": "Resolve {'{'}bless{'}'} token",
       "resolveCurseToken": "Resolve {'{'}curse{'}'} token"
     },
+    "brokenBottle": {
+      "discardForDamage": "Discard to deal +1 damage"
+    },
     "buriedSecrets": {
       "takeHorror": "Take 2 horror to shuffle into your deck"
     },
@@ -173,6 +184,16 @@
       "seeker": "{'{'}seeker{'}'} card, discover 1 clue at your location",
       "mystic": "{'{'}mystic{'}'} card, heal 1 horror from any card",
       "survivor": "{'{'}survivor{'}'} card, heal 1 damage from any card"
+    },
+    "callForBackup2": {
+      "rogueOption": "{'{'}rogue{'}'} card, you may move to a connecting location",
+      "guardianOption": "{'{'}guardian{'}'} card, deal 1 damage to an enemy at your location",
+      "seekerOption": "{'{'}seeker{'}'} card, discover 1 clue at your location",
+      "mysticOption": "{'{'}mystic{'}'} card, heal 1 horror from any card",
+      "survivorOption": "{'{'}survivor{'}'} card, heal 1 damage from any card"
+    },
+    "callOfMadness": {
+      "shuffleTekelili": "Shuffle the top 3 cards of the Tekeli-li deck into your deck"
     },
     "carolynFern": {
       "doNotHeal": "Do not heal anything"
@@ -205,6 +226,10 @@
     "cookiesCustom32": {
       "fightWithABaseCombatSkillOf5": "Fight with a base {'{'}combat{'}'} skill of 5",
       "get2CombatForThisAttack": "Get +2 {'{'}combat{'}'} for this attack"
+    },
+    "corrosiveSlime": {
+      "devourResource": "Subject 8L-08 devours one of your resources",
+      "devourRandomCardFromHand": "Subject 8L-08 devours a random card from your hand"
     },
     "cosmicFlame": {
       "spendChargeForDamage": "Spend 1 charge to deal +1 damage"
@@ -268,12 +293,24 @@
     "delayTheInevitable": {
       "discard": "Discard Delay the Inevitable"
     },
+    "denyExistence": {
+      "cancelDiscardFromHand": "Cancel discarding cards from your hand",
+      "cancelLoseResources": "Cancel losing 1 resource | Cancel losing {count} resources",
+      "cancelLoseActions": "Cancel losing 1 action | Cancel losing {count} actions"
+    },
+    "denyExistence5": {
+      "drawInstead": "Draw that many cards instead of discarding",
+      "gainResourcesInstead": "Gain 1 resource instead | Gain {count} resources instead",
+      "gainActionsInstead": "Gain 1 action instead | Gain {count} actions instead",
+      "healDamageInstead": "Heal 1 damage instead | Heal {count} damage instead",
+      "healHorrorInstead": "Heal 1 horror instead | Heal {count} horror instead"
+    },
     "detectivesColt1911s": {
       "doNotMoveAnInsight": "Do not move an insight"
     },
     "devilFriendOrFoe2": {
-      "damageConcealedCard": "Damage concealed card",
-      "doNotDamageConcealedCard": "Do not damage concealed card"
+      "damageConcealed": "Damage concealed card",
+      "doNotDamageConcealed": "Do not damage concealed card"
     },
     "dexterDrake": {
       "skip": "Do no return an asset"
@@ -304,6 +341,9 @@
     "doppelganger1": {
       "moveToLocationOfDoppelganger": "Move to location of doppelganger",
       "evadeEnemy": "Evade enemy"
+    },
+    "doubleDown2": {
+      "spendResources": "Spend resources on Double Down"
     },
     "dowsingRod": {
       "exhaustForBoost": "Exhaust Dowsing Rod and place 1 doom on it to move to a connecting location.",
@@ -349,6 +389,14 @@
     "emergencyCache": {
       "takeResource": "Take Resource",
       "addSupply": "Add Supply"
+    },
+    "empiricalHypothesis": {
+      "failBy2": "You fail a test by 2 or more.",
+      "succeedBy3": "You succeed at a test by 3 or more.",
+      "runOutOfCards": "You run out of cards in your hand.",
+      "dealtDamageOrHorror": "You are dealt damage or horror.",
+      "discardTreacheryOrEnemy": "You discard a treachery or enemy from play.",
+      "enterLocationWithShroud3": "You enter a location with 3 or more shroud."
     },
     "encephalonSignal": {
       "damage": "Deal 2 damage to an investigator or Humanoid enemy at your location"
@@ -455,6 +503,9 @@
       "moveAnEnemy": "Move an enemy from a connecting location to your location",
       "moveAnEnemy2": "Move an enemy from your location to a connecting location"
     },
+    "georgeBarnaby": {
+      "donePlacingCards": "Done placing cards underneath George Barnaby"
+    },
     "ghastlyPossession": {
       "placeDoom": "Place 1 doom on that asset. Ghastly Posession gains {'{'}wild{'}'}{'{'}wild{'}'}",
       "ifSuccess": "If this test is successful, either remove 1 doom from that asset, or replenish half of its uses (rounded down)",
@@ -534,7 +585,7 @@
       "shuffleItInto": "Shuffle it into your deck instead of discarding it"
     },
     "handCrankFlashlight": {
-      "discardForDamage": "Discard to deal give your location -1 shroud until the end of the round"
+      "discardForShroud": "Discard to deal give your location -1 shroud until the end of the round"
     },
     "handHook": {
       "discardForDamage": "Discard 1 card from your hand to deal +1 damage"
@@ -582,6 +633,10 @@
       "discardIcePick3": "Discard Ice Pick (3) to discover 1 additional clue at your location",
       "discardIcePick3ToDo1Damage": "Discard Ice Pick (3) to do +1 damage"
     },
+    "icebreakerLanding": {
+      "removeFrost": "Remove 1 {'{'}frost{'}'} token from the chaos bag",
+      "recordSmallRadio": "Record Small Radio in the \"Supplies Recovered\" section of the Campaign Log"
+    },
     "idolOfXanatosWatcherBeyondTime": {
       "cancel1Damage": "Cancel 1 damage",
       "cancel1Horror": "Cancel 1 horror"
@@ -609,8 +664,8 @@
       "take2Resources": "Take 2 Resources"
     },
     "joeDiamond": {
-      "chooseHunchCards": "Choose 10 more cards for hunch deck",
-      "chooseHunch": "Choose 10 more cards for hunch deck",
+      "chooseHunchCards": "Set aside 11 _Insight_ events to form your hunch deck. _Unsolved Case_ is already in it.",
+      "chooseHunch": "Set aside 11 _Insight_ events to form your hunch deck. _Unsolved Case_ is already in it.",
       "doNotMove": "Do not move an insight"
     },
     "katana": {
@@ -633,7 +688,7 @@
     "kohakuNarukami": {
       "addBless": "Add 1 {'{'}bless{'}'} token",
       "addCurse": "Add 1 {'{'}curse{'}'} token",
-      "removeAction": "Remove 2 {'{'}bless{'}'} tokens and 2 {'{'}curse{'}'} tokens from the chaos bag to take an additional action this turn"
+      "removeAction": "<span>Remove 2 {'{'}bless{'}'} tokens and 2 {'{'}curse{'}'} tokens from the chaos bag to take an additional action this turn</span>"
     },
     "kukri": {
       "spendActionForDamage": "Spend 1 action to deal +1 damage",
@@ -656,10 +711,17 @@
       "remove1Charge": "Remove 1 charge"
     },
     "localMap": {
-      "exhaust": "Exhaust Local Map and move to the investigated location"
+      "exhaustAndMove": "Exhaust Local Map and move to the investigated location"
     },
     "logicalReasoning": {
       "discardTerror": "Discard a Terror"
+    },
+    "ltWilsonStewart": {
+      "healDamage": "Heal 1 damage from Lt. Wilson Stewart",
+      "healHorror": "Heal 1 horror from Lt. Wilson Stewart",
+      "plus1SkillValue": "You get +1 skill value for your next skill test",
+      "drawCard": "Draw 1 card",
+      "gainResource": "Gain 1 resource"
     },
     "luckyCharm": {
       "move1Damage": "Move 1 damage",
@@ -680,6 +742,10 @@
     "mandyThompson": {
       "additionalCards": "Search 3 additional cards",
       "additionalTargets": "Resolve 1 additional target of the search"
+    },
+    "manifestationsOfEvil": {
+      "addFrost": "Add 1 {'{'}frost{'}'} token to the chaos bag",
+      "shuffleTekelili": "In player order, each investigator shuffles the top 2 cards of the Tekeli-li deck into their deck"
     },
     "manipulateDestiny": {
       "damage": "Deal 2 damage to an enemy at your location",
@@ -721,6 +787,10 @@
     "memoriesOfAnotherLife5": {
       "removeFromGame": "Remove Memories of Another Life from the game",
       "doNotRemove": "Do not remove Memories of Another Life"
+    },
+    "miasmaticTorment": {
+      "damage": "Attached asset takes 1 damage",
+      "horror": "Attached asset takes 1 horror"
     },
     "michaelMcGlen": {
       "doNotAdd": "Do not add any ammo"
@@ -780,6 +850,10 @@
       "moveTowards": "Move twice towards the enemy",
       "discoverBetween": "Discover 1 clue at any empty location between you and the chosen enemy"
     },
+    "onTheTrail1": {
+      "moveTwiceTowardsEnemy": "Move twice towards the enemy",
+      "discoverClueBetween": "Discover 1 clue at any empty location between you and the chosen enemy"
+    },
     "onTheirHeels5": {
       "discoverAClueAtYourLocation": "Discover a clue at your location"
     },
@@ -804,6 +878,9 @@
     },
     "outerFieldsDesolateHills": {
       "doneDiscarding": "Done discarding"
+    },
+    "parlorHemlockHouse": {
+      "testForAdditionalDamage": "Test {'{'}intellect{'}'} (4) for 1 additional damage"
     },
     "patriceHathaway": {
       "shuffleDiscardKeepOne": "Shuffle all but 1 card from your discard pile into your deck",
@@ -967,9 +1044,8 @@
       "returnToHand": "Return Sea Change Harpoon to your hand to return all of your committed skill cards to your hand instead of discarding them"
     },
     "searchForTheTruthAdvanced": {
-      "draw": "Draw 1 Card",
-      "place": "Place that clue on your location and return any card from your discard pile to your hand",
-      "skip": "Do nothing (finishes this card)"
+      "placeClueAndReturnCard": "Place that clue on your location and return any card from your discard pile to your hand",
+      "doNothingFinish": "Do nothing (finishes this card)"
     },
     "secondSight": {
       "spendChargeForClue": "Spend 1 charge to discover 1 additional clue"
@@ -1029,11 +1105,15 @@
       "useOriginalLocationsShroud": "Use original locations shroud"
     },
     "sledgehammer3": {
-      "exhaustSledgehammer": "Exhaust Sledgehammer"
+      "exhaustForDamage": "Exhaust Sledgehammer"
     },
     "smuggledGoods": {
       "deck": "Search deck",
       "discard": "Search discard"
+    },
+    "songOfTheMagahBird": {
+      "resistTheCall": "Resist the call",
+      "driveAwayTheBirds": "Drive away the birds"
     },
     "spiritSpeaker": {
       "moveChargesToResources": "Move all charges to your resource pool",
@@ -1052,6 +1132,7 @@
       "fail": "Automatically fail this skill test to heal 1 damage and 1 horror"
     },
     "stickToThePlan3": {
+      "chooseCards": "Set aside up to 3 _Tactic_ or _Supply_ events from your deck.",
       "chooseNoMoreEvents": "Choose no more events"
     },
     "stormRuler": {
@@ -1060,6 +1141,10 @@
     "stouthearted": {
       "done": "Done moving damage/horror",
       "doneMovingDamageHorror": "Done moving damage/horror"
+    },
+    "stringOfCurses": {
+      "evadeAndPlaceDoom": "Automatically evade that enemy and place 1 doom on it. It cannot take damage for the remainder of the round. Discover 1 clue at your location.",
+      "defeatForResources": "If that enemy has 1 or more doom on it, defeat it. Gain 1 resource for each doom that was on it."
     },
     "strokeOfLuck": {
       "exile": "Exile Stroke of Luck to automatically succeed",
@@ -1087,9 +1172,9 @@
       "doneCanceling": "Done canceling"
     },
     "taskForce": {
-      "ability": "...resolve an {'{'}action{'}'} ability on an asset they control without paying its {'{'}action{'}'} cost.",
-      "move": "...move to a connecting location.",
-      "discover": "...discover 1 clue at their location"
+      "resolveAbilityNoCost": "...resolve an {'{'}action{'}'} ability on an asset they control without paying its {'{'}action{'}'} cost.",
+      "moveToConnecting": "...move to a connecting location.",
+      "discoverClueAtTheirLocation": "...discover 1 clue at their location"
     },
     "teachingsOfTheOrder": {
       "defeatANon_elite_EnemyAtYourLocation": "Defeat a non-_Elite_ enemy at your location.",
@@ -1160,8 +1245,19 @@
       "useAgility": "Use {'{'}agility{'}'}",
       "useIntellect": "Use {'{'}intellect{'}'}"
     },
+    "throughTheCracks": {
+      "disengage": "Disengage from each enemy engaged with you.",
+      "move": "Move to a revealed connecting location.",
+      "disengageAndMove": "Disengage from each enemy engaged with you and move to a revealed connecting location."
+    },
+    "throughTheCracks2": {
+      "disengage": "Disengage from each enemy engaged with you.",
+      "move": "Move to a revealed connecting location.",
+      "disengageAndMove": "Disengage from each enemy engaged with you and move to a revealed connecting location."
+    },
     "throwTheBookAtThem": {
-      "afterAttack": "After the attack ends, you may resolve an {'{'}action{'}'} or {'{'}fast{'}'} ability on the chosen asset (ignoring its {'{'}action{'}'} cost, if any)"
+      "automaticallyEvade": "Automatically evade the attacked enemy",
+      "resolveAbilityOnTome": "After the attack ends, you may resolve an {'{'}action{'}'} or {'{'}fast{'}'} ability on the chosen asset (ignoring its {'{'}action{'}'} cost, if any)"
     },
     "tinker": {
       "hand": "Hand",
@@ -1198,18 +1294,23 @@
       "doNotChooseLocation": "Do not choose a different location"
     },
     "trustyBullwhipAdvanced": {
-      "deal1DamageFor": "Deal + 1 damage for this attack and Automatically evade the enemy"
+      "dealDamageAndEvade": "Deal +1 damage for this attack and Automatically evade the enemy"
     },
     "twentyOneOrBust": {
       "stopWith": "Stop with {total}",
       "continue": "Continue"
     },
     "underworldMarket2": {
+      "chooseMarketDeck": "Set aside 10 _Illicit_ cards from your deck to form your market deck.",
       "placeTheRestOnTheBottomInAnyOrder": "Place the rest on the bottom, in any order",
       "spend1ResourceToDraw1OfThem": "Spend 1 resource to draw 1 of them"
     },
     "unrelenting1": {
       "doneSealingTokens": "Done sealing tokens"
+    },
+    "untimelyTransaction1": {
+      "noOnePays": "No one pays",
+      "playCard": "Play Card"
     },
     "virgilGray": {
       "heal1HorrorFromVirgilGray": "Heal 1 horror from Virgil Gray"
@@ -1241,17 +1342,21 @@
     },
     "zeal": {
       "putIntoPlayFromDiscard": "Put into play from discard"
+    }
+  },
+  "title": {
+    "joeDiamond": {
+      "chooseHunchCards": "Hunch Deck",
+      "chooseHunch": "Hunch Deck"
     },
-    "corrosiveSlime": {
-      "devourResource": "Subject 8L-08 devours one of your resources",
-      "devourRandomCardFromHand": "Subject 8L-08 devours a random card from your hand"
+    "stickToThePlan3": {
+      "chooseCards": "Stick to the Plan"
+    },
+    "underworldMarket2": {
+      "chooseMarketDeck": "Market Deck"
     }
   },
   "tooltips": {
-    "aethericCurrentYuggoth": {
-      "exhaustEnemyAndMove": "Exhaust Enemy and move it",
-      "doNotExhaustEnemy": "Do not exhaust enemy"
-    },
     "agencyBackup5": {
       "fastExhaustAgency": "{'{'}fast{'}'} Exhaust Agency Backup and deal 1 damage to it: Deal 1 damage to an enemy at your location.",
       "fastExhaustAgency2": "{'{'}fast{'}'} Exhaust Agency Backup and deal 1 horror to it: Discover 1 clue at your location."
@@ -1277,19 +1382,9 @@
       "fastAdd1Doom": "{'{'}fast{'}'} Add 1 doom to Blood Pact: You get +3 {'{'}combat{'}'} for this skill test. (Limit once per test.)",
       "fastAdd1Doom2": "{'{'}fast{'}'} Add 1 doom to Blood Pact: You get +3 {'{'}willpower{'}'} for this skill test. (Limit once per test.)"
     },
-    "brokenBottle": {
-      "discardForDamage": "Discard to deal +1 damage"
-    },
     "butterflySwords5": {
       "doNotExhaust": "Do not exhaust",
       "exhaustForDamage": "Exhaust to do +1 damage"
-    },
-    "callForBackup2": {
-      "rogueOption": "{'{'}rogue{'}'} card, you may move to a connecting location",
-      "guardianOption": "{'{'}guardian{'}'} card, deal 1 damage to an enemy at your location",
-      "seekerOption": "{'{'}seeker{'}'} card, discover 1 clue at your location",
-      "mysticOption": "{'{'}mystic{'}'} card, heal 1 horror from any card",
-      "survivorOption": "{'{'}survivor{'}'} card, heal 1 damage from any card"
     },
     "combatTraining1": {
       "spendForCombat": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}combat{'}'} for this skill test.",
@@ -1315,10 +1410,6 @@
     "decoy": {
       "twoEnemies": "{'{'}reaction{'}'}  When you play Decoy, increase its cost by 2: Change \"a non-Elite enemy\" to \"up to 2 non-Elite enemies.\"",
       "twoConnections": "{'{'}reaction{'}'} When you play Decoy, increase its cost by 2: Change \"at your location\" to \"at a location up to 2 connections away.\""
-    },
-    "devilFriendOrFoe2": {
-      "damageConcealed": "Damage concealed card",
-      "doNotDamageConcealed": "Do not damage concealed card"
     },
     "digDeep": {
       "fastSpend1Resource": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}agility{'}'} for this skill test.",
@@ -1346,9 +1437,6 @@
     "endurance3": {
       "fastSpend1Resource": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}agility{'}'} for this skill test. (+2 {'{'}agility{'}'} instead if this is an attack or evasion).",
       "fastSpend1Resource2": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}combat{'}'} for this skill test. (+2 {'{'}combat{'}'} instead if this is an attack or evasion)."
-    },
-    "handCrankFlashlight": {
-      "discardForShroud": "Discard to deal give your location -1 shroud until the end of the round"
     },
     "hardKnocks": {
       "fastSpend1Resource": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}agility{'}'} for this skill test.",
@@ -1409,9 +1497,6 @@
       "fastExhaustLivre": "{'{'}fast{'}'} Exhaust Livre d'Eibon: Commit the top card of your deck to an eligible skill test performed by an investigator at your location.",
       "fastExhaustLivre2": "{'{'}fast{'}'} Exhaust Livre d'Eibon: Swap the top card of your deck with a card in your hand."
     },
-    "localMap": {
-      "exhaustAndMove": "Exhaust Local Map and move to the investigated location"
-    },
     "longbow3": {
       "youNockAnotherArrow": "You nock another arrow"
     },
@@ -1425,16 +1510,16 @@
       "fastSpend1Resource": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}agility{'}'} for this skill test.",
       "fastSpend1Resource2": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}willpower{'}'} for this skill test."
     },
+    "obsidianClaw": {
+      "move": "{'{'}fast{'}'} During your turn, exhaust this card and choose a location up to 2 connections away: Move to the chosen location.",
+      "flip": "{'{'}fast{'}'} Flip this card. (Max once per round.)"
+    },
     "oldCompass": {
       "exhaustToRepeat": "Exhaust Old Compass"
     },
     "oldHuntingRifle3": {
       "clearJam": "You clear the jam.",
       "youClearTheJam": "You clear the jam."
-    },
-    "onTheTrail1": {
-      "moveTwiceTowardsEnemy": "Move twice towards the enemy",
-      "discoverClueBetween": "Discover 1 clue at any empty location between you and the chosen enemy"
     },
     "ornateBow3": {
       "nockArrow": "You nock another arrow",
@@ -1513,9 +1598,6 @@
       "fastSpend1Resource": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}agility{'}'} for this skill test. (+2 {'{'}agility{'}'} instead if this is an evasion or parley).",
       "fastSpend1Resource2": "{'{'}fast{'}'} Spend 1 resource: You get +1 {'{'}intellect{'}'} for this skill test. (+2 {'{'}intellect{'}'} instead if this is an evasion or parley)."
     },
-    "sledgehammer3": {
-      "exhaustForDamage": "Exhaust Sledgehammer"
-    },
     "smallRadio": {
       "partner": "{name}"
     },
@@ -1541,11 +1623,6 @@
     "streetwise3": {
       "fastSpend2Resources": "{'{'}fast{'}'} Spend 2 resources: You get +3 {'{'}agility{'}'} for this skill test.",
       "fastSpend2Resources2": "{'{'}fast{'}'} Spend 2 resources: You get +3 {'{'}intellect{'}'} for this skill test."
-    },
-    "taskForce": {
-      "resolveAbilityNoCost": "...resolve an {'{'}action{'}'} ability on an asset they control without paying its {'{'}action{'}'} cost.",
-      "moveToConnecting": "...move to a connecting location.",
-      "discoverClueAtTheirLocation": "...discover 1 clue at their location"
     },
     "theKeyOfSolomonSecretsOfTheUnknown4": {
       "ifThereAre": "If there are more {'{'}bless{'}'} than {'{'}curse{'}'} tokens in the chaos bag, remove 1 {'{'}bless{'}'} token from the chaos bag and exhaust The Key of Solomon: Heal up to 2 damage and/or horror from an investigator or _Ally_ asset at your location.",
@@ -1579,10 +1656,6 @@
       "ifYouAre": "If you are this vehicle's driver: Draw the top card of the encounter deck. Then, move this vehicle to a connecting _Road_ location. (Max once per round.)",
       "ifYouAre2": "If you are this vehicle's driver: You stop the car. Flip this vehicle over."
     },
-    "throwTheBookAtThem": {
-      "automaticallyEvade": "Automatically evade the attacked enemy",
-      "resolveAbilityOnTome": "After the attack ends, you may resolve an {'{'}action{'}'} or {'{'}fast{'}'} ability on the chosen asset (ignoring its {'{'}action{'}'} cost, if any)"
-    },
     "timewornBrand5": {
       "actionExhaustTimeworn": "{'{'}action{'}'} Exhaust Timeworn Brand: _Fight_. Add your {'{'}willpower{'}'} to your skill value for this attack. This attack deals +3 damage. If this attack defeats an _Elite_ enemy, draw 3 cards. (Max once per game.)",
       "actionIfTimeworn": "{'{'}action{'}'} If Timeworn Brand is ready: _Fight_. You get +2 {'{'}combat{'}'} and deal +1 damage for this attack."
@@ -1598,20 +1671,13 @@
     "trueMagickReworkingReality5": {
       "useTrueMagick": "Use True Magick"
     },
-    "trustyBullwhipAdvanced": {
-      "dealDamageAndEvade": "Deal +1 damage for this attack and Automatically evade the enemy"
-    },
-    "untimelyTransaction1": {
-      "noOnePays": "No one pays",
-      "playCard": "Play Card"
-    },
     "winchesterModel522": {
       "actionDiscardWinchester": "{'{'}action{'}'}: Discard Winchester Model 52: _Fight ({'{'}combat{'}'})_. You get +3 {'{'}combat{'}'} for this attack. If you succeed, automatically evade the targeted enemy.",
       "actionSpend1Ammo": "{'{'}action{'}'}: Spend 1 ammo: _Fight ({'{'}combat{'}'})_. You get +3 {'{'}combat{'}'} and deal +1 damage for this attack."
     },
     "yaotl1": {
       "fastDiscardThe": "{'{'}fast{'}'}: Discard the top card of your deck. (Limit once per phase.)",
-      "fastExhaustYaotl": "{'{'}fast{'}'} Exhaust Yaotl: During this skill test, you get a bonus to each skill equal to the number of matching skill icons on the top card of your discard pile (not counting {'{'}skillWild{'}'} icons)."
+      "fastExhaustYaotl": "{'{'}fast{'}'} Exhaust Yaotl: During this skill test, you get a bonus to each skill equal to the number of matching skill icons on the top card of your discard pile (not counting {'{'}wild{'}'} icons)."
     }
   }
 }

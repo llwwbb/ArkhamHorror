@@ -33,6 +33,8 @@ describe('dbCards store', () => {
         : [card('01001', 'Roland Banks', 'English text')]
 
       return {
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
         json: async () => cards,
       } as Response
     })
@@ -51,6 +53,8 @@ describe('dbCards store', () => {
   it('reuses current card data for English alternate descriptions when language is English', async () => {
     localStorage.setItem('language', 'en')
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => [card('01001', 'Roland Banks', 'English text')],
     } as Response)
 

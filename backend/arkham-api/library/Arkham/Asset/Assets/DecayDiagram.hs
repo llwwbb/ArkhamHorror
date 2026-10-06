@@ -4,12 +4,11 @@ import Arkham.Ability
 import Arkham.Asset.Cards qualified as Cards
 import Arkham.Asset.Import.Lifted
 import Arkham.Investigator.Types (Field (..))
-import Arkham.Location.Cards qualified as Locations
+import Arkham.Location.CardDefs.TheLabyrinthsOfLunacy qualified as Locations
 import Arkham.Matcher
 import Arkham.Matcher qualified as Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Projection
-import Arkham.Scenarios.TheLabyrinthsOfLunacy.Helpers (scenarioI18n)
 
 newtype DecayDiagram = DecayDiagram AssetAttrs
   deriving anyclass (IsAsset, HasModifiersFor)

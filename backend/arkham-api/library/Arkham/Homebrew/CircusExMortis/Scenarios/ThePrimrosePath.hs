@@ -1,21 +1,20 @@
 module Arkham.Homebrew.CircusExMortis.Scenarios.ThePrimrosePath (thePrimrosePath) where
 
-import Arkham.Homebrew.CircusExMortis.CardDefs.Acts qualified as Acts
-import Arkham.Homebrew.CircusExMortis.Tokens (pattern MoonToken)
-import Arkham.Homebrew.CircusExMortis.CardDefs.Agendas qualified as Agendas
-import Arkham.Homebrew.CircusExMortis.Helpers
-import Arkham.Homebrew.CircusExMortis.Key
 import Arkham.Card.CardDef
 import Arkham.ChaosBag.Base (ChaosBag (..))
 import Arkham.ChaosToken
-import Arkham.Homebrew.CircusExMortis.Sets qualified as Set
-import Arkham.Homebrew.CircusExMortis.CardDefs.Enemies qualified as Enemies
 import Arkham.Helpers.ChaosBag (getChaosBag)
 import Arkham.Helpers.ChaosToken (getModifiedChaosTokenFaces)
 import Arkham.Helpers.FlavorText
-import Arkham.Helpers.Location (connectBothWays)
 import Arkham.Helpers.SkillTest (getSkillTestRevealedChaosTokens)
+import Arkham.Homebrew.CircusExMortis.CardDefs.Acts qualified as Acts
+import Arkham.Homebrew.CircusExMortis.CardDefs.Agendas qualified as Agendas
+import Arkham.Homebrew.CircusExMortis.CardDefs.Enemies qualified as Enemies
 import Arkham.Homebrew.CircusExMortis.CardDefs.Locations qualified as Locations
+import Arkham.Homebrew.CircusExMortis.Helpers
+import Arkham.Homebrew.CircusExMortis.Key
+import Arkham.Homebrew.CircusExMortis.Sets qualified as Set
+import Arkham.Homebrew.CircusExMortis.Tokens (pattern MoonToken)
 import Arkham.Location.Grid (Pos (..))
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
@@ -30,9 +29,6 @@ newtype ThePrimrosePath = ThePrimrosePath ScenarioAttrs
 thePrimrosePath :: Difficulty -> ThePrimrosePath
 thePrimrosePath difficulty =
   scenario ThePrimrosePath ":circus-ex-mortis:017" "The Primrose Path" difficulty []
-
-scenarioI18n :: (HasI18n => a) -> a
-scenarioI18n a = campaignI18n $ scope "thePrimrosePath" a
 
 -- Moonlit Forest variants carrying the red-cross (Victory) symbol; two of these
 -- four are removed from the game at random during setup (guide p6).
@@ -56,8 +52,13 @@ otherForests =
 
 -- Grid positions for the eight Moonlit Forest copies (guide p7 layout):
 --   top row (y=1), middle sides (y=0), bottom row (y=-1). Forest Passage is the
---   center start (0,0); Remote Cabin far left (-2,0); Woodland Overlook far
---   right (2,0); Circus Encampment at the top (0,2).
+--   center start (0,0), the Cabin and Overlook sit on the far sides (x=±2), and
+--   Circus Encampment is at the top (0,2).
+--
+-- The grid is layout only, plus the agenda front's "adjacent copies of Moonlit
+-- Forest are connected to each other" (see 'adjacentMoonlitForestConnection').
+-- Every other connection in this scenario comes from the printed connection
+-- symbols on the location cards.
 forestPositions :: [Pos]
 forestPositions =
   [ Pos (-1) 1
@@ -91,18 +92,18 @@ instance HasChaosTokenValue ThePrimrosePath where
     otherFace -> getChaosTokenValue iid otherFace attrs
 
 instance RunMessage ThePrimrosePath where
-  runMessage msg s@(ThePrimrosePath attrs) = runQueueT $ scenarioI18n $ case msg of
+  runMessage msg s@(ThePrimrosePath attrs) = runQueueT $ scenarioI18n "thePrimrosePath" $ case msg of
     PreScenarioSetup -> scope "intro" do
       bag <- getChaosBag
-      let moonInBag = any ((== MoonToken) . (.face)) bag.chaosBagChaosTokens
-          tabletInBag = any ((== Tablet) . (.face)) bag.chaosBagChaosTokens
-      storyWithChooseOneM' (setTitle "title" >> p "body") do
-        labeled' "useMoonlight" $ when moonInBag do
-          removeChaosToken MoonToken
-          addChaosToken Tablet
-        labeled' "shadows" $ when tabletInBag do
+      let tabletInBag = any ((== Tablet) . (.face)) bag.chaosBagChaosTokens
+          cultistInBag = any ((== Cultist) . (.face)) bag.chaosBagChaosTokens
+      storyWithChooseOneM (h "title" >> p "body") do
+        labeled "useMoonlight" $ when tabletInBag do
           removeChaosToken Tablet
-          addChaosToken MoonToken
+          addChaosToken Cultist
+        labeled "shadows" $ when cultistInBag do
+          removeChaosToken Cultist
+          addChaosToken Tablet
       pure s
     Setup -> runScenarioSetup ThePrimrosePath attrs do
       gather Set.ThePrimrosePath
@@ -118,35 +119,18 @@ instance RunMessage ThePrimrosePath where
       (removed, kept) <- splitAt 2 <$> shuffle victoryForests
       removeEvery removed
       forestDefs <- shuffle (kept <> otherForests)
-      forestIds <- for (zip forestPositions forestDefs) \(pos, def) -> do
-        lid <- placeInGrid pos def
-        pure (pos, lid)
+      for_ (zip forestPositions forestDefs) (uncurry placeInGrid_)
 
       forestPassage <- placeInGrid (Pos 0 0) Locations.forestPassage
-      remoteCabin <- placeInGrid (Pos (-2) 0) Locations.remoteCabin
-      woodlandOverlook <- placeInGrid (Pos 2 0) Locations.woodlandOverlook
-      circusEncampment <- placeInGrid (Pos 0 2) Locations.circusEncampment
-      startAt forestPassage
+      placeInGrid_ (Pos 2 0) Locations.remoteCabin
+      placeInGrid_ (Pos (-2) 0) Locations.woodlandOverlook
+      placeInGrid_ (Pos 0 2) Locations.circusEncampment
 
-      -- Remote Cabin connects to the three rightmost (x=1) Moonlit Forests,
-      -- Woodland Overlook to the three leftmost (x=-1), and Circus Encampment to
-      -- the three top-row (y=1) copies (guide p7 + location text).
-      let rightmost = [lid | (Pos x _, lid) <- forestIds, x == 1]
-          leftmost = [lid | (Pos x _, lid) <- forestIds, x == -1]
-          topRow = [lid | (Pos _ y, lid) <- forestIds, y == 1]
-      for_ rightmost (connectBothWays remoteCabin)
-      for_ leftmost (connectBothWays woodlandOverlook)
-      for_ topRow (connectBothWays circusEncampment)
+      startAt forestPassage
 
       setAgendaDeck [Agendas.savageNature, Agendas.bloodMoon]
       setActDeck [Acts.forestOfIllusion]
       placeDoomOnAgenda 1
-    -- Moon token revealed during a skill test: seal it on the revealer's
-    -- investigator card and reveal another token (campaign guide p1).
-    ResolveChaosToken token MoonToken iid -> do
-      sealChaosToken iid iid token
-      drawAnotherChaosToken iid
-      pure s
     ResolveChaosToken _ Cultist iid -> do
       moons <- getSealedMoonTokens iid
       when (null moons) $ loseActions iid ScenarioSource 1

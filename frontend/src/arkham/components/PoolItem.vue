@@ -19,6 +19,7 @@ const tokenImages: Record<string, string> = {
   sanity: 'horror.png',
   card: 'backs/back_encounter.jpg',
   player_card: 'backs/back_player.jpg',
+  artifact_card: 'backs/back_artifact.jpg',
 }
 
 const image = computed(() => {
@@ -131,6 +132,36 @@ const image = computed(() => {
       drop-shadow(-1px 0 0 var(--select))
       drop-shadow(0 1px 0 var(--select))
       drop-shadow(0 -1px 0 var(--select));
+    animation: token-attention-pulse 0.9s ease-in-out infinite alternate;
+  }
+}
+
+/* Pending damage/horror assignments block the turn, so their tokens tick
+   between the base outline and a brighter, slightly enlarged glow. */
+@keyframes token-attention-pulse {
+  from {
+    filter:
+      drop-shadow(1px 0 0 var(--select))
+      drop-shadow(-1px 0 0 var(--select))
+      drop-shadow(0 1px 0 var(--select))
+      drop-shadow(0 -1px 0 var(--select));
+    transform: scale(1);
+  }
+  to {
+    filter:
+      drop-shadow(1px 0 0 var(--select))
+      drop-shadow(-1px 0 0 var(--select))
+      drop-shadow(0 1px 0 var(--select))
+      drop-shadow(0 -1px 0 var(--select))
+      drop-shadow(0 0 5px var(--select))
+      brightness(1.35);
+    transform: scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .health--can-interact img, .sanity--can-interact img {
+    animation: none;
   }
 }
 </style>

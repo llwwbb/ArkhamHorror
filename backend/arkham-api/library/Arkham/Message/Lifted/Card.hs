@@ -2,7 +2,6 @@
 
 module Arkham.Message.Lifted.Card where
 
-
 import Arkham.Helpers.FetchCard as X
 
 import Arkham.Ability
@@ -50,7 +49,7 @@ import Arkham.Evade qualified as Evade
 import Arkham.Exhaust qualified as Exhaust
 import Arkham.Fight
 import Arkham.Fight qualified as Fight
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers
 import Arkham.Helpers.Act
 import Arkham.Helpers.Agenda
@@ -91,8 +90,8 @@ import Arkham.Location.Types (Field (..), Location)
 import Arkham.Matcher hiding (PerformAction)
 import Arkham.Message hiding (story)
 import Arkham.Message as X (AndThen (..), getChoiceAmount, optionWhenExists, preOriginalOption)
-import Arkham.Message.Lifted.Queue as X
 import Arkham.Message.Lifted.Base
+import Arkham.Message.Lifted.Queue as X
 import Arkham.Modifier
 import Arkham.Name
 import Arkham.Phase (Phase)
@@ -111,7 +110,6 @@ import Arkham.Source
 import Arkham.Spawn
 import Arkham.Target
 import Arkham.Token
-import Arkham.Tracing
 import Arkham.Trait (Trait)
 import Arkham.Window (Window (..), WindowType, defaultWindows)
 import Arkham.Window qualified as Window
@@ -243,7 +241,8 @@ changeDrawnBy drawer newDrawer =
     Window.DrawCard who _ _ -> who == drawer
     _ -> False
   changeWindow = \case
-    Window.Window t (Window.DrawCard who c f) batchId | who == drawer -> Window.Window t (Window.DrawCard newDrawer c f) batchId
+    w@(Window.windowType -> Window.DrawCard who c f)
+      | who == drawer -> w {Window.windowType = Window.DrawCard newDrawer c f}
     other -> other
 
 attach :: (HasQueue Message m, Attachable a, Targetable target) => a -> target -> m ()
@@ -274,7 +273,7 @@ drawCardFrom iid deck (toCard -> card) = do
   obtainCard $ toCard card
   case card of
     EncounterCard ec -> push $ InvestigatorDrewEncounterCardFrom iid ec (Just $ toDeck deck)
-    PlayerCard pc -> push $ InvestigatorDrewPlayerCardFrom iid pc (Just $ toDeck deck)
+    PlayerCard pc -> push $ InvestigatorDrewPlayerCardFrom iid pc (Just $ toDeck deck) Nothing
     VengeanceCard vc -> Arkham.Message.Lifted.Card.drawCardFrom iid deck vc
 
 drawCard :: (ReverseQueue m, FetchCard card) => InvestigatorId -> card -> m ()
@@ -283,7 +282,7 @@ drawCard iid card = do
   obtainCard c
   case c of
     EncounterCard ec -> push $ InvestigatorDrewEncounterCard iid ec
-    PlayerCard pc -> push $ InvestigatorDrewPlayerCardFrom iid pc Nothing
+    PlayerCard pc -> push $ InvestigatorDrewPlayerCardFrom iid pc Nothing Nothing
     VengeanceCard vc -> Arkham.Message.Lifted.Card.drawCard iid vc
 
 discard :: (IsCard card, ReverseQueue m) => card -> m ()

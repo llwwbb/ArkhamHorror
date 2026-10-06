@@ -2,8 +2,9 @@
 import { computed, ComputedRef } from 'vue';
 import { useDebug } from '@/arkham/debug';
 import type { Card } from '@/arkham/types/Card';
-import { cardImage } from '@/arkham/types/Card';
+import { cardImage, toCardContents } from '@/arkham/types/Card';
 import { imgsrc } from '@/arkham/helpers';
+import { homebrewScenarioDeckDisplay } from '@/arkham/homebrewAssets';
 import { investigatorPortrait as portraitFor } from '@/arkham/cardImages';
 import { MessageType } from '@/arkham/types/Message'
 import * as ArkhamGame from '@/arkham/types/Game'
@@ -54,8 +55,18 @@ const revealedCards = computed(() => props.deck[1].map(card => {
   return card
 }))
 const showCards = () => emits('show', revealedCards, props.deck[0], false)
+const homebrewDisplay = computed(() => homebrewScenarioDeckDisplay(props.deck[0]))
 
 const deckImage = computed(() => {
+  if (homebrewDisplay.value?.image === 'top-card-back') {
+    const topCard = props.deck[1][0]
+    if (topCard) {
+      const contents = toCardContents(topCard)
+      return imgsrc(cardImage({ ...contents, isFlipped: true, facedown: false }))
+    }
+    return imgsrc("backs/back_encounter.jpg")
+  }
+
   switch(props.deck[0]) {
     case 'UnknownPlacesDeck':
       return imgsrc("cards/05134b.avif");
@@ -84,6 +95,18 @@ const deckImage = computed(() => {
       return imgsrc("backs/back_the_longest_night.jpg");
     case 'AbyssDeck':
       return imgsrc("cards/10670b.avif");
+    case 'CthulhuDeck':
+      return imgsrc("backs/back_cthulhu_deck.jpg");
+    case 'SummitDeck': {
+      // Summit locations and Open Sky have different backs. Show the actual
+      // top card facedown so returned Open Sky cards are visible on the deck.
+      const topCard = props.deck[1][0]
+      if (topCard) {
+        const contents = toCardContents(topCard)
+        return imgsrc(cardImage({ ...contents, isFlipped: true, facedown: false }))
+      }
+      return imgsrc("cards/11649b.avif")
+    }
     default:
       return imgsrc("backs/back_encounter.jpg");
   }
@@ -109,6 +132,8 @@ const deckLabel = computed(() => {
       return "Monsters"
     case 'LeadsDeck':
       return "Leads"
+    case 'SummitDeck':
+      return "Summit"
     default:
       return null
   }
@@ -116,11 +141,16 @@ const deckLabel = computed(() => {
 </script>
 
 <template>
-  <div class="scenario-deck-area">
+  <div class="scenario-deck-area" :class="homebrewDisplay?.className">
     <div v-if="topOfDiscard" class="discard-card">
       <img :src="topOfDiscardImage ?? undefined" class="card" />
       <span class="deck-size">{{ discardPile!.length }}</span>
     </div>
+    <div
+      v-else-if="deck[0] === 'CthulhuDeck'"
+      class="discard-card discard-placeholder"
+      aria-hidden="true"
+    ></div>
     <div class="deck">
       <img
         :src="deckImage"
@@ -155,6 +185,10 @@ const deckLabel = computed(() => {
 
 .deck {
   position: relative;
+
+  > .card {
+    margin-top: 0;
+  }
 }
 
 .discard-card {
@@ -189,6 +223,12 @@ const deckLabel = computed(() => {
     opacity: .85;
     mix-blend-mode: saturation;
   }
+}
+
+.discard-placeholder {
+  width: var(--card-width);
+  aspect-ratio: 0.704;
+  visibility: hidden;
 }
 
 .deck-label {

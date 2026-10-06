@@ -13,6 +13,10 @@ toeToToe =
     , cdActions = #fight
     , cdBeforeEffect = True
     , cdCriteria = Just (exists $ CanFightEnemy ThisCard <> EnemyCanAttack You)
+    , -- the criteria above already covers the generic fight-action probe, and once
+      -- the enemy has been chosen the play is initiated and must resolve even if
+      -- the enemy leaves (e.g. Elusive fleeing after the additional-cost attack)
+      cdOverrideActionPlayableIfCriteriaMet = True
     }
 
 getBehindMe :: CardDef
@@ -282,7 +286,7 @@ fendOff3 =
   (event "08082" "Fend Off" 2 Survivor)
     { cdSkills = [#agility, #agility]
     , cdCardTraits = setFromList [Gambit, Trick]
-    , cdFastWindow = Just $ EnemySpawns #when YourLocation NonEliteEnemy
+    , cdFastWindow = Just $ EnemySpawns #when (PlacementAt YourLocation) NonEliteEnemy
     , cdLevel = Just 3
     }
 

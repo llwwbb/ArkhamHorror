@@ -27,7 +27,6 @@ import Data.Time
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Database.Persist.Postgresql
-import OpenTelemetry.Trace
 
 instance IsString UUID where
   fromString = fromJust . UUID.fromString
@@ -62,11 +61,9 @@ runGameMessage gameUUID msg = do
   gameRef <- newIORef arkhamGameCurrentData
   queueRef <- newQueue [msg]
   genRef <- newIORef (mkStdGen gameSeed)
-  provider <- initializeGlobalTracerProvider
-  let tracer = makeTracer provider $(detectInstrumentationLibrary) tracerOptions
   runGameApp
-    (GameApp gameRef queueRef genRef (pure . const ()) tracer Nothing)
-    (runMessages (gameIdToText gameId) Nothing)
+    (GameApp gameRef queueRef genRef (pure . const ()) Nothing)
+    (runMessages (gameIdToText gameId) noRunObservers)
   ge <- readIORef gameRef
   now <- liftIO getCurrentTime
   void $ dbGhci $ do

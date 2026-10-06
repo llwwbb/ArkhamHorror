@@ -5,6 +5,8 @@ module Arkham.ModifierData (
 import Arkham.Prelude
 
 import Arkham.Campaigns.TheScarletKeys.Key.Id
+import Arkham.ChaosBag.RevealStrategy (RevealStrategy)
+import Arkham.ChaosToken.Types (ChaosTokenFace)
 import Arkham.Id
 import Arkham.Json
 import Arkham.Modifier
@@ -19,6 +21,9 @@ instance ToJSON ModifierData where
 
 data LocationMetadata = LocationMetadata
   { lmConnectedLocations :: [LocationId]
+  , -- The subset of the above a modifier granted rather than the card printing, which
+    -- the map draws from the single location instead of from its group's box.
+    lmGrantedConnections :: [LocationId]
   , lmInvestigators :: [InvestigatorId]
   , lmEnemies :: [EnemyId]
   , lmTreacheries :: [TreacheryId]
@@ -89,11 +94,41 @@ instance ToJSON AssetMetadata where
   toJSON = genericToJSON $ aesonOptions $ Just "am"
   toEncoding = genericToEncoding $ aesonOptions $ Just "am"
 
+data ChaosTokenValueEntry = ChaosTokenValueEntry
+  { ctveFace :: ChaosTokenFace
+  , ctveCount :: Int
+  , ctveValue :: Maybe Int
+  , ctveAutoFail :: Bool
+  , ctveAutoSuccess :: Bool
+  , ctveRevealsAnother :: Bool
+  }
+  deriving stock (Show, Eq, Generic)
+
+instance ToJSON ChaosTokenValueEntry where
+  toJSON = genericToJSON $ aesonOptions $ Just "ctve"
+  toEncoding = genericToEncoding $ aesonOptions $ Just "ctve"
+
+data SkillTestValueBreakdown = SkillTestValueBreakdown
+  { stvbTokens :: [ChaosTokenValueEntry]
+  , stvbSkillValue :: Int
+  , stvbDifficulty :: Int
+  , stvbFailTies :: Bool
+  , stvbAutoFailIfSucceedByAtLeast :: [Int]
+  }
+  deriving stock (Show, Eq, Generic)
+
+instance ToJSON SkillTestValueBreakdown where
+  toJSON = genericToJSON $ aesonOptions $ Just "stvb"
+  toEncoding = genericToEncoding $ aesonOptions $ Just "stvb"
+
 data SkillTestMetadata = SkillTestMetadata
   { stmModifiedSkillValue :: Int
   , stmModifiedDifficulty :: Int
   , stmSkills :: [SkillType]
   , stmModifiers :: [Modifier]
+  , stmValueBreakdown :: Maybe SkillTestValueBreakdown
+  , -- The reveal strategy as it stands; see 'getSkillTestRevealStrategy'.
+    stmRevealStrategy :: RevealStrategy
   }
   deriving stock (Show, Eq, Generic)
 

@@ -24,7 +24,12 @@ import Arkham.Agenda.Sequence qualified as Agenda
 import Arkham.Agenda.Types (Field (..))
 import Arkham.Asset.Cards qualified as Assets
 import Arkham.Asset.Types (Field (..))
-import Arkham.Campaign.Types (Field (..), getRandomBasicWeakness)
+import Arkham.Campaign.Types (
+  Field (..),
+  basicWeaknessCodes,
+  getRandomBasicWeakness,
+  getRandomBasicWeaknessExcluding,
+ )
 import Arkham.CampaignLog hiding (optionsL)
 import Arkham.CampaignLogKey
 import Arkham.CampaignStep
@@ -54,12 +59,13 @@ import Arkham.Enemy.Creation
 import Arkham.Enemy.Types (Enemy, Field (..), enemyHealth)
 import Arkham.Event.Types (Field (..))
 import {-# SOURCE #-} Arkham.Game ()
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers
 import Arkham.Helpers.Calculation
 import Arkham.Helpers.Card
 import Arkham.Helpers.Deck
 import Arkham.Helpers.Enemy
+import Arkham.Helpers.History (getAllHistoryField)
 import Arkham.Helpers.Investigator
 import Arkham.Helpers.Log (getHasRecord)
 import Arkham.Helpers.Message qualified as Msg
@@ -74,7 +80,7 @@ import Arkham.Homebrew.Tokens
 import Arkham.I18n (countVar, ikey', withI18n)
 import Arkham.Id
 import Arkham.Investigator.Types (Field (..))
-import Arkham.Label (mkLabel)
+import Arkham.Keyword qualified as Keyword
 import Arkham.Location.Grid
 import Arkham.Location.Types (Field (..))
 import Arkham.Matcher qualified as Matcher
@@ -93,7 +99,9 @@ import Arkham.Skill.Types qualified as Field
 import Arkham.Story.Types (Field (..))
 import Arkham.Tarot
 import Arkham.Token
-import Arkham.Treachery.Cards qualified as Treacheries
+import Arkham.TokenBag (editTokenBag)
+import Arkham.Treachery.CardDefs.TheDreamEaters.DarkSideOfTheMoon qualified as DarkSideOfTheMoon
+import Arkham.Treachery.CardDefs.TheDreamEaters.PointOfNoReturn qualified as PointOfNoReturn
 import Arkham.Treachery.Types (Field (..))
 import Arkham.UltimatumsAndBoons (
   Boon (..),
@@ -108,6 +116,7 @@ import Arkham.Window qualified as Window
 import Arkham.Zone (Zone)
 import Arkham.Zone qualified as Zone
 import Control.Lens (each, non, over, _1, _2)
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Data.Lens (biplate)
 import Data.IntMap.Strict qualified as IntMap
 import Data.List.NonEmpty qualified as NE
@@ -182,22 +191,15 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
         push $ LoadDeck iid (Deck $ unDeck deck <> mapMaybe (preview _PlayerCard) investigatorStoryCards)
     pure $ overAttrs (inResolutionL .~ False) a
   BeginGame -> do
-    mFalseAwakeningPointOfNoReturn <-
-      getMaybeCampaignStoryCard Treacheries.falseAwakeningPointOfNoReturn
-    for_ mFalseAwakeningPointOfNoReturn \falseAwakening -> do
-      tid <- getRandom
-      pushAll
-        [ AttachStoryTreacheryTo tid (toCard falseAwakening) AgendaDeckTarget
-        , PlaceDoom (toSource tid) (toTarget tid) 1
-        ]
-
-    mFalseAwakening <- getMaybeCampaignStoryCard Treacheries.falseAwakening
-    for_ mFalseAwakening \falseAwakening -> do
-      tid <- getRandom
-      pushAll
-        [ AttachStoryTreacheryTo tid (toCard falseAwakening) AgendaDeckTarget
-        , PlaceDoom (toSource tid) (toTarget tid) 1
-        ]
+    -- both Dream-Eaters printings of False Awakening begin next to the agenda deck
+    for_ [DarkSideOfTheMoon.falseAwakening, PointOfNoReturn.falseAwakening] \def -> do
+      mFalseAwakening <- getMaybeCampaignStoryCard def
+      for_ mFalseAwakening \falseAwakening -> do
+        tid <- getRandom
+        pushAll
+          [ AttachStoryTreacheryTo tid (toCard falseAwakening) AgendaDeckTarget
+          , PlaceDoom (toSource tid) (toTarget tid) 1
+          ]
 
     pure a
   BeginRound -> do
@@ -247,7 +249,13 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
           disaster <- hasUltimatumOrBoon (Ultimatum UltimatumOfDisaster)
           extraWeakness <-
             if disaster
-              then (: []) <$> getRandomBasicWeakness investigatorClass playerCount mDecklist
+              then
+                (: [])
+                  <$> getRandomBasicWeaknessExcluding
+                    (basicWeaknessCodes baseRandomWeaknesses)
+                    investigatorClass
+                    playerCount
+                    mDecklist
               else pure []
           let randomWeaknesses = baseRandomWeaknesses <> extraWeakness
           morrigan <- hasBoon BoonOfTheMorrigan
@@ -294,9 +302,9 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
         physicalTrauma <- field InvestigatorPhysicalTrauma iid
         chooseOrRunOneM iid $ withI18n $ countVar 1 do
           when (physicalTrauma > 0) do
-            labeled' "healPhysicalTrauma" $ push $ HealTrauma iid 1 0
+            labeled "healPhysicalTrauma" $ push $ HealTrauma iid 1 0
           when (mentalTrauma > 0) do
-            labeled' "healMentalTrauma" $ push $ HealTrauma iid 0 1
+            labeled "healMentalTrauma" $ push $ HealTrauma iid 0 1
     pure a
   EndSetup -> do
     -- Preludes are the same game as the scenario that follows them, so the
@@ -514,6 +522,11 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     pure $ a & noRemainingInvestigatorsHandlerL .~ target
   HandleNoRemainingInvestigators target | isTarget a target -> do
     clearQueue
+    -- inResolution is set below so a resolution that kills an investigator does
+    -- not re-enter here. That also makes the ScenarioResolution wrapper take its
+    -- already-resolving branch, which never opens the end-of-game window, so
+    -- open it here instead.
+    checkWhen Window.EndOfGame
     push (ScenarioResolution NoResolution)
     pure $ a & inResolutionL .~ True -- must set to avoid redundancy when scenario kills investigator
   InvestigatorWhenEliminated _ iid mmsg -> do
@@ -553,7 +566,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
         then push FailSkillTest
         else do
           let shouldRevealAnother = DoNotRevealAnotherChaosToken `notElem` mods
-          when (token `elem` [#curse, #bless, #frost]) do
+          when (token `elem` [#curse, #bless, #frost, #blood]) do
             pushWhen shouldRevealAnother (DrawAnotherChaosToken iid)
           -- Homebrew custom tokens: engine-level reveal behavior comes from the
           -- token's registered 'CustomTokenReveal'. ResolveChaosToken only
@@ -733,7 +746,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       & (encounterDeckL %~ withDeck (filter (/= ec)))
       & (victoryDisplayL %~ filter (/= EncounterCard ec))
       & (setAsideCardsL %~ filter (/= EncounterCard ec))
-  AddToVictory _ (SkillTarget sid) -> do
+  Do (AddToVictory _ (SkillTarget sid)) -> do
     card <- field Field.SkillCard sid
     pure $ a & (victoryDisplayL %~ (card :))
   AddToVictory _ (EventTarget eid) -> do
@@ -748,8 +761,11 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     card <- field AssetCard tid
     pure $ a & (victoryDisplayL %~ nub . (card :))
   AddToVictory _ (TreacheryTarget tid) -> do
-    card <- field TreacheryCard tid
-    pure $ a & (victoryDisplayL %~ nub . (card :))
+    selectAny (Matcher.TreacheryWithId tid) >>= \case
+      False -> pure a
+      True -> do
+        card <- field TreacheryCard tid
+        pure $ a & (victoryDisplayL %~ nub . (card :))
   AddToVictory _ (ActTarget aid) -> do
     flipped <- field ActFlipped aid
     card <- field ActCard aid
@@ -884,9 +900,12 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     pure a
   ShuffleCardsIntoDeck (Deck.EncounterDeckByKey deckKey) cards -> do
     let encounterCards = mapMaybe (preview _EncounterCard) cards
+    -- A card cannot be in a deck twice, so a card already in this deck moves
+    -- rather than doubling: filterOutCards below cannot do it, since the deck
+    -- it clears is overwritten by deck'.
     deck' <-
       withDeckM
-        (shuffleM . (<> encounterCards))
+        (shuffleM . (<> encounterCards) . filter ((`notElem` cards) . toCard))
         (a ^. encounterDeckLensFromKey deckKey)
     pure
       $ filterOutCards cards a
@@ -960,7 +979,11 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
 
     let playerCards = onlyPlayerCards drew.cards
     when (notNull playerCards) do
-      pushAll $ InvestigatorDrewPlayerCardFrom iid <$> playerCards <*> pure (Just drew.deck)
+      pushAll
+        $ InvestigatorDrewPlayerCardFrom iid
+        <$> playerCards
+        <*> pure (Just drew.deck)
+        <*> pure (Just drew.source)
 
     let encounterCards = onlyEncounterCards drew.cards
     when (notNull encounterCards) do
@@ -996,8 +1019,12 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
         other -> encounterDecksL . at other . non (Deck [], []) . _2
     case unDeck (a ^. deckL') of
       [] -> do
-        when (notNull (a ^. discardL')) $ do
-          pushAll [ShuffleEncounterDiscardBackInByKey key, Do (DrawCards iid drawing)]
+        -- With nothing left to draw from we still report the draw, carrying whatever
+        -- was drawn before the deck ran dry, so that scenarios which replace an
+        -- impossible encounter draw (Lost Quantum) can react to it.
+        if notNull (a ^. discardL')
+          then pushAll [ShuffleEncounterDiscardBackInByKey key, Do (DrawCards iid drawing)]
+          else push $ DrewCards iid $ finalizeDraw drawing drawing.alreadyDrawn
         pure a
       xs -> do
         let (drew, rest) = splitAt drawing.amount xs
@@ -1023,8 +1050,9 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     key <- getEncounterDeckKey iid
     case unDeck (a ^. deckLens handler) of
       [] -> do
-        when (notNull (a ^. discardLens handler)) $ do
-          pushAll [ShuffleEncounterDiscardBackInByKey key, Do (DrawCards iid drawing)]
+        if notNull (a ^. discardLens handler)
+          then pushAll [ShuffleEncounterDiscardBackInByKey key, Do (DrawCards iid drawing)]
+          else push $ DrewCards iid $ finalizeDraw drawing drawing.alreadyDrawn
         pure a
       xs -> do
         let (drew, rest) = splitAt drawing.amount xs
@@ -1107,7 +1135,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
 
       when (searchType == Searching) $ do
         pushBatch batchId
-          $ CheckWindows [Window.Window #when (Window.AmongSearchedCards batchId iid) (Just batchId)]
+          $ CheckWindows [Window.Window #when (Window.AmongSearchedCards batchId iid) (Just batchId) Nothing]
 
       pushBatch batchId $ ResolveSearch (toTarget a)
       pushBatch batchId $ EndSearch iid source t cardSources
@@ -1360,8 +1388,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
               remaining
       ShuffleBackIn -> do
         when (foundKey cardSource /= Zone.FromDeck) (error "Expects a deck: Investigator<ShuffleBackIn>")
-        for_ scenarioSearch \MkSearch {searchType} ->
-          pushWhen (searchType == Searching) $ ShuffleDeck deck
+        push $ ShuffleDeck deck
       PutBack -> pure () -- Nothing moves while searching
       DoNothing -> pure () -- Nothing moves while searching
       RemoveRestFromGame -> do
@@ -1704,12 +1731,18 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     push (RequestedEncounterCards target cards)
     pure $ a & encounterDeckL .~ encounterDeck
   DiscardTopOfEncounterDeck iid n source mtarget -> do
+    -- One checkpoint for the whole discard, before any card leaves the deck.
+    -- Responders that change the size of the discard (Ring Library) rewrite the
+    -- queued message below, so the extra cards stay part of this same batch and
+    -- reach whatever handler asked for the discard.
+    checkWhen $ Window.WouldDiscardTopOfEncounterDeck iid source n
     push $ DiscardTopOfEncounterDeckWithDiscardedCards iid n source mtarget []
     pure a
   DiscardTopOfEncounterDeckWithDiscardedCards iid 0 source mtarget cards -> do
     when (null scenarioEncounterDeck && not scenarioInShuffle) do
       checkWhen Window.EncounterDeckRunsOutOfCards
       push ShuffleEncounterDiscardBackIn
+    unless (null cards) $ checkAfter $ Window.DiscardedTopOfEncounterDeckBatch iid source cards
     for_ mtarget $ push . DiscardedTopOfEncounterDeck iid cards source
     pure $ a & inShuffleL .~ null scenarioEncounterDeck
   DiscardTopOfEncounterDeckWithDiscardedCards iid n source mtarget discardedCards -> do
@@ -1818,7 +1851,9 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       $ map
         (mkWhen . Window.InvestigatorWouldBeDefeated (DefeatedByOther $ LocationSource lid))
         investigatorIds
-    push $ RemovedLocation lid
+    -- pushes the deletion of the location entity behind the announcement, so
+    -- everything standing on the location gets to leave play first, #5426
+    pushAll [RemovedLocation lid, Do (RemovedLocation lid)]
     pure $ a & gridL %~ deleteInGrid lid
   RemoveEnemyLocation lid ->
     pure $ a & gridL %~ deleteInGrid lid
@@ -1844,6 +1879,20 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
   EnemiesAttack -> do
     eachInvestigator (`forInvestigator` EnemiesAttack)
     do_ EnemiesAttack
+    pure a
+  -- Enemy phase, after framework step 3.3: each relentless enemy that attacked
+  -- this phase (even if that attack was cancelled) readies and attacks the
+  -- investigator(s) it is engaged with a second time.
+  RelentlessEnemiesAttack -> do
+    attacked <- getAllHistoryField PhaseHistory HistoryEnemiesAttackedBy
+    relentless <-
+      select
+        $ Matcher.EnemyWithKeyword Keyword.Relentless
+        <> Matcher.mapOneOf Matcher.EnemyWithId attacked
+    pushAll
+      =<< concatForM relentless \eid -> do
+        exhausted <- eid <=~> Matcher.ExhaustedEnemy
+        pure $ [Ready (EnemyTarget eid) | exhausted] <> [ForTarget (EnemyTarget eid) (Do EnemiesAttack)]
     pure a
   LoadScenario opts -> do
     for_ (challengeScenarioInvestigator scenarioId) \title -> do
@@ -1894,6 +1943,20 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       checkWhen (Window.DrawingStartingHand iid)
       push $ DrawStartingHand iid
     pure a
+  SetCustomChaosBag key bag ->
+    pure $ a {scenarioCustomChaosBags = Map.insert key bag scenarioCustomChaosBags}
+  RemoveCustomChaosBag key ->
+    pure $ a {scenarioCustomChaosBags = Map.delete key scenarioCustomChaosBags}
+  ScenarioSpecific "debugTokenBag" (Object payload)
+    | Just (String key) <- KeyMap.lookup "key" payload
+    , Just choice <- KeyMap.lookup "next" payload
+    , Just bag <- Map.lookup key scenarioCustomChaosBags -> do
+        updated <- editTokenBag choice (toJSON bag)
+        pure
+          $ maybe
+            a
+            (\b -> a {scenarioCustomChaosBags = Map.insert key (toResult b) scenarioCustomChaosBags})
+            updated
   SetScenarioMeta v -> do
     pure $ a & metaL .~ v
   LoadTarotDeck -> do
@@ -1921,6 +1984,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     pure $ a & setAsideKeysL %~ insertSet k & keysL %~ deleteSet k
   PlaceKey target k | not (isTarget a target) -> do
     pure $ a & (setAsideKeysL %~ deleteSet k)
+  MoveTokens s source _ tType n | isSource a source -> liftRunMessage (RemoveTokens s ScenarioTarget tType n) a
   MoveTokens s _ target tType n | isTarget a target -> liftRunMessage (PlaceTokens s target tType n) a
   PlaceTokens _ ScenarioTarget token amount -> do
     pure $ a & tokensL %~ addTokens token amount
@@ -1929,7 +1993,12 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
   RestartScenario -> do
     standalone <- getIsStandalone
     pushAll
-      $ ResetGame
+      -- Killed/insane investigators cannot be used for the rest of the campaign, so their
+      -- players must pick a replacement before the scenario is set up again. Without this
+      -- they are reset back into play, matchers filter every one of them out, and setup
+      -- ends up in `Begin InvestigationPhase` with no investigators at all (#5367).
+      $ HandleKilledOrInsaneInvestigators
+      : ResetGame
       : [StandaloneSetup | standalone]
         <> [ ChooseLeadInvestigator
            , SetPlayerOrder
@@ -1988,9 +2057,11 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       Nothing -> pure a
       Just enemy -> do
         let eattrs = toAttrs enemy
+        -- Printed, not EnemyHealth: every reader of this record (Bounty,
+        -- Ancestral Token, Autopsy Report (3), Twisting Catwalks) says
+        -- "printed health". Turn history keeps the modified value.
         printedHealth <- calculatePrinted (enemyHealth eattrs)
-        enemyHealth <- fieldWithDefault printedHealth EnemyHealth eid
-        pure $ a & defeatedEnemiesL %~ insertMap eid (DefeatedEnemyAttrs eattrs enemyHealth)
+        pure $ a & defeatedEnemiesL %~ insertMap eid (DefeatedEnemyAttrs eattrs printedHealth)
   SetAsideCards cards -> do
     for_ cards obtainCard
     do_ msg
@@ -2000,7 +2071,17 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
   SetLayout layout -> do
     pure $ a & locationLayoutL .~ layout
   ChooseLeadInvestigator -> do
-    getInvestigators >>= \case
+    -- A simultaneous "each investigator is defeated" queues one defeat per
+    -- investigator, and the first one to resolve pushes this message ahead of the
+    -- rest. Promoting a candidate who is already queued to be defeated makes the
+    -- promotion stick once the queue drains, so the resolution ends up addressing
+    -- whoever happened to be defeated last instead of the lead (#5779). Wait
+    -- behind the queued eliminations instead: by then there is nobody left and
+    -- the recorded lead stands. Should one of those defeats be prevented after
+    -- all, the deferred re-check still promotes the survivor.
+    pending <- lift getPendingEliminations
+    candidates <- filter (`notElem` pending) <$> getInvestigators
+    case candidates of
       [x] -> push $ ChoosePlayer x SetLeadInvestigator
       xs@(x : _) -> do
         questionLabel' "chooseLeadInvestigator" x
@@ -2008,6 +2089,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
             [ PortraitLabel iid [ChoosePlayer iid SetLeadInvestigator]
             | iid <- xs
             ]
+      [] | notNull pending -> lift $ insertAfterLastMatching [ChooseLeadInvestigator] isPendingElimination
       [] -> pure ()
     pure a
   ReportXp breakdown -> do
@@ -2019,11 +2101,22 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
           Nothing -> scenarioGrid
           Just oldPos -> clearGrid oldPos scenarioGrid
         grid = insertGrid gloc gridCleared
-    let getAdjacent = selectOne . Matcher.LocationWithLabel . mkLabel . gridLabel . updatePosition pos
-    mTopLocation <- getAdjacent GridUp
-    mBottomLocation <- getAdjacent GridDown
-    mLeftLocation <- getAdjacent GridLeft
-    mRightLocation <- getAdjacent GridRight
+    -- Neighbours come from the freshly updated grid, never from labels. Labels are
+    -- set by a *queued* SetLocationLabel, so mid-move they lie in both directions:
+    -- the mover still carries its old label (a location sliding one cell over would
+    -- record itself as its own neighbour — the Great Lift), and when two locations
+    -- swap places (Dark Matter's "switch two locations") the second mover finds two
+    -- locations claiming the same label and can pick the wrong one, leaving the pair
+    -- disconnected. `grid` already has the mover in its new cell and its old cell
+    -- cleared, so both cases fall out correctly.
+    let getAdjacent dir = do
+          GridLocation _ lid' <- viewGrid (updatePosition pos dir) grid
+          guard (lid' /= lid)
+          pure lid'
+        mTopLocation = getAdjacent GridUp
+        mBottomLocation = getAdjacent GridDown
+        mLeftLocation = getAdjacent GridLeft
+        mRightLocation = getAdjacent GridRight
     pushAll
       $ [ LocationMoved lid
         , SetLocationLabel lid (gridLabel pos)

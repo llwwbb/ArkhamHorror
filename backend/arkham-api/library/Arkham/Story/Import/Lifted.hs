@@ -21,6 +21,8 @@ import Arkham.Message as X (
   pattern BeforeRevealChaosTokens,
   pattern BeforeSkillTest,
   pattern BeginSkillTestAfterFast,
+  pattern AddChaosToken,
+  pattern AddChaosTokenForGame,
   pattern BeginSkillTestWithPreMessages,
   pattern BeginSkillTestWithPreMessages',
   pattern CancelAssetHorror,
@@ -249,8 +251,8 @@ import Arkham.Story.Runner as X (
   pushWhen,
   removeAfterResolutionL,
   story,
-  storyWith,
   storyOtherSide,
+  storyWith,
  )
 import Arkham.Target as X
 
@@ -286,3 +288,6 @@ pattern ResolveThisStory iid sid <- StoryMessage (ResolveStory iid ResolveIt sid
 
 pattern DoNotResolveThisStory :: InvestigatorId -> StoryId -> Message
 pattern DoNotResolveThisStory iid sid <- StoryMessage (ResolveStory iid DoNotResolveIt sid)
+
+setMeta :: (ToJSON a, Entity b, EntityAttrs b ~ StoryAttrs) => a -> b -> b
+setMeta a = overAttrs (\attrs -> attrs & metaL .~ toJSON a)

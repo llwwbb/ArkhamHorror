@@ -5,8 +5,8 @@ import Arkham.Asset.Cards qualified as Cards
 import Arkham.Asset.Import.Lifted
 import Arkham.Asset.Uses
 import Arkham.Helpers.SkillTest (withSkillTest)
+import Arkham.I18n
 import Arkham.Modifier
-import Arkham.Scenarios.WarOfTheOuterGods.Helpers (scenarioI18n)
 
 newtype BladeOfArkat = BladeOfArkat AssetAttrs
   deriving anyclass (IsAsset, HasModifiersFor)
@@ -38,7 +38,7 @@ instance RunMessage BladeOfArkat where
     PassedThisSkillTest iid (isAbilitySource attrs 2 -> True) -> do
       let resources = min 3 (attrs.use Resource)
       when (resources > 0) do
-        scenarioI18n $ chooseAmount' iid "bladeOfArkat.resourcesToRemove" "$resources" 0 resources attrs
+        withI18n $ chooseAmount iid "resourcesToRemove" "$resources" 0 resources attrs
       pure a
     ResolveAmounts iid (getChoiceAmount "$resources" -> n) (isTarget attrs -> True) | n > 0 -> do
       removeTokens (attrs.ability 2) (toTarget attrs) Resource n

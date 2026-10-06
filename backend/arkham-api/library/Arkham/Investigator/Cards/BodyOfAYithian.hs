@@ -11,7 +11,7 @@ import {-# SOURCE #-} Arkham.Investigator
 import Arkham.Investigator.Import.Lifted
 import Arkham.Matcher
 import Arkham.Trait (Trait (Yithian))
-import Arkham.Treachery.Cards qualified as Treacheries
+import Arkham.Treachery.CardDefs.TheDrownedCity qualified as Treacheries
 import Data.Aeson (Result (..))
 
 newtype YithianMetadata = YithianMetadata {originalBody :: Value}
@@ -56,8 +56,18 @@ instance RunMessage BodyOfAYithian where
     UseCardAbility _iid (isSource attrs -> True) 1 (getCommittedCard -> card) _ -> do
       withSkillTest \sid -> skillTestModifier sid (attrs.ability 1) card DoubleSkillIcons
       pure i
-    _ -> case fromJSON @Investigator (originalBody meta) of
-      Error _ -> error "the original mind of the Yithian is lost"
-      Success original -> do
+    _ -> case originalInvestigator of
+      Nothing -> error "the original mind of the Yithian is lost"
+      Just original -> do
         original' <- liftRunMessage (Blanked msg) (overAttrs (const attrs) original)
         pure $ BodyOfAYithian $ toAttrs original' `with` meta
+   where
+    -- Older versions of the engine could clobber the stored snapshot (playing
+    -- Transfiguration (2) re-seeded it from the Yithian's own attrs). We still know who
+    -- we were from our id, so rebuild rather than bricking the game.
+    originalInvestigator = case fromJSON @Investigator (originalBody meta) of
+      Success original -> Just original
+      Error _
+        | unInvestigatorId attrs.id /= investigatorCardCode attrs ->
+            Just $ lookupInvestigator attrs.id (investigatorPlayerId attrs)
+      Error _ -> Nothing

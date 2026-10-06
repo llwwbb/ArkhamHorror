@@ -10,6 +10,7 @@ import Arkham.Prelude
 
 import Arkham.Card
 import Arkham.Classes.Entity.TH
+import Arkham.Custom.Investigator (CustomInvestigator, customInvestigator)
 import Arkham.Id
 import Arkham.Investigator.Investigators
 import Arkham.Investigator.Runner hiding (allInvestigators)
@@ -19,8 +20,12 @@ import Data.Typeable
 
 lookupInvestigator :: InvestigatorId -> PlayerId -> Investigator
 lookupInvestigator iid pid = case lookup (toCardCode iid) allInvestigators of
-  Nothing -> lookupPromoInvestigator iid pid
   Just c -> overAttrs (artL .~ CardCodeExact (toCardCode iid)) $ toInvestigator c pid
+  Nothing -> case lookupCustomCardDefOrMissing InvestigatorType (toCardCode iid) of
+    Just def ->
+      overAttrs (artL .~ CardCodeExact (toCardCode iid))
+        $ toInvestigator (SomeInvestigatorCard (customInvestigator def)) pid
+    Nothing -> lookupPromoInvestigator iid pid
 
 normalizeInvestigatorId :: InvestigatorId -> InvestigatorId
 normalizeInvestigatorId iid = findWithDefault iid iid promoInvestigators
@@ -63,6 +68,7 @@ withInvestigatorCardCode cCode f = case lookup cCode allInvestigators of
     "05048" -> f (SomeInvestigator @ValentinoRivas)
     "05049" -> f (SomeInvestigator @PennyWhite)
     "10661" -> f (SomeInvestigator @ShatteredSelf)
+    _ | isCustomCardCode cCode -> f (SomeInvestigator @CustomInvestigator)
     _ -> error ("invalid investigators: " <> show cCode)
   Just (SomeInvestigatorCard (_ :: InvestigatorCard a)) -> f (SomeInvestigator @a)
 
@@ -226,6 +232,14 @@ becomeShatteredSelf (Investigator a) =
       , investigatorDiscarding = Nothing
       }
 
+-- | The investigator a Body of a Yithian was made from, per its stored snapshot.
+yithianOriginalCardCode :: Investigator -> Maybe CardCode
+yithianOriginalCardCode (Investigator a) = case cast a of
+  Just (BodyOfAYithian (_ `With` meta)) -> case fromJSON @Investigator meta.originalBody of
+    Success x -> Just $ investigatorCardCode $ toAttrs x
+    _ -> Nothing
+  Nothing -> Nothing
+
 shatteredSelfOriginalCardCode :: Investigator -> Maybe CardCode
 shatteredSelfOriginalCardCode (Investigator a) = case cast a of
   Just (ShatteredSelf (_ `With` meta)) -> case fromJSON @Investigator meta.originalBody of
@@ -247,8 +261,11 @@ returnFromShatteredSelf = flip handleInvestigator \(ShatteredSelf (attrs `With` 
         , investigatorPlacement = investigatorPlacement attrs
         , investigatorMovement = investigatorMovement attrs
         , investigatorPreviousLocation = investigatorPreviousLocation attrs
-        , investigatorUsedAbilities = filter onlyCampaignAbilities (investigatorUsedAbilities a)
-        , investigatorLog = investigatorLog a
+        , -- Unlike returnToBody, this reversal happens mid-scenario, so anything the
+          -- shattered self accumulated during play has to come across rather than being
+          -- reset to the pre-transformation snapshot.
+          investigatorUsedAbilities = investigatorUsedAbilities attrs
+        , investigatorLog = investigatorLog attrs
         , investigatorKilled = investigatorKilled a
         , investigatorDrivenInsane = investigatorDrivenInsane a
         , investigatorDeck = investigatorDeck attrs
@@ -258,12 +275,46 @@ returnFromShatteredSelf = flip handleInvestigator \(ShatteredSelf (attrs `With` 
         , investigatorRemainingActions = investigatorRemainingActions attrs
         , investigatorActionsTaken = investigatorActionsTaken attrs
         , investigatorActionsPerformed = investigatorActionsPerformed attrs
+        , investigatorIgnoredPerformedActions = investigatorIgnoredPerformedActions attrs
         , investigatorEndedTurn = investigatorEndedTurn attrs
         }
-    _ -> error "The shattered self cannot be made whole again"
+    _ ->
+      fromMaybe (error "The shattered self cannot be made whole again")
+        $ rebuildFromAlternateBody attrs
 
 handleInvestigator :: IsInvestigator a => Investigator -> (a -> Investigator) -> Investigator
 handleInvestigator o@(Investigator a) f = maybe o f (cast a)
+
+{- | Rebuild the investigator an alternate body (Body of a Yithian, Shattered Self) was
+made from when the stored snapshot of that investigator can no longer be read. Older
+versions of the engine clobbered the snapshot when the alternate body was transfigured,
+so some saves carry a snapshot of the alternate body instead of the original.
+
+Nothing meaningful is lost: taking on an alternate body keeps the original investigator's
+id, deck, hand, discard, XP, and trauma, so only the printed identity has to come back
+from the card.
+-}
+rebuildFromAlternateBody :: InvestigatorAttrs -> Maybe Investigator
+rebuildFromAlternateBody attrs
+  | toCardCode attrs.id == investigatorCardCode attrs = Nothing
+  | otherwise = Just $ updateAttrs base \b ->
+      attrs
+        { investigatorCardCode = investigatorCardCode b
+        , investigatorArt = investigatorArt b
+        , investigatorName = investigatorName b
+        , investigatorClass = investigatorClass b
+        , investigatorTraits = investigatorTraits b
+        , investigatorHealth = investigatorHealth b
+        , investigatorSanity = investigatorSanity b
+        , investigatorWillpower = investigatorWillpower b
+        , investigatorIntellect = investigatorIntellect b
+        , investigatorCombat = investigatorCombat b
+        , investigatorAgility = investigatorAgility b
+        , investigatorForm = RegularForm
+        , investigatorUsedAbilities = filter onlyCampaignAbilities (investigatorUsedAbilities attrs)
+        }
+ where
+  base = lookupInvestigator attrs.id (investigatorPlayerId attrs)
 
 returnToBody :: Investigator -> Investigator
 returnToBody = flip handleInvestigator \(BodyOfAYithian (attrs `With` meta)) ->
@@ -281,4 +332,6 @@ returnToBody = flip handleInvestigator \(BodyOfAYithian (attrs `With` meta)) ->
         , investigatorKilled = investigatorKilled a
         , investigatorDrivenInsane = investigatorDrivenInsane a
         }
-    _ -> error "Investigator mind is too corrupted to return to their body"
+    _ ->
+      fromMaybe (error "Investigator mind is too corrupted to return to their body")
+        $ rebuildFromAlternateBody attrs

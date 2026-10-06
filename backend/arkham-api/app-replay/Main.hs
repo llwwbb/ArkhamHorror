@@ -3,30 +3,41 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- | Headless replay CLI.
---
--- Loads a game export (from /api/v1/arkham/games/:id/export), optionally pushes
--- a list of raw 'Message's, runs the engine, and prints the resulting 'Game'.
--- No DB, no Yesod, no frontend. The point is to reproduce a bug in <1s instead
--- of the full investigate-bug stack.
+{- | Headless replay CLI.
+
+Loads a game export (from /api/v1/arkham/games/:id/export), optionally pushes
+a list of raw 'Message's, runs the engine, and prints the resulting 'Game'.
+No DB, no Yesod, no frontend. The point is to reproduce a bug in <1s instead
+of the full investigate-bug stack.
+-}
 module Main where
 
-import Api.Arkham.Export
-  ( ArkhamExport (..)
-  , ArkhamGameExportData (..)
-  )
+import Api.Arkham.Export (
+  ArkhamExport (..),
+  ArkhamGameExportData (..),
+ )
 import Api.Arkham.Helpers (GameApp (..), runGameApp)
+import Arkham.Classes.GameLogger (ClientMessage (..))
 import Arkham.Classes.HasQueue (newQueue, pushAll)
-import Arkham.Game (Game (..), PublicGame (..), runMessages)
+import Arkham.Game (Game (..), PublicGame (..), RunObservers (..), runMessages)
 import Arkham.Game.Diff (diff, patchValueWithRecovery)
 import Arkham.Game.Runner (handleActionDiff)
+import Arkham.Log.Entry (logEntryToLines)
+import Arkham.Log.Narrator (emptyNarrator, flushNarrator)
 import Arkham.Message (Message (ClearUI, SetActivePlayer))
 import Arkham.Metrics (dumpMetricsTo, enableMetrics, withMetric)
 import Control.Exception (evaluate)
-import GHC.Clock (getMonotonicTimeNSec)
 import Control.Monad (forM, forM_, when)
 import Control.Monad.Random (mkStdGen)
-import Data.Aeson (Result (..), Value, eitherDecodeFileStrict', eitherDecode, encode, fromJSON, toJSON)
+import Data.Aeson (
+  Result (..),
+  Value,
+  eitherDecode,
+  eitherDecodeFileStrict',
+  encode,
+  fromJSON,
+  toJSON,
+ )
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Lazy.Char8 qualified as BL8
 import Data.IORef (newIORef, readIORef)
@@ -36,12 +47,7 @@ import Data.Ord (Down (..))
 import Data.Text qualified as T
 import Entity.Answer (Reply (..), answerPlayer, handleAnswerPure)
 import Entity.Arkham.Step (ArkhamStep (..), Choice (..))
-import OpenTelemetry.Trace
-  ( detectInstrumentationLibrary
-  , initializeGlobalTracerProvider
-  , makeTracer
-  , tracerOptions
-  )
+import GHC.Clock (getMonotonicTimeNSec)
 import System.Environment (getArgs)
 import System.Exit (die, exitSuccess)
 import System.IO (hPutStrLn, stderr)
@@ -66,6 +72,32 @@ data Opts = Opts
 defaultOpts :: Opts
 defaultOpts = Opts "" Nothing Nothing False 0 Nothing 50 False Nothing 30 False 0
 
+{- | One-line rendering of a client (UI) message. 'ClientMessage' has no 'Show'
+instance, and the embedded card 'Value's are enormous, so keep it terse.
+-}
+formatClientMessage :: ClientMessage -> String
+formatClientMessage = \case
+  ClientText t -> "text " <> T.unpack t
+  -- Multi-line on purpose: nesting is the point of a structured entry, and a
+  -- trace that flattens it cannot show whether the grouping is right.
+  ClientLogEntry e -> "log\n" <> T.unpack (T.intercalate "\n" (map ("  " <>) (logEntryToLines e)))
+  ClientRetractLog tag -> "retract " <> T.unpack tag
+  ClientError t -> "error " <> T.unpack t
+  ClientCard t v -> "card " <> T.unpack t <> " " <> briefValue v
+  ClientCardOnly pid t v -> "cardOnly[" <> show pid <> "] " <> T.unpack t <> " " <> briefValue v
+  ClientDrewCards pid t v k ->
+    "drewCards[" <> show pid <> "/" <> T.unpack k <> "] " <> T.unpack t <> " " <> briefValue v
+  ClientTarot v -> "tarot " <> briefValue v
+  ClientShowDiscard iid -> "showDiscard " <> show iid
+  ClientShowUnder iid -> "showUnder " <> show iid
+  ClientUI t -> "ui " <> T.unpack t
+  ClientAudio t -> "audio " <> T.unpack t
+  ClientPlayabilityReport _ t _ -> "playabilityReport " <> T.unpack t
+  ClientCustomCardIssue cc detail payload ->
+    "customCardIssue " <> T.unpack cc <> " " <> T.unpack detail <> " " <> briefValue payload
+ where
+  briefValue v = let s = BL8.unpack (encode v) in if length s > 200 then take 200 s <> "..." else s
+
 usage :: String
 usage =
   unlines
@@ -78,7 +110,8 @@ usage =
     , "  --answers FILE     JSON list of Answer values to apply one at a time"
     , "                     (Answer accepts {\"tag\":\"Raw\",...}, {\"tag\":\"Answer\",...}, etc.)"
     , "  --output FILE      Write final Game state JSON here (default: stdout)"
-    , "  --trace            Print every Message processed to stderr"
+    , "  --trace            Print every Message processed to stderr, plus every client"
+    , "                     (UI) message as \"client> ...\""
     , "  --metrics [FILE]   Record per-span wall-clock timings; dump table to FILE (or stderr)"
     , "  --metrics-top N    Show top-N spans in the metrics table (default 50)"
     , "  --replay-all       Undo to step 0 then replay every step forward, timing each one."
@@ -107,8 +140,9 @@ parseArgs = go defaultOpts
   go o ("--undo" : n : rest) = case reads n of
     [(k, "")] -> go o {optUndo = k} rest
     _ -> die $ "--undo expects an integer, got: " <> n
-  go o ("--metrics" : f : rest) | take 2 f /= "--" =
-    go o {optMetrics = Just (Just f)} rest
+  go o ("--metrics" : f : rest)
+    | take 2 f /= "--" =
+        go o {optMetrics = Just (Just f)} rest
   go o ("--metrics" : rest) = go o {optMetrics = Just Nothing} rest
   go o ("--metrics-top" : n : rest) = case reads n of
     [(k, "")] -> go o {optMetricsTopN = k} rest
@@ -185,12 +219,12 @@ main = do
     t1 <- getMonotonicTimeNSec
     hPutStrLn stderr
       $ "bench-action-diff: "
-      <> show k
-      <> " in-action messages; forcing the save cost took "
-      <> printfMs (fromIntegral (t1 - t0) / 1_000_000)
-      <> " ms ("
-      <> show bytes
-      <> " bytes of actionDiff JSON)"
+        <> show k
+        <> " in-action messages; forcing the save cost took "
+        <> printfMs (fromIntegral (t1 - t0) / 1_000_000)
+        <> " ms ("
+        <> show bytes
+        <> " bytes of actionDiff JSON)"
     exitSuccess
 
   -- The queue waiting at the resume step.
@@ -198,9 +232,6 @@ main = do
         case filter ((== targetStep) . arkhamStepStep) agedSteps of
           (s : _) -> choiceMessages (arkhamStepChoice s)
           _ -> []
-
-  provider <- initializeGlobalTracerProvider
-  let tracer = makeTracer provider $(detectInstrumentationLibrary) tracerOptions
 
   metricsRef <- case optMetrics opts of
     Nothing -> pure Nothing
@@ -210,10 +241,24 @@ main = do
         | optTrace opts = Just (\m -> hPutStrLn stderr ("> " <> show m))
         | otherwise = Nothing
 
+  -- Narrate while replaying, so --trace shows the derived log beside the
+  -- messages it came from. That pairing is how you tell whether a narration is
+  -- actually right.
+  narratorRef <- newIORef emptyNarrator
+  let observers ref =
+        RunObservers {observeMessage = tracerCallback, observeNarration = Just ref}
+
   gameRef <- newIORef currentData
   queueRef <- newQueue resumeQueue
   genRef <- newIORef (mkStdGen currentData.gameSeed)
-  let app = GameApp gameRef queueRef genRef (const (pure ())) tracer Nothing
+  -- Client messages (card popups, log lines, UI pokes) never touch the Game
+  -- state, so a bug that only drops one is invisible in --output. Surface them
+  -- on stderr under --trace so they can be asserted on headlessly.
+  let clientLogger m
+        | optTrace opts = hPutStrLn stderr ("client> " <> formatClientMessage m)
+        | otherwise = pure ()
+
+  let app = GameApp gameRef queueRef genRef clientLogger Nothing
 
   -- Drain any pending queue first, then process answers one at a time using
   -- the same dance as Api.Handler.Arkham.Games.Shared.updateGame: resolve the
@@ -221,7 +266,7 @@ main = do
   -- SetActivePlayer if the answering player isn't the active player), and
   -- run the queue.
   wallStart <- getMonotonicTimeNSec
-  runGameApp app (runMessages "headless" tracerCallback)
+  runGameApp app (runMessages "headless" (observers narratorRef) >> flushNarrator narratorRef)
 
   perStepTimings <-
     if optReplayAll opts
@@ -241,7 +286,7 @@ main = do
           gBefore <- readIORef gameRef
           runGameApp app (pushAll (ClearUI : msgs))
           t0 <- getMonotonicTimeNSec
-          runGameApp app (runMessages "headless" tracerCallback)
+          runGameApp app (runMessages "headless" (observers narratorRef) >> flushNarrator narratorRef)
           t1 <- getMonotonicTimeNSec
           serverNs <-
             if optSimulateServer opts
@@ -280,16 +325,16 @@ main = do
             Unhandled reason ->
               hPutStrLn stderr
                 $ "answer "
-                <> show idx
-                <> " unhandled: "
-                <> T.unpack reason
+                  <> show idx
+                  <> " unhandled: "
+                  <> T.unpack reason
             Handled msgs -> do
               let bracketed =
                     [SetActivePlayer answerPid | activePid /= answerPid]
                       <> msgs
                       <> [SetActivePlayer activePid | activePid /= answerPid]
               runGameApp app (pushAll (ClearUI : bracketed))
-              runGameApp app (runMessages "headless" tracerCallback)
+              runGameApp app (runMessages "headless" (observers narratorRef) >> flushNarrator narratorRef)
         pure []
 
   wallEnd <- getMonotonicTimeNSec
@@ -303,8 +348,8 @@ main = do
       let elapsedMs = fromIntegral (wallEnd - wallStart) / (1_000_000 :: Double)
       hPutStrLn stderr
         $ "Replay wall-clock (excluding load + final encode): "
-        <> show elapsedMs
-        <> " ms"
+          <> show elapsedMs
+          <> " ms"
       dumpMetricsTo dest ref (optMetricsTopN opts)
     _ -> pure ()
 
@@ -318,24 +363,24 @@ main = do
     hPutStrLn stderr ""
     hPutStrLn stderr
       $ "Aggregate: drain "
-      <> printfMs (toMs sumDrain)
-      <> " ms, server-sim "
-      <> printfMs (toMs sumServer)
-      <> " ms over "
-      <> show (length perStepTimings)
-      <> " steps"
+        <> printfMs (toMs sumDrain)
+        <> " ms, server-sim "
+        <> printfMs (toMs sumServer)
+        <> " ms over "
+        <> show (length perStepTimings)
+        <> " steps"
     hPutStrLn stderr "Top slowest steps (descending by drain+server time):"
     hPutStrLn stderr "  step      duration_ms     server_ms   messages_pushed"
     forM_ slowest $ \(step, ns, serverNs, msgs) ->
       hPutStrLn stderr
         $ "  "
-        <> padLeft 8 (show step)
-        <> "  "
-        <> padLeft 11 (printfMs (toMs ns))
-        <> "  "
-        <> padLeft 12 (printfMs (toMs serverNs))
-        <> "  "
-        <> padLeft 5 (show msgs)
+          <> padLeft 8 (show step)
+          <> "  "
+          <> padLeft 11 (printfMs (toMs ns))
+          <> "  "
+          <> padLeft 12 (printfMs (toMs serverNs))
+          <> "  "
+          <> padLeft 5 (show msgs)
     case optPerStepReport opts of
       Nothing -> pure ()
       Just path -> do
@@ -356,8 +401,9 @@ main = do
         writeFile path rows
         hPutStrLn stderr $ "Per-step CSV written to " <> path
 
--- | Apply one step's choicePatchDown to the running JSON value. Stops on the
--- first failure.
+{- | Apply one step's choicePatchDown to the running JSON value. Stops on the
+first failure.
+-}
 applyUndo :: Either String Value -> ArkhamStep -> Either String Value
 applyUndo (Left e) _ = Left e
 applyUndo (Right v) step =

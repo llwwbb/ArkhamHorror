@@ -7,19 +7,32 @@ import Import hiding (on, (==.))
 
 import Api.Arkham.Epic (applyEpicDeltasLocked, lookupGameEvent, mkEpicEnv)
 import Api.Arkham.Helpers
-import Api.Handler.Arkham.Games.Shared (epicSyncMessages, propagateShared, publishToRoom)
-import Arkham.Epic.Types (EpicRole (GroupPlayer), GroupOrdinal (..), epicEnvDeltaRef, epicEnvGroup, epicEnvSharedRef)
+import Api.Handler.Arkham.Games.Shared (
+  broadcastEventChanged,
+  epicSyncMessages,
+  propagateShared,
+  publishToRoom,
+ )
 import Arkham.Classes.HasQueue
+import Arkham.Epic.Types (
+  EpicRole (GroupPlayer),
+  GroupOrdinal (..),
+  epicEnvDeltaRef,
+  epicEnvGroup,
+  epicEnvSharedRef,
+ )
 import Arkham.Game
 import Arkham.Game.State
+import Arkham.Game.Utils (gameInvestigators)
 import Arkham.Id
+import Arkham.Message (Message (JoinCampaign))
 import Arkham.Queue
 import Control.Lens (view)
 import Control.Monad.Random (mkStdGen)
 import Data.Time.Clock
 import Database.Persist ((==.))
+import Entity.Answer (atCampaignContinuation, maxInvestigators)
 import Entity.Arkham.Step
-import OpenTelemetry.Trace.Monad (MonadTracer (..))
 
 getApiV1ArkhamPendingGameR :: ArkhamGameId -> Handler (PublicGame ArkhamGameId)
 getApiV1ArkhamPendingGameR gameId = do
@@ -30,10 +43,70 @@ getApiV1ArkhamPendingGameR gameId = do
 putApiV1ArkhamPendingGameR :: ArkhamGameId -> Handler (PublicGame ArkhamGameId)
 putApiV1ArkhamPendingGameR gameId = do
   userId <- getRequestUserId
-  tracer <- getTracer
   now <- liftIO getCurrentTime
+  -- A player may occupy seats in only one group of an event. The normal UI
+  -- enforces this too, but direct invite URLs/API calls must not be able to move
+  -- the membership row while leaving ArkhamPlayer rows in multiple games.
+  mJoinEvent <- runDB $ lookupGameEvent gameId
+  for_ mJoinEvent \(eventEntity, GroupOrdinal requestedOrdinal) -> do
+    mMembership <-
+      runDB
+        $ selectFirst
+          [ ArkhamEpicMemberArkhamEpicEventId ==. entityKey eventEntity
+          , ArkhamEpicMemberUserId ==. userId
+          , ArkhamEpicMemberRole ==. GroupPlayer
+          ]
+          []
+    for_ mMembership \(Entity _ membership) ->
+      when (arkhamEpicMemberGroupOrdinal membership /= Just requestedOrdinal)
+        $ permissionDenied "You already occupy a seat in another group in this event"
   (game@ArkhamGame {..}, mShared) <- runDB $ atomicallyWithGame gameId \original@ArkhamGame {..} -> do
     case gameGameState arkhamGameCurrentData of
+      -- Between scenarios a campaign is open to new players (Rules Reference,
+      -- "Joining or Leaving a Campaign"). The seat is added to the live game and
+      -- picks a deck from the investigators nobody has used yet.
+      IsActive
+        | atCampaignContinuation arkhamGameCurrentData
+        , length (gameInvestigators arkhamGameCurrentData) < maxInvestigators -> do
+            alreadyExists <- exists [ArkhamPlayerArkhamGameId ==. gameId, ArkhamPlayerUserId ==. userId]
+            if alreadyExists
+              then pure (original, Nothing)
+              else do
+                mLastStep <- getBy (UniqueStep gameId arkhamGameStep)
+                let currentQueue = maybe [] (choiceMessages . arkhamStepChoice . entityVal) mLastStep
+
+                gameRef <- liftIO $ newIORef arkhamGameCurrentData
+                queueRef <- liftIO $ newQueue currentQueue
+                genRef <- liftIO $ newIORef (mkStdGen (gameSeed arkhamGameCurrentData))
+
+                pid <- insert $ ArkhamPlayer userId gameId "00000"
+
+                runGameApp (GameApp gameRef queueRef genRef (pure . const ()) Nothing) do
+                  pushEnd $ JoinCampaign (PlayerId $ coerce pid)
+                  runMessages (gameIdToText gameId) noRunObservers
+
+                updatedGame <- liftIO $ readIORef gameRef
+                updatedQueue <- liftIO $ readIORef (queueToRef queueRef)
+
+                let
+                  game' =
+                    ArkhamGame
+                      arkhamGameName
+                      updatedGame
+                      (arkhamGameStep + 1)
+                      arkhamGameMultiplayerVariant
+                      arkhamGameCreatedAt
+                      now
+
+                replace gameId game'
+                insert_
+                  $ ArkhamStep
+                    gameId
+                    (Choice mempty updatedQueue)
+                    (arkhamGameStep + 1)
+                    (ActionDiff $ view actionDiffL updatedGame)
+
+                pure (game', Nothing)
       IsPending _ -> do
         alreadyExists <- exists [ArkhamPlayerArkhamGameId ==. gameId, ArkhamPlayerUserId ==. userId]
 
@@ -55,21 +128,24 @@ putApiV1ArkhamPendingGameR gameId = do
             -- the CURRENT pool rather than 0/seed — otherwise a group set up
             -- after others have acted would not reflect their spends/damage.
             mEpicCtx <- lookupGameEvent gameId
-            for_ mEpicCtx \(eventEntity, GroupOrdinal groupOrd) ->
-              void
-                $ upsertBy
-                  (UniqueEpicMember (entityKey eventEntity) userId GroupPlayer)
-                  (ArkhamEpicMember (entityKey eventEntity) userId GroupPlayer (Just groupOrd))
-                  [ArkhamEpicMemberGroupOrdinal =. Just groupOrd]
+            for_ mEpicCtx \(eventEntity, GroupOrdinal groupOrd) -> do
+              membership <-
+                insertBy
+                  $ ArkhamEpicMember (entityKey eventEntity) userId GroupPlayer (Just groupOrd)
+              case membership of
+                Left (Entity _ existing)
+                  | arkhamEpicMemberGroupOrdinal existing /= Just groupOrd ->
+                      error "player already belongs to another event group"
+                _ -> pure ()
             mEpicEnv <- traverse (uncurry mkEpicEnv) mEpicCtx
 
-            runGameApp (GameApp gameRef queueRef genRef (pure . const ()) tracer mEpicEnv) $ do
+            runGameApp (GameApp gameRef queueRef genRef (pure . const ()) mEpicEnv) $ do
               addPlayer (PlayerId $ coerce pid)
               -- Run setup. For a multiplayer lobby this PAUSES at ChooseDeck
               -- (IsChooseDecks) until players pick decks, so we must NOT run any
               -- further messages here or we'd blast past deck selection and start
               -- the scenario with zero investigators ("No lead found").
-              runMessages (gameIdToText gameId) Nothing
+              runMessages (gameIdToText gameId) noRunObservers
               -- Only when setup actually completed in this request (e.g. a fully
               -- pre-decked/AI group) do we reconcile the board to the shared pool.
               -- Otherwise the reconcile happens after deck selection via the
@@ -78,7 +154,7 @@ putApiV1ArkhamPendingGameR gameId = do
               when (setupState == IsActive) $ for_ mEpicEnv \epic -> do
                 shared <- liftIO $ readIORef (epicEnvSharedRef epic)
                 pushAll (epicSyncMessages (epicEnvGroup epic) shared)
-                runMessages (gameIdToText gameId) Nothing
+                runMessages (gameIdToText gameId) noRunObservers
 
             updatedGame <- liftIO $ readIORef gameRef
             updatedQueue <- liftIO $ readIORef (queueToRef queueRef)
@@ -116,6 +192,7 @@ putApiV1ArkhamPendingGameR gameId = do
       _ -> pure (original, Nothing)
 
   for_ mShared \(eid, s) -> propagateShared eid (Just gameId) s
+  for_ mJoinEvent \(eventEntity, _) -> broadcastEventChanged (entityKey eventEntity)
   publishToRoom gameId
     $ GameUpdate
     $ PublicGame gameId arkhamGameName [] arkhamGameCurrentData

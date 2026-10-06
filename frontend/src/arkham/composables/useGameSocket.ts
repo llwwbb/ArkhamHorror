@@ -8,6 +8,8 @@ import * as ArkhamGame from '@/arkham/types/Game'
 import * as Message from '@/arkham/types/Message'
 import type { SharedEventState } from '@/arkham/types/EpicEvent'
 import type { Question } from '@/arkham/types/Question'
+import type { LogEntry, LogRow } from '@/arkham/types/GameLog'
+import { legacyLogEntry, logRowsToEntries } from '@/arkham/legacyLogParse'
 import { preloadGameImages } from '@/arkham/gameImagePreload'
 import type { GameModals } from './useGameModals'
 
@@ -46,7 +48,7 @@ export function useGameSocket(opts: UseGameSocketOptions) {
   const userStore = useUserStore()
 
   const game = shallowRef<Arkham.Game | null>(null)
-  const gameLog = shallowRef<readonly string[]>(Object.freeze([]))
+  const gameLog = shallowRef<readonly LogEntry[]>(Object.freeze([]))
   const playerId = ref<string | null>(null)
   const eventId = ref<string | null>(null)
   const ready = ref(false)
@@ -58,7 +60,8 @@ export function useGameSocket(opts: UseGameSocketOptions) {
   const resultQueue = ref<any>([])
   const skipAllPending = ref<Set<string>>(new Set())
 
-  function updateGameLog(nextLog: readonly string[]) {
+  function updateGameLog(rows: readonly LogRow[]) {
+    const nextLog = logRowsToEntries(rows, game.value?.locations ?? {})
     const currentLog = gameLog.value
     if (
       currentLog.length === nextLog.length &&
@@ -114,13 +117,19 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     const placementChanged = (
       previousEntities: Record<string, { placement: unknown }> | undefined,
       currentEntities: Record<string, { placement: unknown }> | undefined,
-    ) => Object.entries(currentEntities ?? {}).some(([id, entity]) => {
-      const previousEntity = previousEntities?.[id]
-      return previousEntity && JSON.stringify(previousEntity.placement) !== JSON.stringify(entity.placement)
-    })
+    ) =>
+      Object.entries(currentEntities ?? {}).some(([id, entity]) => {
+        const previousEntity = previousEntities?.[id]
+        return (
+          previousEntity &&
+          JSON.stringify(previousEntity.placement) !== JSON.stringify(entity.placement)
+        )
+      })
 
-    return placementChanged(previous.investigators, current.investigators)
-      || placementChanged(previous.enemies, current.enemies)
+    return (
+      placementChanged(previous.investigators, current.investigators) ||
+      placementChanged(previous.enemies, current.enemies)
+    )
   }
 
   function applyGameUpdate(updatedGame: Arkham.Game, locked: boolean) {
@@ -134,7 +143,11 @@ export function useGameSocket(opts: UseGameSocketOptions) {
       startViewTransition?: (callback: () => Promise<void>) => unknown
     }
 
-    if (previousGame && entitiesMoved(previousGame, nextGame) && transitionDocument.startViewTransition) {
+    if (
+      previousGame &&
+      entitiesMoved(previousGame, nextGame) &&
+      transitionDocument.startViewTransition
+    ) {
       transitionDocument.startViewTransition(apply)
     } else {
       void apply()
@@ -163,7 +176,10 @@ export function useGameSocket(opts: UseGameSocketOptions) {
             } else {
               playerId.value = Object.keys(updatedGame.question)[0]
             }
-          } else if (playerId.value && !Object.keys(updatedGame.question).includes(playerId.value)) {
+          } else if (
+            playerId.value &&
+            !Object.keys(updatedGame.question).includes(playerId.value)
+          ) {
             playerId.value = Object.keys(updatedGame.question)[0]
           }
         }
@@ -208,18 +224,24 @@ export function useGameSocket(opts: UseGameSocketOptions) {
     return result
   }
 
-  function investigatorBelongsToPlayer(g: Arkham.Game, investigatorId: string, targetPlayerId: string) {
+  function investigatorBelongsToPlayer(
+    g: Arkham.Game,
+    investigatorId: string,
+    targetPlayerId: string,
+  ) {
     return g.investigators[investigatorId]?.playerId === targetPlayerId
   }
 
   function isInvestigatorTurn(g: Arkham.Game) {
-    return g.phaseStep?.tag === 'InvestigationPhaseStep'
-      && [
+    return (
+      g.phaseStep?.tag === 'InvestigationPhaseStep' &&
+      [
         'NextInvestigatorsTurnBeginsStep',
         'NextInvestigatorsTurnBeginsWindow',
         'InvestigatorTakesActionStep',
         'InvestigatorsTurnEndsStep',
       ].includes(g.phaseStep.contents)
+    )
   }
 
   function canCurrentPlayerSkipAllWindows(g: Arkham.Game, currentPlayerId: string) {
@@ -258,7 +280,9 @@ export function useGameSocket(opts: UseGameSocketOptions) {
   function continueSkipAll() {
     if (skipAllPending.value.size === 0) return
     if (!game.value) return
-    const next = authorizedSkipTriggerEntries(game.value).find((e) => skipAllPending.value.has(e.playerId))
+    const next = authorizedSkipTriggerEntries(game.value).find((e) =>
+      skipAllPending.value.has(e.playerId),
+    )
     if (!next) {
       skipAllPending.value = new Set()
       return
@@ -315,7 +339,10 @@ export function useGameSocket(opts: UseGameSocketOptions) {
       case 'GameMessage':
         // Store the raw token; GameMessage.vue localizes via handleEmbeddedI18n,
         // which keeps params intact and re-renders reactively on language change.
-        gameLog.value = Object.freeze([...gameLog.value, result.contents])
+        gameLog.value = Object.freeze([
+          ...gameLog.value,
+          legacyLogEntry(result.contents, gameLog.value.length, game.value?.locations ?? {}),
+        ])
         return
       case 'GameAchievement':
         opts.onAchievement?.(result.contents)
@@ -392,7 +419,10 @@ export function useGameSocket(opts: UseGameSocketOptions) {
           qPush(result)
           return
         }
-        modals.showGameCardOnly(result, (player) => solo.value === true || player === playerId.value)
+        modals.showGameCardOnly(
+          result,
+          (player) => solo.value === true || player === playerId.value,
+        )
         return
       case 'SharedStateUpdate':
         opts.onSharedStateUpdate?.(result.contents)

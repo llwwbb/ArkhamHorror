@@ -1,16 +1,14 @@
 import { createApp, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import GameLog from '@/arkham/components/GameLog.vue'
+import { legacyLogEntry } from '@/arkham/legacyLogParse'
 
-vi.mock('@/arkham/components/GameMessage.vue', async () => {
+vi.mock('@/arkham/components/GameLogEntry.vue', async () => {
   const { defineComponent } = await import('vue')
-
   return {
     default: defineComponent({
-      props: {
-        msg: { type: String, required: true },
-      },
-      template: '<span class="message">{{ msg }}</span>',
+      props: ['entry', 'path', 'isOpen'],
+      template: '<span class="message">{{ entry.body[0].contents }}</span>',
     }),
   }
 })
@@ -28,14 +26,13 @@ afterEach(() => {
 })
 
 describe('GameLog', () => {
-  it('renders the latest 30 log entries', async () => {
+  it('renders all loaded log entries, including older pages', async () => {
     const gameLog = Array.from({ length: 35 }, (_value, index) => `entry-${index + 1}`)
     const host = document.createElement('div')
     document.body.appendChild(host)
 
     const app = createApp(GameLog, {
-      game: {},
-      gameLog,
+      entries: gameLog.map((body, index) => legacyLogEntry(body, index)),
     })
     mountedApps.push(app)
 
@@ -43,8 +40,8 @@ describe('GameLog', () => {
     await nextTick()
 
     const messages = Array.from(host.querySelectorAll('.message')).map((el) => el.textContent)
-    expect(messages).toHaveLength(30)
-    expect(messages[0]).toBe('entry-6')
+    expect(messages).toHaveLength(35)
+    expect(messages[0]).toBe('entry-1')
     expect(messages.at(-1)).toBe('entry-35')
   })
 })

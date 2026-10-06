@@ -1,11 +1,11 @@
 module Arkham.Homebrew.CircusExMortis.Treacheries.QuickerThanTheEye (quickerThanTheEye) where
 
 import Arkham.Helpers.Message.Discard.Lifted (chooseAndDiscardCards)
+import Arkham.Homebrew.CircusExMortis.CardDefs.Treacheries qualified as Cards
 import Arkham.I18n
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Trait (Trait (Performer))
-import Arkham.Homebrew.CircusExMortis.CardDefs.Treacheries qualified as Cards
 import Arkham.Treachery.Import.Lifted
 
 newtype QuickerThanTheEye = QuickerThanTheEye TreacheryAttrs
@@ -25,6 +25,6 @@ instance RunMessage QuickerThanTheEye where
     FailedThisSkillTest iid (isSource attrs -> True) -> do
       chooseOneM iid $ withI18n do
         chooseTakeHorror iid attrs 2
-        countVar 2 $ labeled' "discardCards" $ chooseAndDiscardCards iid attrs 2
+        countVar 2 $ labeled "discardCards" $ chooseAndDiscardCards iid attrs 2
       pure t
     _ -> QuickerThanTheEye <$> liftRunMessage msg attrs

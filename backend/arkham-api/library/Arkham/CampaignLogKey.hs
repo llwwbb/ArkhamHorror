@@ -3,6 +3,7 @@
 module Arkham.CampaignLogKey where
 
 import Arkham.Campaigns.BrethrenOfAsh.Key
+import Arkham.Campaigns.ChildrenOfBlood.Key
 import Arkham.Campaigns.EdgeOfTheEarth.Key
 import Arkham.Campaigns.NightOfTheZealot.Key
 import Arkham.Campaigns.TheCircleUndone.Key
@@ -16,10 +17,10 @@ import Arkham.Campaigns.TheInnsmouthConspiracy.Key
 import Arkham.Campaigns.TheInnsmouthConspiracy.Memory
 import Arkham.Campaigns.ThePathToCarcosa.Key
 import Arkham.Campaigns.TheScarletKeys.Key
-import Arkham.Scenarios.TheLabyrinthsOfLunacy.Key
 import Arkham.Card.CardCode
 import Arkham.Classes.GameLogger
 import Arkham.Prelude hiding (toLower)
+import Arkham.Scenarios.TheLabyrinthsOfLunacy.Key
 import Control.Monad.Fail
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.TH
@@ -42,13 +43,15 @@ data CampaignLogKey
   | TheScarletKeysKey TheScarletKeysKey
   | TheFeastOfHemlockValeKey TheFeastOfHemlockValeKey
   | BrethrenOfAshKey BrethrenOfAshKey
+  | ChildrenOfBloodKey ChildrenOfBloodKey
   | TheDrownedCityKey TheDrownedCityKey
-  | -- | The single shared wrapper through which any homebrew campaign plugs its
-    -- own key enum into the log — the homebrew analogue of the per-campaign
-    -- @…Key …Key@ constructors above, but injected rather than hardcoded. Each
-    -- campaign owns @data …Key@ plus an 'IsCampaignLogKey' instance that maps to
-    -- and from this wrapper (see e.g. @Arkham.Homebrew.DarkMatter.Key@), so
-    -- adding a campaign needs no change here.
+  | {- | The single shared wrapper through which any homebrew campaign plugs its
+    own key enum into the log — the homebrew analogue of the per-campaign
+    @…Key …Key@ constructors above, but injected rather than hardcoded. Each
+    campaign owns @data …Key@ plus an 'IsCampaignLogKey' instance that maps to
+    and from this wrapper (see e.g. @Arkham.Homebrew.DarkMatter.Key@), so
+    adding a campaign needs no change here.
+    -}
     HomebrewCampaignLogKey Text
   | TheLabyrinthsOfLunacyKey TheLabyrinthsOfLunacyKey
   | -- | Curse of the Rougarou
@@ -116,6 +119,7 @@ instance FromJSON CampaignLogKey where
       <|> (TheScarletKeysKey <$> parseJSON o)
       <|> (TheFeastOfHemlockValeKey <$> parseJSON o)
       <|> (BrethrenOfAshKey <$> parseJSON o)
+      <|> (ChildrenOfBloodKey <$> parseJSON o)
       <|> (TheDrownedCityKey <$> parseJSON o)
       <|> (TheLabyrinthsOfLunacyKey <$> parseJSON o)
       <|> $(mkParseJSON defaultOptions ''CampaignLogKey) o
@@ -285,6 +289,12 @@ instance IsCampaignLogKey BrethrenOfAshKey where
     BrethrenOfAshKey k -> Just k
     _ -> Nothing
 
+instance IsCampaignLogKey ChildrenOfBloodKey where
+  toCampaignLogKey = ChildrenOfBloodKey
+  fromCampaignLogKey = \case
+    ChildrenOfBloodKey k -> Just k
+    _ -> Nothing
+
 instance IsCampaignLogKey TheDrownedCityKey where
   toCampaignLogKey = TheDrownedCityKey
   fromCampaignLogKey = \case
@@ -359,10 +369,18 @@ instance ToGameLoggerFormat CampaignLogKey where
     TheScarletKeysKey k -> pack . go $ show k
     TheFeastOfHemlockValeKey k -> pack . go $ show k
     BrethrenOfAshKey k -> pack . go $ show k
+    ChildrenOfBloodKey k -> pack . go $ show k
     TheDrownedCityKey k -> pack . go $ show k
-    HomebrewCampaignLogKey t -> pack . go $ unpack t
+    -- Homebrew keys are namespaced "<campaignScope>.KeyName"; the scope is for
+    -- i18n lookup and does not belong in the printed text.
+    HomebrewCampaignLogKey t -> pack . go . dropScope $ unpack t
     s -> pack . go $ show s
    where
+    dropScope :: String -> String
+    dropScope s = case break (== '.') s of
+      (_, '.' : rest) -> rest
+      _ -> s
+
     go :: String -> String
     go [] = []
     go (x : xs) = toLower x : go' xs

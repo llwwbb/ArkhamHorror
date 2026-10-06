@@ -159,6 +159,16 @@ withI18nTooltip t a = a & abilityTooltipL ?~ scope "tooltips" (toI18n t)
 tooltip :: HasI18n => Text -> Ability -> Ability
 tooltip = withI18nTooltip
 
+{- | Name what succeeding at this ability actually does, for the choice that resolves it.
+
+The default label for a successful investigation says "Discover Clue at <location>", which
+is wrong for an ability that does something else instead -- Base of the Hill puts a
+Diverging Path into play. The key is taken under the scope in effect here, so the text
+sits in the scenario's locale beside the tooltip it paraphrases.
+-}
+withI18nResultLabel :: HasI18n => Text -> Ability -> Ability
+withI18nResultLabel t a = a & abilityResultLabelL ?~ ("$" <> labelKey t)
+
 selfAbility :: (HasCardCode a, Sourceable a) => a -> Int -> Criterion -> AbilityType -> Ability
 selfAbility a n c = restrictedAbility a n (Self <> c)
 
@@ -235,13 +245,34 @@ investigateAbility entity idx cost criteria =
     { abilityCriteria = criteria <> exists (YourLocation <> InvestigatableLocation)
     }
 
+{- | Like 'investigateAbility', but the "can this location be investigated" check is
+pinned to a specific location rather than to the investigator's current location.
+Needed for the basic investigate action printed on a location, so that effects which
+let you investigate a remote location (Beguile) aren't blocked by a CannotInvestigate
+effect (Locked Door) on the location you happen to be standing in. See #5333.
+-}
+investigateAbilityAt
+  :: (Sourceable a, HasCardCode a) => a -> LocationMatcher -> Int -> Cost -> Criterion -> Ability
+investigateAbilityAt entity matcher idx cost criteria =
+  (mkAbility entity idx (investigateAction cost))
+    { abilityCriteria = criteria <> exists (matcher <> InvestigatableLocation)
+    }
+
 withInvestigationTargets :: LocationMatcher -> Ability -> Ability
-withInvestigationTargets matcher =
+withInvestigationTargets matcher = withInvestigationTargetsMatching (matcher <> InvestigatableLocation)
+
+{- | Like 'withInvestigationTargets', but the matcher already says which locations
+count as targets. Needed when investigatability differs per target, e.g. Duke,
+which may move you to a location before investigating it, so an unrevealed
+connecting location is a legal target even though it can't be investigated yet.
+-}
+withInvestigationTargetsMatching :: LocationMatcher -> Ability -> Ability
+withInvestigationTargetsMatching matcher =
   delayAdditionalCostsWhen criterion
     . restrict criterion
     . (abilityMetadataL ?~ InvestigateTargets matcher)
  where
-  criterion = exists $ matcher <> InvestigatableLocation
+  criterion = exists matcher
 
 investigateAbilityWith
   :: (Sourceable a, HasCardCode a) => a -> Int -> SkillType -> Cost -> Criterion -> Ability
@@ -301,6 +332,16 @@ basicAbility ab = ab {abilityBasic = True}
 skipForAll :: Ability -> Ability
 skipForAll ab = ab {abilitySkipForAll = True}
 
+{- | Mark a reaction non-blocking: it is offered only alongside whatever else the window
+already stops for, and never on its own. See 'runWindow'.
+-}
+nonBlocking :: Ability -> Ability
+nonBlocking ab = ab {abilityNonBlocking = True}
+
+-- | Non-blocking, except in windows matching this matcher, where it blocks as usual.
+nonBlockingExcept :: WindowMatcher -> Ability -> Ability
+nonBlockingExcept m ab = ab {abilityNonBlocking = True, abilityBlocksIn = Just m}
+
 mkAbility :: (Sourceable a, HasCardCode a) => a -> Int -> AbilityType -> Ability
 mkAbility entity idx type' =
   Ability
@@ -316,6 +357,7 @@ mkAbility entity idx type' =
     , abilityCriteria = NoRestriction
     , abilityDoesNotProvokeAttacksOfOpportunity = Nothing
     , abilityTooltip = Nothing
+    , abilityResultLabel = Nothing
     , abilityCanBeCancelled = True
     , abilityDisplayAs = Nothing
     , abilityDelayAdditionalCosts = Nothing
@@ -328,6 +370,8 @@ mkAbility entity idx type' =
     , abilityHighlightFromWindow = False
     , abilityFightCriteriaOverride = Nothing
     , abilityEvadeCriteriaOverride = Nothing
+    , abilityNonBlocking = False
+    , abilityBlocksIn = Nothing
     }
 
 applyAbilityModifiers :: Ability -> [ModifierType] -> Ability
@@ -476,6 +520,7 @@ applyCostModifier (ActionCost n) (ActionCostModifier m) =
 applyCostModifier (ActionCost _) (ActionCostSetToModifier m) = ActionCost m
 applyCostModifier (Costs xs) modifier = Costs $ map (`applyCostModifier` modifier) xs
 applyCostModifier (NonBlankedCost x) modifier = NonBlankedCost $ x `applyCostModifier` modifier
+applyCostModifier (SourcedCost s x) modifier = SourcedCost s $ x `applyCostModifier` modifier
 applyCostModifier cost _ = cost
 
 defaultAbilityWindow :: AbilityType -> WindowMatcher
@@ -536,11 +581,19 @@ isSilentForcedAbilityType = \case
   ConstantAbility {} -> False
 defaultAbilityLimit :: AbilityType -> AbilityLimit
 defaultAbilityLimit = \case
+  -- Every Forced default is a GROUP limit: `Do (CheckWindows ws)` fans out to every
+  -- investigator and each queues its own ResolveWindowInitiations, so the group limit is
+  -- the cross-seat dedupe -- the later seats' initiations drop out of the re-filter once
+  -- the first seat's use is recorded (#5756). A `You` window only ever matches one seat,
+  -- so group and player agree there; on a shared source with an `Anyone` window they do
+  -- not, and the act's Objective was offered once per seat (#5761). The period still
+  -- scopes the bucket: PerWindow intersects `usedAbilityWindows`, PerTest is cleared at
+  -- SkillTestEnds, and PerMove is rewritten to PerMovement by `upgradePerMove`.
   ForcedAbility window' -> case window' of
-    SkillTestResult {} -> PlayerLimit PerTest 1
-    Moves {} -> PlayerLimit PerMove 1
-    Enters timing _ _ | timing /= #after -> PlayerLimit PerMove 1
-    Enters timing _ _ | timing == #after -> PlayerLimit PerWindow 1
+    SkillTestResult {} -> GroupLimit PerTest 1
+    Moves {} -> GroupLimit PerMove 1
+    Enters timing _ _ | timing /= #after -> GroupLimit PerMove 1
+    Enters timing _ _ | timing == #after -> GroupLimit PerWindow 1
     EnemySpawns {} -> GroupLimit PerSpawn 1
     _ -> GroupLimit PerWindow 1
   SilentForcedAbility _ -> GroupLimit PerWindow 1

@@ -8,8 +8,8 @@ import Arkham.Agenda.Types (Agenda)
 import Arkham.Asset (createAsset)
 import Arkham.Asset.Types (Asset)
 import Arkham.Campaign ()
-import Arkham.Campaigns.TheScarletKeys.Concealed.Runner ()
 import Arkham.Campaigns.TheScarletKeys.Concealed
+import Arkham.Campaigns.TheScarletKeys.Concealed.Runner ()
 import Arkham.Campaigns.TheScarletKeys.Keys
 import Arkham.Card
 import Arkham.Classes.Entity
@@ -19,7 +19,7 @@ import Arkham.Classes.RunMessage
 import Arkham.Effect ()
 import Arkham.Effect.Types (Effect)
 import Arkham.Enemy ()
-import Arkham.Enemy.Types (Enemy)
+import Arkham.Enemy.Types (Enemy, EnemyAttrs (enemyAttacking))
 import Arkham.EnemyLocation ()
 import Arkham.EnemyLocation.Types (EnemyLocation)
 import Arkham.Event
@@ -30,6 +30,7 @@ import Arkham.Investigator ()
 import Arkham.Investigator.Types (Investigator)
 import Arkham.Json
 import Arkham.Location
+import Arkham.Metrics (withMetric)
 import Arkham.Placement
 import Arkham.Prelude
 import Arkham.Scenario ()
@@ -98,7 +99,13 @@ instance FromJSON Entities where
 clearRemovedEntities :: Entities -> Entities
 clearRemovedEntities entities =
   entities
-    { entitiesEnemies = Map.filter (\e -> e.placement /= OutOfPlay RemovedZone) entities.enemies
+    { -- An enemy defeated by a "when... attacks" interrupt still has to resolve
+      -- the attack it is in the middle of, so keep it until 'enemyAttacking' is
+      -- cleared by the attack's After step.
+      entitiesEnemies =
+        Map.filter
+          (\e -> e.placement /= OutOfPlay RemovedZone || isJust (attr enemyAttacking e))
+          entities.enemies
     , entitiesAssets = Map.filter (\e -> e.placement /= OutOfPlay RemovedZone) entities.assets
     }
 
@@ -251,18 +258,18 @@ instance RunMessage Entities where
       runEntities :: (a ~ RunType a, RunMessage a) => Lens' Entities (EntityMap a) -> GameT (EntityMap a)
       runEntities lensL = traverse (runMessage msg) (entities ^. lensL)
 
-    entitiesActs <- runEntities actsL
-    entitiesAgendas <- runEntities agendasL
-    entitiesTreacheries <- runEntities treacheriesL
-    entitiesEvents <- runEntities eventsL
-    entitiesLocations <- runEntities locationsL
-    entitiesEnemies <- runEntities enemiesL
-    entitiesEnemyLocations <- runEntities enemyLocationsL
-    entitiesEffects <- runEntities effectsL
-    entitiesAssets <- runEntities assetsL
-    entitiesSkills <- runEntities skillsL
-    entitiesStories <- runEntities storiesL
-    entitiesInvestigators <- runEntities investigatorsL
-    entitiesConcealed <- runEntities concealedL
-    entitiesScarletKeys <- runEntities scarletKeysL
+    entitiesActs <- withMetric "fan/acts" $ runEntities actsL
+    entitiesAgendas <- withMetric "fan/agendas" $ runEntities agendasL
+    entitiesTreacheries <- withMetric "fan/treacheries" $ runEntities treacheriesL
+    entitiesEvents <- withMetric "fan/events" $ runEntities eventsL
+    entitiesLocations <- withMetric "fan/locations" $ runEntities locationsL
+    entitiesEnemies <- withMetric "fan/enemies" $ runEntities enemiesL
+    entitiesEnemyLocations <- withMetric "fan/enemyLocations" $ runEntities enemyLocationsL
+    entitiesEffects <- withMetric "fan/effects" $ runEntities effectsL
+    entitiesAssets <- withMetric "fan/assets" $ runEntities assetsL
+    entitiesSkills <- withMetric "fan/skills" $ runEntities skillsL
+    entitiesStories <- withMetric "fan/stories" $ runEntities storiesL
+    entitiesInvestigators <- withMetric "fan/investigators" $ runEntities investigatorsL
+    entitiesConcealed <- withMetric "fan/concealed" $ runEntities concealedL
+    entitiesScarletKeys <- withMetric "fan/scarletKeys" $ runEntities scarletKeysL
     pure Entities {..}

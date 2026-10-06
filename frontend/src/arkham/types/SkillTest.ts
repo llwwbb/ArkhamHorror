@@ -4,6 +4,8 @@ import { ChaosToken, chaosTokenDecoder } from '@/arkham/types/ChaosToken';
 import { Card, cardDecoder} from '@/arkham/types/Card';
 import { SkillType, skillTypeDecoder} from '@/arkham/types/SkillType';
 import { Modifier, modifierDecoder } from '@/arkham/types/Modifier';
+import { Target, targetDecoder } from '@/arkham/types/Target';
+import { TokenFace, tokenFaceDecoder } from '@/arkham/types/ChaosToken';
 
 export type SkillTestStep
   = "DetermineSkillOfTestStep"
@@ -43,6 +45,85 @@ const baseValueDecoder = JsonDecoder.oneOf<SkillTestBaseValue>(
   'SkillTestBaseValue',
 );
 
+/** One distinct face in the chaos bag and what it is worth right now. */
+export type ChaosTokenValueEntry = {
+  face: TokenFace
+  count: number
+  /** null when the face auto fails or auto succeeds */
+  value: number | null
+  autoFail: boolean
+  autoSuccess: boolean
+  /** bless/curse/frost draw another token when revealed */
+  revealsAnother: boolean
+}
+
+export const chaosTokenValueEntryDecoder = JsonDecoder.object<ChaosTokenValueEntry>({
+  face: tokenFaceDecoder,
+  count: JsonDecoder.number(),
+  value: JsonDecoder.nullable(JsonDecoder.number()),
+  autoFail: JsonDecoder.boolean(),
+  autoSuccess: JsonDecoder.boolean(),
+  revealsAnother: JsonDecoder.boolean(),
+}, 'ChaosTokenValueEntry')
+
+/**
+ * Everything needed to answer "would the test succeed if the next token were X"
+ * without reimplementing the engine's success rule.
+ */
+export type SkillTestValueBreakdown = {
+  tokens: ChaosTokenValueEntry[]
+  /** as it stands before the next token is revealed; includes committed icons */
+  skillValue: number
+  difficulty: number
+  failTies: boolean
+  autoFailIfSucceedByAtLeast: number[]
+}
+
+export const skillTestValueBreakdownDecoder = JsonDecoder.object<SkillTestValueBreakdown>({
+  tokens: JsonDecoder.array(chaosTokenValueEntryDecoder, 'ChaosTokenValueEntry[]'),
+  skillValue: JsonDecoder.number(),
+  difficulty: JsonDecoder.number(),
+  failTies: JsonDecoder.boolean(),
+  autoFailIfSucceedByAtLeast: JsonDecoder.array(JsonDecoder.number(), 'number[]'),
+}, 'SkillTestValueBreakdown')
+
+/** How many chaos tokens the test reveals, and how many of those resolve. */
+export type RevealStrategy
+  = { tag: 'Reveal', contents: number }
+  | { tag: 'RevealAndChoose', contents: [number, number] }
+  | { tag: 'MultiReveal', contents: [RevealStrategy, RevealStrategy] }
+
+export const revealStrategyDecoder: JsonDecoder.Decoder<RevealStrategy> = JsonDecoder.oneOf<RevealStrategy>(
+  [
+    JsonDecoder.object({
+      tag: JsonDecoder.literal('Reveal'),
+      contents: JsonDecoder.number(),
+    }, 'Reveal'),
+    JsonDecoder.object({
+      tag: JsonDecoder.literal('RevealAndChoose'),
+      contents: JsonDecoder.tuple([JsonDecoder.number(), JsonDecoder.number()], '[number, number]'),
+    }, 'RevealAndChoose'),
+    JsonDecoder.object({
+      tag: JsonDecoder.literal('MultiReveal'),
+      contents: JsonDecoder.tuple(
+        [JsonDecoder.lazy(() => revealStrategyDecoder), JsonDecoder.lazy(() => revealStrategyDecoder)],
+        '[RevealStrategy, RevealStrategy]',
+      ),
+    }, 'MultiReveal'),
+  ],
+  'RevealStrategy',
+)
+
+/** `Reveal 2 -> 1`, `2 + 1`, ... as a one-line label. */
+export function describeRevealStrategy(strategy: RevealStrategy): string {
+  switch (strategy.tag) {
+    case 'Reveal': return `${strategy.contents}`
+    case 'RevealAndChoose': return `${strategy.contents[0]} \u2192 ${strategy.contents[1]}`
+    case 'MultiReveal':
+      return `${describeRevealStrategy(strategy.contents[0])} + ${describeRevealStrategy(strategy.contents[1])}`
+  }
+}
+
 export type SkillTest = {
   investigator: string;
   setAsideChaosTokens: ChaosToken[];
@@ -51,6 +132,7 @@ export type SkillTest = {
   // result: SkillTestResult;
   committedCards: Card[]
   source: Source;
+  target: Target;
   id: string
   action: string | null;
   targetCard?: string | null;
@@ -60,8 +142,11 @@ export type SkillTest = {
   skills: SkillType[];
   step: SkillTestStep;
   baseValue: SkillTestBaseValue;
-  result: null | { tag: string };
+  result: null | { tag: string; contents?: [string, number] };
+  resultForced: boolean;
   modifiers?: Modifier[];
+  valueBreakdown?: SkillTestValueBreakdown;
+  revealStrategy?: RevealStrategy;
 }
 
 export type SkillTestResults = {
@@ -101,14 +186,21 @@ export const skillTestDecoder = JsonDecoder.object<SkillTest>(
     // result: skillTestResultDecoder,
     committedCards: JsonDecoder.record(JsonDecoder.array(cardDecoder, 'Card[]'), 'Record<string, Card[]>').map((record) => Object.values(record).flat()),
     source: sourceDecoder,
+    target: targetDecoder,
     targetCard: v2Optional(JsonDecoder.string()),
     sourceCard: v2Optional(JsonDecoder.string()),
     modifiedSkillValue: JsonDecoder.number(),
     skills: JsonDecoder.array(skillTypeDecoder, 'SkillType[]'),
     step: JsonDecoder.fallback("DetermineSkillOfTestStep", skillTestStepDecoder),
     baseValue: baseValueDecoder,
-    result: JsonDecoder.nullable(JsonDecoder.object({ tag: JsonDecoder.string() }, 'SkillTestResult')),
+    result: JsonDecoder.nullable(JsonDecoder.object({
+      tag: JsonDecoder.string(),
+      contents: v2Optional(JsonDecoder.tuple([JsonDecoder.string(), JsonDecoder.number()], '[string, number]')),
+    }, 'SkillTestResult')),
+    resultForced: JsonDecoder.fallback(false, JsonDecoder.boolean()),
     modifiers: v2Optional(JsonDecoder.array<Modifier>(modifierDecoder, 'Modifier[]')),
+    valueBreakdown: v2Optional(skillTestValueBreakdownDecoder),
+    revealStrategy: v2Optional(revealStrategyDecoder),
   },
   'SkillTest',
 );

@@ -1,11 +1,11 @@
 <script lang="ts" setup>
-import { computed } from 'vue';
+import { computed, inject, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { handleEmbeddedI18n } from '@/arkham/i18n';
 import type { Game } from '@/arkham/types/Game';
 import { QuestionType, type Question } from '@/arkham/types/Question';
 import { Done, CardLabel, ChaosTokenLabel, Label, MessageType, PortraitLabel, TooltipLabel, ScenarioLabel, Info, type Message } from '@/arkham/types/Message';
-import { imgsrc, formatContent } from '@/arkham/helpers';
+import { imgsrc, formatContent, scenarioBox } from '@/arkham/helpers';
 import { cardArt, cardImage, investigatorPortrait } from '@/arkham/cardImages';
 import { chaosTokenImage } from '@/arkham/types/ChaosToken';
 import StoryEntry from '@/arkham/components/StoryEntry.vue';
@@ -17,6 +17,8 @@ import * as ArkhamGame from '@/arkham/types/Game';
 import WorldMap, { type MapData } from '@/arkham/components/TheScarletKeys/WorldMap.vue';
 import BuildSpiritDeck from '@/arkham/components/BuildSpiritDeck.vue';
 import { usePhoneShell } from '@/arkham/composables/phoneShell'
+import CardImage from '@/arkham/components/CardImage.vue';
+import type { CardDef } from '@/arkham/types/CardDef';
 
 export interface Props {
   game: Game
@@ -26,6 +28,7 @@ export interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits(['choose'])
 const phoneShell = usePhoneShell()
+const solo = inject<Ref<boolean>>('solo')
 
 const ownQuestion = computed(() => props.game.question[props.playerId])
 
@@ -46,6 +49,20 @@ const viewerInvestigatorName = computed(() => {
   const targetPlayerId = effectivePlayerId.value
   const inv = Object.values(props.game.investigators).find(i => i.playerId === targetPlayerId)
   return inv?.name.title ?? ''
+})
+
+const choiceInvestigator = computed(() => {
+  if (!solo?.value || props.game.playerCount < 2) return null
+  if (question.value?.tag !== QuestionType.READ) return null
+  if (Object.keys(props.game.question).length < 2 || choices.value.length === 0) return null
+  return Object.values(props.game.investigators).find(
+    (investigator) => investigator.playerId === effectivePlayerId.value,
+  ) ?? null
+})
+
+const choiceInvestigatorPortrait = computed(() => {
+  const investigator = choiceInvestigator.value
+  return investigator ? investigatorPortrait(props.game, investigator.id) : null
 })
 
 const { t } = useI18n()
@@ -108,7 +125,9 @@ const choose = (idx: number) => {
   emit('choose', idx)
 }
 
-const flippableCard = (cardCode: string) => {
+// A card the story offers face-down: we have no def for it, only enough of one
+// for CardImage to show both sides.
+const flippableCard = (cardCode: string): CardDef => {
   return {
     cardCode,
     doubleSided: true,
@@ -116,11 +135,13 @@ const flippableCard = (cardCode: string) => {
     cardType: 'UnknownType',
     art: cardArt(cardCode),
     level: 0,
-    traits: [],
-    name: "",
+    cardTraits: [],
+    name: { title: "", subtitle: null },
     skills: [],
     cost: null,
-    otherSide: `${cardCode}b`
+    otherSide: `${cardCode}b`,
+    meta: {},
+    errata: null
   }
 }
 
@@ -142,7 +163,7 @@ const scenarioChoices = computed<[ScenarioLabel, number][]>(() => {
 })
 
 const scenarioBoxImage = (scenarioId: string) => {
-  return imgsrc(`boxes/${scenarioId}.jpg`)
+  return scenarioBox(scenarioId)
 }
 
 const isEmbarkQuestion = (q: Question): q is Question & { tag: QuestionType.PICK_CAMPAIGN_SPECIFIC; contents: ['embark', MapData] } =>
@@ -163,6 +184,14 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
     </div>
     <template v-else>
     <template v-if="question && question.tag === QuestionType.READ">
+      <div v-if="choiceInvestigator" class="choice-investigator">
+        <img
+          v-if="choiceInvestigatorPortrait"
+          :src="choiceInvestigatorPortrait"
+          :alt="choiceInvestigator.name.title"
+        />
+        <span>{{ choiceInvestigator.name.title }}</span>
+      </div>
       <StoryEntry
         :game="game"
         :playerId="effectivePlayerId"
@@ -352,6 +381,31 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
   box-sizing: border-box;
 }
 
+.choice-investigator {
+  align-items: center;
+  align-self: center;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: #EEE;
+  display: flex;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 0.9em;
+  font-weight: 700;
+  gap: 10px;
+  margin: 14px auto 0;
+  padding: 5px 14px 5px 5px;
+  width: fit-content;
+}
+
+.choice-investigator img {
+  border-radius: 50%;
+  height: 42px;
+  object-fit: cover;
+  object-position: top;
+  width: 42px;
+}
+
 .question-content {
   width: 60%;
   background: rgba(0, 0, 0, 0.3);
@@ -531,17 +585,30 @@ button {
   border: 1px solid var(--select);
 }
 
+.question-content:has(> .scenario-choices) > h2 {
+  color: #f1efe9;
+  font-family: "Noto Sans", sans-serif;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin: 0;
+  padding: 8px 16px;
+  text-align: center;
+}
+
 .scenario-choices {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
-  padding: 20px;
+  padding: 24px;
   max-width: 1000px;
   margin: 0 auto;
 }
 
 .scenario-tile {
   border: 0;
+  margin: 0;
   padding: 0;
   background: var(--neutral-dark);
   border-radius: 12px;
@@ -554,7 +621,7 @@ button {
   display: flex;
   flex-direction: column;
   span {
-    padding: 10px;
+    padding: 12px 16px;
   }
 }
 

@@ -1,16 +1,20 @@
 // Reads frontend/public/cards_*.json (the full ArkhamDB exports) and writes
 // trimmed copies to frontend/public/cards/cards_*.json containing only the
 // fields the frontend actually consumes (see ArkhamDBCard in
-// src/stores/dbCards.ts). Each output is also pre-compressed to .gz so
-// nginx can serve it via gzip_static.
+// src/stores/dbCards.ts). Each output is also pre-compressed to .gz (served by
+// gzip_static) and .br (served by the Accept-Encoding check in prod.nginxconf).
 //
 // Run after refreshing the source card files:
 //   npm run slim-cards
+//
+// `slimCards` is also used by the dev server (see vite.config.js), which slims
+// on demand so `vite dev` does not need this to have been run first.
 
 const fs = require('fs')
 const path = require('path')
 const zlib = require('zlib')
 const { isCardDataFilename } = require('./card-data-files.cjs')
+const { brotliSync } = require('./precompress.cjs')
 
 const KEEP_FIELDS = [
   'code',
@@ -42,6 +46,18 @@ const KEEP_FIELDS = [
   'deck_requirements',
 ]
 
+function slimCards(cards) {
+  return cards.map((c) => {
+    const o = {}
+    for (const k of KEEP_FIELDS) if (c[k] !== undefined) o[k] = c[k]
+    return o
+  })
+}
+
+module.exports = { KEEP_FIELDS, slimCards }
+
+if (require.main !== module) return
+
 const publicDir = path.join(__dirname, '..', 'public')
 const outDir = path.join(publicDir, 'cards')
 
@@ -59,6 +75,7 @@ if (sources.length === 0) {
 let totalIn = 0
 let totalOut = 0
 let totalGz = 0
+let totalBr = 0
 
 for (const file of sources) {
   const src = path.join(publicDir, file)
@@ -67,29 +84,27 @@ for (const file of sources) {
     console.log(`${file}: empty source, skipping`)
     continue
   }
-  const cards = JSON.parse(raw)
-  const slim = cards.map((c) => {
-    const o = {}
-    for (const k of KEEP_FIELDS) if (c[k] !== undefined) o[k] = c[k]
-    return o
-  })
-  const json = JSON.stringify(slim)
+  const json = JSON.stringify(slimCards(JSON.parse(raw)))
   const dst = path.join(outDir, file)
   fs.writeFileSync(dst, json)
   const gz = zlib.gzipSync(json, { level: 9 })
   fs.writeFileSync(dst + '.gz', gz)
+  const br = brotliSync(json)
+  fs.writeFileSync(dst + '.br', br)
 
   const inSize = fs.statSync(src).size
   totalIn += inSize
   totalOut += json.length
   totalGz += gz.length
+  totalBr += br.length
 
   const pct = ((gz.length / inSize) * 100).toFixed(1)
+  const brPct = ((br.length / gz.length) * 100).toFixed(1)
   console.log(
-    `${file}: ${inSize} -> ${json.length} bytes (slim), ${gz.length} bytes (gz, ${pct}% of original)`,
+    `${file}: ${inSize} -> ${json.length} bytes (slim), ${gz.length} bytes (gz, ${pct}% of original), ${br.length} bytes (br, ${brPct}% of gz)`,
   )
 }
 
 console.log(
-  `\nTotal: ${totalIn} -> ${totalOut} bytes (slim), ${totalGz} bytes (gz)`,
+  `\nTotal: ${totalIn} -> ${totalOut} bytes (slim), ${totalGz} bytes (gz), ${totalBr} bytes (br)`,
 )

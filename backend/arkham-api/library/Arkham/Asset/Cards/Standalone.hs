@@ -336,7 +336,7 @@ thePaleLanternHypnoticGlow =
     , cdCost = Nothing
     , cdUnique = True
     , cdDoubleSided = True
-    , cdOtherSide = Just "71068b"
+    , cdOtherSide = Just "71046b"
     }
 
 thePaleLanternBeguilingAura :: CardDef
@@ -346,7 +346,7 @@ thePaleLanternBeguilingAura =
     , cdCost = Nothing
     , cdUnique = True
     , cdDoubleSided = True
-    , cdOtherSide = Just "71068"
+    , cdOtherSide = Just "71046"
     , cdVictoryPoints = Just 1
     }
 
@@ -652,7 +652,6 @@ petOozeling =
   (storyAsset "85030" "Pet Oozeling" 2 MiGoIncursion)
     { cdSkills = [#agility, #wild]
     , cdCardTraits = setFromList [Ally, Monster, Ooze]
-    , cdSlots = [#ally]
     , cdUnique = True
     }
 
@@ -672,6 +671,40 @@ ltWilsonStewart =
     , cdCardTraits = setFromList [Ally, Agency, Veteran]
     , cdSlots = [#ally]
     , cdUnique = True
+    }
+
+armoredCar :: CardDef
+armoredCar =
+  (storyAsset "89012" "Armored Car" 0 MiGoIncursionII)
+    { cdCardTraits = setFromList [Vehicle]
+    , cdCost = Nothing
+    }
+
+brainCase :: CardDef
+brainCase =
+  (storyAsset "89016" "Brain Case" 0 MiGoIncursionII)
+    { cdCardTraits = setFromList [Item, Science]
+    , cdCost = Nothing
+    }
+
+gMen :: CardDef
+gMen =
+  (storyAsset "89019" "G-Men" 2 MiGoIncursionII)
+    { cdCardTraits = setFromList [Ally, Agency]
+    , cdSlots = [#ally]
+    }
+
+corrosiveCloud :: CardDef
+corrosiveCloud =
+  (storyAsset "89020" "Corrosive Cloud" 2 MiGoIncursionII)
+    { cdCardTraits = setFromList [Spell]
+    , cdUses = uses Charge 3
+    }
+
+alienInstruments :: CardDef
+alienInstruments =
+  (storyAsset "89021" "Alien Instruments" 2 MiGoIncursionII)
+    { cdCardTraits = setFromList [Item, Tool, Science]
     }
 
 johnAndJessieBurke :: CardDef
@@ -778,6 +811,7 @@ nikolaTesla =
   (storyAsset "87014" ("Nikola Tesla" <:> "Renowned Inventor") 1 MachinationsThroughTime)
     { cdCardTraits = setFromList [Scientist, Ally, Past]
     , cdUnique = True
+    , cdSlots = [#ally]
     }
 
 thomasCorriganPresent :: CardDef
@@ -799,18 +833,29 @@ ezraGraves =
   (storyAsset "87023" ("Ezra Graves" <:> "Professor of the Arcane") 3 MachinationsThroughTime)
     { cdCardTraits = setFromList [Scientist, Ally, Present]
     , cdUnique = True
+    , cdSlots = [#ally]
     }
 
 thomasCorriganFuture :: CardDef
 thomasCorriganFuture =
-  (storyAsset "87030" ("Thomas Corrigan" <:> "Cofounder of Corrigan Industries") 0 MachinationsThroughTime)
+  ( storyAsset
+      "87030"
+      ("Thomas Corrigan" <:> "Cofounder of Corrigan Industries")
+      0
+      MachinationsThroughTime
+  )
     { cdCardTraits = setFromList [Scientist, Ally, Future]
     , cdCost = Nothing
     }
 
 maryZielinskiFuture :: CardDef
 maryZielinskiFuture =
-  (storyAsset "87031" ("Mary Zielinski" <:> "Cofounder of Corrigan Industries") 0 MachinationsThroughTime)
+  ( storyAsset
+      "87031"
+      ("Mary Zielinski" <:> "Cofounder of Corrigan Industries")
+      0
+      MachinationsThroughTime
+  )
     { cdCardTraits = setFromList [Scientist, Ally, Future]
     , cdCost = Nothing
     }
@@ -834,7 +879,12 @@ edwinBennetAstuteAssociate =
 
 edwinBennetEsteemedColleague :: CardDef
 edwinBennetEsteemedColleague =
-  (storyAsset "87037b" ("Edwin Bennet" <:> "Esteemed Colleague") 0 MachinationsThroughTimeEpicMultiplayer)
+  ( storyAsset
+      "87037b"
+      ("Edwin Bennet" <:> "Esteemed Colleague")
+      0
+      MachinationsThroughTimeEpicMultiplayer
+  )
     { cdCardTraits = setFromList [Scientist, Ally]
     , cdCost = Nothing
     , cdUnique = True

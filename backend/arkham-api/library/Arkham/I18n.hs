@@ -38,24 +38,48 @@ ikey' t = "$" <> ikey t
 
 ikey :: HasI18n => Scope -> Text
 ikey t = intercalate "." (?scope <> [t]) <> varStr
+
+{- | The trailing @k=v@ pairs 'ikey' appends, on their own.
+
+A key built under one scope and used under another -- an ability's label, frozen at the
+card's definition site and emitted where the location's name is known -- takes its vars
+here instead.
+-}
+varStr :: HasI18n => Text
+varStr = case map toVarPair (mapToList ?scopeVars) of
+  [] -> ""
+  vs -> " " <> unwords vs
  where
-  varStr = case map toVarPair (mapToList ?scopeVars) of
-    [] -> ""
-    vs -> " " <> unwords vs
   toVarPair (k, v) = k <> "=" <> toVar v
   toVar = \case
     Number n -> "i:" <> tshow n
-    String n -> "s:" <> tshow n
+    String n -> "s:" <> quoted n
     _ -> ""
 
--- | Build a label key with "label" inserted at the correct position.
---
--- Locale JSON groups labels under a top-level "label" section per source file
--- (e.g. cards.json has @{ label: { cosmicFlame5: { spendChargeForDamage: ... } } }@).
--- When @cardI18n@ sets the scope to @["cards"]@ and a card adds @scope "cosmicFlame5"@,
--- a naive @label.<key>@ append produces @cards.cosmicFlame5.label.spendChargeForDamage@,
--- which doesn't match the JSON structure. We rewrite the scope so "label" lands
--- right after "cards", yielding @cards.label.cosmicFlame5.spendChargeForDamage@.
+{- | Quote a string value for the @name=s:"..."@ form the client parses.
+
+Not 'show': it escapes every non-ASCII character to a decimal escape, so
+"Rodrigo Alvarez" with an accent leaves as @Rodrigo \\193lvarez@ and the client,
+which drops backslashes while unquoting, renders "Rodrigo 193lvarez". Only the
+quote and the backslash need escaping; every other character travels as itself.
+-}
+quoted :: Text -> Text
+quoted t = "\"" <> T.concatMap escape t <> "\""
+ where
+  escape = \case
+    '"' -> "\\\""
+    '\\' -> "\\\\"
+    c -> T.singleton c
+
+{- | Build a label key with "label" inserted at the correct position.
+
+Locale JSON groups labels under a top-level "label" section per source file
+(e.g. cards.json has @{ label: { cosmicFlame5: { spendChargeForDamage: ... } } }@).
+When @cardI18n@ sets the scope to @["cards"]@ and a card adds @scope "cosmicFlame5"@,
+a naive @label.<key>@ append produces @cards.cosmicFlame5.label.spendChargeForDamage@,
+which doesn't match the JSON structure. We rewrite the scope so "label" lands
+right after "cards", yielding @cards.label.cosmicFlame5.spendChargeForDamage@.
+-}
 labelKey :: HasI18n => Text -> Text
 labelKey t = case ?scope of
   ("cards" : rest) -> let ?scope = "cards" : "label" : rest in ikey t

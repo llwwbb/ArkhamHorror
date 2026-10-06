@@ -4,8 +4,8 @@ import { Dropdown } from 'floating-vue'
 import { BugAntIcon } from '@heroicons/vue/20/solid'
 import { useI18n } from 'vue-i18n'
 import { handleEmbeddedI18n } from '@/arkham/i18n'
+import { CARD_FLIGHT_ATTR, useCardFlight } from '@/arkham/cardFlight'
 import { useDebug } from '@/arkham/debug'
-import { useAi } from '@/arkham/ai'
 import { Game } from '@/arkham/types/Game'
 import { keyToId } from '@/arkham/types/Key'
 import { TokenType } from '@/arkham/types/Token'
@@ -15,7 +15,7 @@ import { useGameChoices, useStickyChoicesSource, useGameChoicesTooltip } from '@
 import { useCardFlip } from '@/arkham/composables/useCardFlip'
 import { AbilityLabel, AbilityMessage, Message, MessageType } from '@/arkham/types/Message'
 import AbilitiesMenu from '@/arkham/components/AbilitiesMenu.vue'
-import AiTargetMenu from '@/arkham/components/AiTargetMenu.vue'
+import MissingCardBadge from '@/arkham/components/MissingCardBadge.vue';
 import DebugEnemy from '@/arkham/components/debug/Enemy.vue'
 import PoolItem from '@/arkham/components/PoolItem.vue'
 import TokenPool from '@/arkham/components/TokenPool.vue'
@@ -24,13 +24,15 @@ import Treachery from '@/arkham/components/Treachery.vue'
 import Asset from '@/arkham/components/Asset.vue'
 import Event from '@/arkham/components/Event.vue'
 import Skill from '@/arkham/components/Skill.vue'
-import Token from '@/arkham/components/Token.vue'
+import SealedChaosTokens from '@/arkham/components/SealedChaosTokens.vue'
+import { enemyTarget, cardDropHandlers } from '@/arkham/debugCardDrop'
 import Story from '@/arkham/components/Story.vue'
 import ScarletKey from '@/arkham/components/ScarletKey.vue';
 import * as Arkham from '@/arkham/types/Enemy'
 import { Source } from '@/arkham/types/Source'
 import { isManifestedSpiritEnemy } from '@/arkham/spiritVisuals';
 import { type Card as ArkhamCard, toCardContents } from '@/arkham/types/Card';
+import { isUnvaluedCalculation } from '@/arkham/types/Calculation'
 
 const props = withDefaults(defineProps<{
   game: Game
@@ -38,10 +40,15 @@ const props = withDefaults(defineProps<{
   playerId: string
   atLocation?: boolean
   attached?: boolean
-}>(), { atLocation: false, attached: false })
+  sourceHighlighted?: boolean
+}>(), { atLocation: false, attached: false, sourceHighlighted: false })
+
+// Where a revealed enemy lands when the revelation overlay hands it over.
+const cardFlightStyle = useCardFlight(() => props.enemy.cardId)
 
 const emits = defineEmits<{
   choose: [value: number]
+  'abilities-hover': [value: boolean]
 }>()
 
 
@@ -78,6 +85,7 @@ const id = computed(() => props.enemy.id)
 
 const choicesSource = useStickyChoicesSource(() => props.game, () => props.playerId)
 const isHighlighted = computed(() => {
+  if (props.sourceHighlighted) return true
   const source = choicesSource.value
   return source !== null && 'contents' in source && source.contents === props.enemy.id
 })
@@ -206,6 +214,9 @@ const isExhausted = computed(() => props.enemy.exhausted)
 const keys = computed(() => props.enemy.keys)
 
 const debug = useDebug()
+// Debug: a chaos token dragged from the bag seals here; a token from the debug
+// token panel is placed here.
+const cardDrop = cardDropHandlers(props.game.id, () => enemyTarget(props.enemy.id))
 
 const enemyDamage = computed(() => (props.enemy.tokens[TokenType.Damage] || 0) + props.enemy.assignedDamage)
 const enemyTokens = computed(() => {
@@ -263,6 +274,13 @@ const cannotBeDamagedModifier = computed(() => {
 
 const isCannotBeDamaged = computed(() => cannotBeDamagedModifier.value !== null)
 
+/* An enemy that cannot be damaged, or that has no health at all (Cthulhu (Ancient
+ * Evil) prints a dash), has no damage pool worth showing. Still show it if damage
+ * has somehow landed, so nothing is ever silently hidden. */
+const showDamage = computed(() =>
+  enemyDamage.value > 0 || (!isCannotBeDamaged.value && !isUnvaluedCalculation(props.enemy.health))
+)
+
 const cannotBeDamagedCardCode = computed<string | null>(() => {
   const m = cannotBeDamagedModifier.value
   if (!m) return null
@@ -307,17 +325,9 @@ const addedKeywords = computed(() => {
 
 const choose = (index: number) => emits('choose', index)
 
-const ai = useAi()
-const aiMenuOpen = ref(false)
-const aiTarget = computed(() => ({ tag: 'EnemyTarget', contents: id.value }))
-
 const showAbilities = ref<boolean>(false)
 
 async function clicked() {
-  if (ai.targeting) {
-    aiMenuOpen.value = true
-    return
-  }
   if(cardAction.value !== -1) {
     emits('choose', cardAction.value)
     showAbilities.value = false
@@ -365,16 +375,25 @@ function onDrop(event: DragEvent) {
 </script>
 
 <template>
-  <div class="enemy--outer" :class="{showAbilities, oversized}">
+  <div class="enemy--outer" :class="{showAbilities, oversized}" v-bind="cardDrop">
     <div class="enemy">
       <Story v-if="enemyStory && !flipping" :story="enemyStory" :game="game" :playerId="playerId" @choose="choose"/>
       <template v-else>
-        <div class="card-frame" ref="frame">
+        <!-- The flight lands on the card frame, not the root: Location.vue and
+             Player.vue already put `enemy-<id>` on the root for board movement,
+             and one element can only carry one view-transition-name. -->
+        <div
+          class="card-frame"
+          ref="frame"
+          :[CARD_FLIGHT_ATTR]="enemy.cardId"
+          :style="cardFlightStyle"
+        >
           <div
             class="card-wrapper"
             :class="{ exhausted: isExhausted, 'enemy--objective': hasObjective, 'objective-ring': hasObjective }"
             :style="{ '--ui-rotation': `${uiRotation}deg` }"
           >
+            <MissingCardBadge :card-code="enemy.cardCode" />
             <font-awesome-icon v-if="hasSpiritAura" :icon="['fas', 'ghost']" class="spirit-icon" />
             <span class="important" v-if="important">
               <font-awesome-icon :icon="['fa', 'circle-exclamation']" />
@@ -385,7 +404,7 @@ function onDrop(event: DragEvent) {
             <img v-if="isTrueForm" :src="displayedImage"
               class="card enemy"
               v-tooltip="sourceTooltip"
-              :class="{ dragging, 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted || isAttacking, 'ai-target-hover': ai.targeting, 'card--flipping': flipping }"
+              :class="{ dragging, 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted || isAttacking, 'card--flipping': flipping }"
               :data-id="id"
               :data-card-code="enemy.cardCode"
               :data-game-id="game.id"
@@ -407,7 +426,7 @@ function onDrop(event: DragEvent) {
               :src="isSwarm ? imgsrc('backs/back_player.jpg') : displayedImage"
               class="card enemy"
               v-tooltip="sourceTooltip"
-              :class="{ 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted || isAttacking, 'ai-target-hover': ai.targeting, 'card--flipping': flipping }"
+              :class="{ 'enemy--can-interact': canInteract && !hasObjective, 'enemy--can-interact-cursor': canInteract, attached, 'source-highlight': isHighlighted || isAttacking, 'card--flipping': flipping }"
               :data-id="id"
               :data-card-code="enemy.cardCode"
               :data-game-id="game.id"
@@ -426,17 +445,14 @@ function onDrop(event: DragEvent) {
             <div class="keys" v-if="keys.length > 0">
               <KeyToken v-for="k in keys" :key="keyToId(k)" :keyToken="k" :game="game" :playerId="playerId" @choose="choose" />
             </div>
-            <PoolItem v-if="!omnipotent && !attached" type="health" :amount="enemyDamage" />
-            <TokenPool :tokens="enemyTokens" />
+            <PoolItem v-if="!omnipotent && !attached && showDamage" type="health" :amount="enemyDamage" />
+            <TokenPool :tokens="enemyTokens" :target="enemyTarget(enemy.id)" />
             <PoolItem v-if="enemy.cardsUnderneath.length > 0" type="card" :amount="enemy.cardsUnderneath.length" />
-            <Token
-              v-for="(sealedToken, index) in enemy.sealedChaosTokens"
-              :key="index"
-              :token="sealedToken"
-              :playerId="playerId"
+            <SealedChaosTokens
+              :tokens="enemy.sealedChaosTokens"
               :game="game"
+              :playerId="playerId"
               @choose="choose"
-              class="sealed"
             />
           </div>
 
@@ -448,20 +464,24 @@ function onDrop(event: DragEvent) {
             :game="game"
             :host-has-swarm="swarmEnemies.length > 0"
             @choose="chooseAbility"
-            />
-
-          <AiTargetMenu
-            v-model="aiMenuOpen"
-            :frame="frame"
-            kind="enemy"
-            :target="aiTarget"
-            :seat="ai.selectedSeat"
-            :game-id="game.id"
-            :position="atLocation ? 'right' : (inVoid || global) ? 'left' : 'top'"
+            @hover="(value) => emits('abilities-hover', value)"
             />
         </div>
 
       </template>
+      <!-- Keys come first: they are pulled up over whatever precedes them (see
+           the negative margin below), so they must overlap the enemy card
+           itself rather than hiding an attached treachery/asset/event. -->
+      <ScarletKey
+        v-for="(skId, idx) in enemy.scarletKeys"
+        :scarletKey="game.scarletKeys[skId]"
+        :game="game"
+        :playerId="playerId"
+        :key="skId"
+        @choose="choose"
+        :attached="true"
+        :style="{ 'z-index': enemy.scarletKeys.length - idx }"
+      />
       <img v-for="card in referenceCards" :src="cardImage(card)" :key="card" class="attached card" />
       <Treachery
         v-for="treacheryId in enemy.treacheries"
@@ -500,16 +520,6 @@ function onDrop(event: DragEvent) {
         :attached="true"
         @choose="$emit('choose', $event)"
       />
-      <ScarletKey
-        v-for="(skId, idx) in enemy.scarletKeys"
-        :scarletKey="game.scarletKeys[skId]"
-        :game="game"
-        :playerId="playerId"
-        :key="skId"
-        @choose="choose"
-        :attached="true"
-        :style="{ 'z-index': enemy.scarletKeys.length - idx }"
-      />
       <Story
         v-for="storyId in enemy.stories"
         :key="storyId"
@@ -521,7 +531,7 @@ function onDrop(event: DragEvent) {
       />
 
       <template v-if="debug.active">
-        <button @click="debugging = true">{{ $t('enemy.debug') }}</button>
+        <button class="debug-open" @click="debugging = true">{{ $t('enemy.debug') }}</button>
       </template>
     </div>
 
@@ -608,20 +618,6 @@ function onDrop(event: DragEvent) {
   cursor: pointer;
 }
 
-/* Dev-only "AI targeting mode": class is only bound while targeting is on, so
-   normal play is untouched. Green border + pale green wash on hover. */
-.ai-target-hover {
-  cursor: pointer;
-  transition: box-shadow 120ms ease, filter 120ms ease;
-}
-
-.ai-target-hover:hover {
-  border: 2px solid var(--ai-target);
-  border-radius: 5px;
-  box-shadow: 0 0 0 2px var(--ai-target), 0 0 12px 3px rgba(74, 222, 128, 0.55);
-  filter: brightness(1.05) sepia(0.35) hue-rotate(55deg) saturate(1.3);
-}
-
 .enemy--can-interact-cursor {
   cursor: pointer;
 }
@@ -665,6 +661,14 @@ img.card.source-highlight {
   &:not(:has(.key--can-interact)) {
     pointer-events: none;
   }
+}
+
+/* A fanned-open sealed-token group reaches well past the card, so lift the
+   enemy above its neighbours while it is expanded. */
+.enemy--outer:has(.sealed-chaos-tokens--expanded),
+.enemy--outer:has(.sealed-chaos-tokens--expanded) > .enemy,
+.card-frame:has(.sealed-chaos-tokens--expanded) {
+  z-index: var(--z-index-30000);
 }
 
 .card-wrapper {

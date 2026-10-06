@@ -44,7 +44,7 @@ instance HasModifiersFor TheRavenQuill where
 
 instance HasAbilities TheRavenQuill where
   getAbilities (TheRavenQuill a) =
-    [ restricted a 1 ControlsThis $ freeReaction (oneOf [GameEnds #when, InvestigatorResigned #when You])
+    [ controlled_ a 1 $ freeReaction (oneOf [GameEnds #when, InvestigatorResigned #when You])
     ]
       <> [ controlled
              a
@@ -57,11 +57,11 @@ instance HasAbilities TheRavenQuill where
              $ FastAbility (exhaust a)
          | a `hasCustomization` EnergySap
          ]
-      <> [ controlled
-             a
-             3
-             (exists $ AssetControlledBy You <> #exhausted <> not_ (assetWithAttachedEvent a.id))
-             $ SilentForcedAbility (ActivateAbility #after You $ AbilityOnAsset $ assetWithAttachedEvent a.id)
+      <> [ controlled a 3 (exists $ AssetControlledBy You <> #exhausted <> not_ (assetWithAttachedEvent a.id))
+             $ silent
+             $ ActivateAbility #after You
+             $ #action
+             <> AbilityOnAsset (assetWithAttachedEvent a.id)
          | a `hasCustomization` InterwovenInk && a.ready
          ]
 
@@ -109,12 +109,15 @@ instance RunMessage TheRavenQuill where
       pure e
     SearchFound iid (isTarget attrs -> True) _ xs | notNull xs -> do
       let ws = defaultWindows iid
-      for_ xs \x -> cardResolutionModifiers attrs attrs x $ DoNotTakeUpSlot <$> [minBound ..]
+      -- the asset enters play before we get to attach, so bridge the gap
+      when (attrs `hasCustomization` SpectralBinding)
+        $ for_ xs \x -> cardResolutionModifiers attrs attrs x $ DoNotTakeUpSlot <$> [minBound ..]
       chooseOne iid $ targetLabels xs \x -> [Msg.addToHand iid x, PayCardCost iid x ws, handleTargetChoice iid attrs x]
       pure e
-    HandleTargetChoice _iid (isSource attrs -> True) (CardIdTarget cid) -> do
-      selectOne (AssetWithCardId cid)
-        >>= traverse_ (push . PlaceEvent attrs.id . (`AttachedToAsset` Nothing))
+    HandleTargetChoice iid (isSource attrs -> True) (CardIdTarget cid) -> do
+      selectOne (AssetWithCardId cid) >>= traverse_ \aid -> do
+        push $ PlaceEvent attrs.id (AttachedToAsset aid Nothing)
+        push $ RefillSlots iid []
       pure e
     UseThisAbility iid (isSource attrs -> True) 1 -> do
       -- [DECKBUILDING]
@@ -138,7 +141,8 @@ instance RunMessage TheRavenQuill where
         hasCharge <- sourceAsset <=~> AssetWithUses Charge
         if
           | hasSecret && hasCharge ->
-              chooseOne iid
+              chooseOne
+                iid
                 [ Label "$cards.label.theRavenQuill.moveSecret" [moveToken Secret]
                 , Label "$cards.label.theRavenQuill.moveCharge" [moveToken Charge]
                 ]

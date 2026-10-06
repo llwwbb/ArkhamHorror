@@ -1,9 +1,11 @@
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue'
-import { useDebug, scenarioDebugCountsFor } from '@/arkham/debug'
+import { useDebug, scenarioDebugCountsFor, scenarioTokenBagsFor } from '@/arkham/debug'
+import TokenBag from '@/arkham/components/debug/TokenBag.vue'
 import type { Game } from '@/arkham/types/Game'
 import type { Scenario } from '@/arkham/types/Scenario'
-import { chaosTokenImage, type TokenFace } from '@/arkham/types/ChaosToken'
+import { chaosTokenImage, standardTokenFaces, type TokenFace } from '@/arkham/types/ChaosToken'
+import { useEscape } from '@/composable/escape'
 
 const props = defineProps<{
   game: Game
@@ -12,16 +14,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 
+useEscape(() => emit('close'))
+
 const debug = useDebug()
+const tokenBags = computed(() => scenarioTokenBagsFor(props.scenario))
 
 const realityAcidDebugToken1 = ref<TokenFace>('Skull')
 const realityAcidDebugToken2 = ref<TokenFace>('Cultist')
-const realityAcidDebugTokens: TokenFace[] = [
-  'PlusOne', 'Zero',
-  'MinusOne', 'MinusTwo', 'MinusThree', 'MinusFour', 'MinusFive', 'MinusSix', 'MinusSeven', 'MinusEight',
-  'Skull', 'Cultist', 'Tablet', 'ElderThing',
-  'AutoFail', 'ElderSign',
-]
+const realityAcidDebugTokens: readonly TokenFace[] = standardTokenFaces
 
 const realityAcidTokenLabel = (token: TokenFace) => {
   switch (token) {
@@ -154,6 +154,15 @@ const clearRealityAcidDebugTokens = () => {
   debug.send(props.game.id, { tag: 'ScenarioSpecific', contents: ['blobClearDebugRealityAcidTokens', null] })
 }
 
+/* The Doom of Arkham Pt II: draw and resolve the top Cthulhu deck card on demand,
+ * which otherwise only happens off the agenda's forced ability at the end of the
+ * enemy phase. */
+const isDoomOfArkhamPartII = computed(() => props.scenario.id === 'c11688a')
+
+const drawCthulhuCard = () => {
+  debug.send(props.game.id, { tag: 'ScenarioSpecific', contents: ['debugDrawCthulhuCard', null] })
+}
+
 const debugCounts = computed(() => scenarioDebugCountsFor(props.scenario))
 
 const countValue = (key: string) => props.scenario.counts[key] ?? 0
@@ -182,12 +191,16 @@ const setCount = (key: string) => {
 
 <template>
   <div class="scenario-debug-modal-overlay" @click.self="emit('close')">
-    <div class="scenario-debug-modal" @click="openRealityAcidDropdown = null">
+    <div class="scenario-debug-modal" role="dialog" aria-modal="true" aria-labelledby="scenario-debug-title" @click="openRealityAcidDropdown = null">
       <header class="scenario-debug-modal-header">
-        <h2>Scenario Debug</h2>
-        <button type="button" @click="emit('close')">×</button>
+        <h2 id="scenario-debug-title">Scenario Debug</h2>
+        <button type="button" aria-label="Close scenario debug" @click="emit('close')">×</button>
       </header>
       <div class="scenario-debug-options">
+        <section v-for="entry in tokenBags" :key="entry.key" class="scenario-debug-section">
+          <span class="scenario-debug-label">{{ entry.label }}</span>
+          <TokenBag :game-id="game.id" :bag-key="entry.key" :bag="entry.bag" />
+        </section>
         <section v-if="scenario.id === 'c85001'" class="scenario-debug-section">
           <span class="scenario-debug-label">Reality Acid tokens</span>
           <div class="scenario-debug-row">
@@ -250,6 +263,11 @@ const setCount = (key: string) => {
           </button>
         </section>
 
+        <section v-if="isDoomOfArkhamPartII" class="scenario-debug-section">
+          <span class="scenario-debug-label">Cthulhu deck</span>
+          <button type="button" @click="drawCthulhuCard">Draw top card</button>
+        </section>
+
         <section v-if="debugCounts.length > 0" class="scenario-debug-section">
           <div v-for="count in debugCounts" :key="count.key" class="scenario-debug-count">
             <span class="scenario-debug-label">
@@ -281,14 +299,16 @@ const setCount = (key: string) => {
 }
 
 .scenario-debug-modal {
-  width: min(520px, 100%);
-  max-height: 90vh;
-  overflow: visible;
+  width: min(560px, 100%);
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
-  background: rgba(20, 24, 32, 0.96);
+  background: var(--background);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  padding: 14px;
+  padding: 0;
 }
 
 .scenario-debug-modal-header {
@@ -297,12 +317,16 @@ const setCount = (key: string) => {
   justify-content: space-between;
   gap: 12px;
   color: white;
-  margin-bottom: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--box-border);
 }
 
 .scenario-debug-modal-header h2 {
   margin: 0;
-  font-size: 1rem;
+  font-family: teutonic, sans-serif;
+  font-size: 1.3rem;
+  font-weight: normal;
+  letter-spacing: .04em;
 }
 
 .scenario-debug-modal-header button {
@@ -317,21 +341,23 @@ const setCount = (key: string) => {
 .scenario-debug-options {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
+  gap: 16px;
+  padding: 20px;
+  overflow-y: auto;
+  min-height: 0;
+  color: var(--text);
+  font-size: .85rem;
+  font-weight: normal;
 }
 
 .scenario-debug-options button {
   min-width: 0;
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.65);
-  color: white;
+  background: var(--background-dark);
+  color: var(--text);
   font-size: 0.8rem;
-  padding: 4px 6px;
+  padding: 7px 10px;
   cursor: pointer;
 }
 
@@ -413,7 +439,11 @@ const setCount = (key: string) => {
 .scenario-debug-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  padding: 16px;
+  background: var(--box-background);
+  border: 1px solid var(--box-border);
+  border-radius: 6px;
 }
 
 .scenario-debug-row {
@@ -440,8 +470,13 @@ const setCount = (key: string) => {
 }
 
 .scenario-debug-label {
-  opacity: 0.85;
-  text-transform: none;
+  color: var(--title);
+  font-family: teutonic, sans-serif;
+  font-size: 1.05rem;
+  font-weight: normal;
+  letter-spacing: .04em;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--box-border);
 }
 
 .scenario-debug-current {

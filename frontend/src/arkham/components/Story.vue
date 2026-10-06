@@ -1,14 +1,13 @@
 <script lang="ts" setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { Game } from '@/arkham/types/Game'
 import * as ArkhamGame from '@/arkham/types/Game'
 import { AbilityLabel, AbilityMessage, Message, MessageType } from '@/arkham/types/Message'
-import { useDebug } from '@/arkham/debug'
 import { cardImage } from '@/arkham/cardImages'
 import { useCardFlip } from '@/arkham/composables/useCardFlip'
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
 import Token from '@/arkham/components/Token.vue'
-import DebugStory from '@/arkham/components/debug/Story.vue'
+import { readTokenBag } from '@/arkham/types/TokenBag'
 import * as Arkham from '@/arkham/types/Story'
 import TokenPool from '@/arkham/components/TokenPool.vue';
 import { TokenType } from '@/arkham/types/Token';
@@ -47,23 +46,8 @@ const checkmarks = computed(() => {
 })
 
 
-const setAsideInfestationTokens = computed(() => props.story.meta?.infestationSetAside ?? [])
-
-const debug = useDebug()
-const debugging = ref(false)
-
-const hasBag = computed(() => {
-  const meta = props.story.meta
-  if (!meta) return false
-  return (
-    (meta.predationTokens?.length ?? 0) > 0 ||
-    (meta.predationSetAside?.length ?? 0) > 0 ||
-    meta.predationCurrentToken != null ||
-    (meta.infestationTokens?.length ?? 0) > 0 ||
-    (meta.infestationSetAside?.length ?? 0) > 0 ||
-    meta.infestationCurrentToken != null
-  )
-})
+const bag = computed(() => readTokenBag(props.story.meta))
+const setAsideTokens = computed(() => bag.value?.setAside ?? [])
 
 function canInteract(c: Message): boolean {
   if (c.tag === MessageType.TARGET_LABEL && c.target.contents === id.value) {
@@ -110,6 +94,14 @@ const abilities = computed(() => {
     }, []);
 })
 
+// Story cards generally expose a single story ability. Let the card itself
+// select that unambiguous choice instead of requiring a second click on the
+// ability button. Target-label choices still take precedence.
+const directAction = computed(() => {
+  if (cardAction.value !== -1) return cardAction.value
+  return abilities.value.length === 1 ? abilities.value[0].index : -1
+})
+
 const civilians = computed(() => props.story.tokens[TokenType.Civilian])
 const storyTokens = computed(() => {
   const { Civilian, ...rest } = props.story.tokens
@@ -117,6 +109,7 @@ const storyTokens = computed(() => {
 })
 
 const hasPool = computed(() => Object.values(storyTokens.value).some((amount) => (amount ?? 0) > 0))
+const sealedChaosTokens = computed(() => props.story.sealedChaosTokens ?? [])
 </script>
 
 <template>
@@ -124,14 +117,17 @@ const hasPool = computed(() => Object.values(storyTokens.value).some((amount) =>
     <div class="story-card">
       <div class="image-container">
         <img :src="displayedImage"
-          :class="{'story--can-interact': cardAction !== -1, 'card--flipping': flipping }"
+          :class="{'story--can-interact': directAction !== -1, 'card--flipping': flipping }"
           :data-crossed-off="crossedOff"
           :data-checkmarks="JSON.stringify(checkmarks)"
           class="card story"
-          @click="$emit('choose', cardAction)"
+          @click="directAction !== -1 && $emit('choose', directAction)"
         />
         <div class="pool" v-if="hasPool">
-          <TokenPool :tokens="storyTokens" />
+          <TokenPool :tokens="storyTokens" :target="{ tag: 'StoryTarget', contents: story.id }" />
+        </div>
+        <div class="sealed-tokens" v-if="sealedChaosTokens.length > 0">
+          <Token v-for="(sealedToken, index) in sealedChaosTokens" :key="index" :token="sealedToken" :playerId="playerId" :game="game" @choose="choose" />
         </div>
         <TokenPool :tokens="{ Civilian: civilians }" :overrides="{ Civilian: { class: 'civilians' } }" />
       </div>
@@ -143,14 +139,10 @@ const hasPool = computed(() => Object.values(storyTokens.value).some((amount) =>
         :game="game"
         @click="$emit('choose', ability.index)"
         />
-      <button v-if="debug.active && hasBag" @click="debugging = true">
-        {{ $t('debug.story.inspectBag') }}
-      </button>
     </div>
-    <div v-if="setAsideInfestationTokens.length > 0" class="infestation-tokens">
-      <Token v-for="token in setAsideInfestationTokens" :key="token.infestationTokenId" :token="Arkham.infestationAsChaosToken(token)" :playerId="playerId" :game="game" @choose="choose" />
+    <div v-if="setAsideTokens.length > 0" class="infestation-tokens">
+      <Token v-for="token in setAsideTokens" :key="token.id" :token="token" :playerId="playerId" :game="game" @choose="choose" />
     </div>
-    <DebugStory v-if="debugging" :story="story" @close="debugging = false" />
   </div>
 </template>
 
@@ -218,6 +210,16 @@ const hasPool = computed(() => Object.values(storyTokens.value).some((amount) =>
   > .pool {
     grid-area: base;
     pointer-events: none;
+  }
+
+  /* Sealed tokens sit on the card, like an asset's, but stay clickable so a
+     "release the token sealed here" prompt can be answered from them. */
+  > .sealed-tokens {
+    grid-area: base;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
   }
 
   > .card {

@@ -37,6 +37,11 @@ data Ability = Ability
   , abilityCriteria :: Criterion
   , abilityDoesNotProvokeAttacksOfOpportunity :: Maybe EnemyMatcher
   , abilityTooltip :: Maybe Text
+  , abilityResultLabel :: Maybe Text
+  {- ^ A complete i18n key naming what this ability's success does, for the choice that
+  resolves it. The default label assumes clue discovery, which an ability that does
+  something else instead needs to override. See 'withI18nResultLabel'.
+  -}
   , abilityCanBeCancelled :: Bool
   , abilityDisplayAs :: Maybe AbilityDisplayAs
   , abilityDelayAdditionalCosts :: Maybe AdditionalCostDelay
@@ -51,6 +56,18 @@ data Ability = Ability
   , abilityIgnoreAllCosts :: Bool
   , abilityFightCriteriaOverride :: Maybe CriteriaOverride
   , abilityEvadeCriteriaOverride :: Maybe CriteriaOverride
+  , abilityNonBlocking :: Bool
+  {- ^ A reaction that must never be the reason a window stops for input. It rides along
+  with whatever else that window offers and is dropped as soon as the window is
+  answered, so it never produces a lone prompt needing a Skip Triggers press.
+  See 'runWindow' in "Arkham.Investigator.Runner".
+  -}
+  , abilityBlocksIn :: Maybe WindowMatcher
+  {- ^ Windows in which a non-blocking reaction blocks anyway, so it still gets one
+  deliberate prompt of its own there. Safeguard (2) uses the start of a turn: that is the
+  only point at which arming it can still matter, and nothing else is ever on offer in the
+  windows that follow.
+  -}
   }
   deriving stock (Show, Ord, Data)
 
@@ -82,6 +99,7 @@ buildAbility source idx abilityType =
     , abilityCriteria = NoRestriction
     , abilityDoesNotProvokeAttacksOfOpportunity = Nothing
     , abilityTooltip = Nothing
+    , abilityResultLabel = Nothing
     , abilityCanBeCancelled = True
     , abilityDisplayAs = Nothing
     , abilityDelayAdditionalCosts = Nothing
@@ -96,6 +114,8 @@ buildAbility source idx abilityType =
     , abilityIgnoreAllCosts = False
     , abilityFightCriteriaOverride = Nothing
     , abilityEvadeCriteriaOverride = Nothing
+    , abilityNonBlocking = False
+    , abilityBlocksIn = Nothing
     }
 
 withHighlight :: Targetable target => target -> Ability -> Ability
@@ -119,8 +139,17 @@ instance HasCost Ability where
 instance HasField "skipForAll" Ability Bool where
   getField = abilitySkipForAll
 
+instance HasField "nonBlocking" Ability Bool where
+  getField = abilityNonBlocking
+
+instance HasField "blocksIn" Ability (Maybe WindowMatcher) where
+  getField = abilityBlocksIn
+
 instance HasField "wantsSkillTest" Ability (Maybe SkillTestMatcher) where
   getField = abilityWantsSkillTest
+
+instance HasField "resultLabel" Ability (Maybe Text) where
+  getField = abilityResultLabel
 
 instance HasField "limitType" Ability (Maybe AbilityLimitType) where
   getField = abilityLimitType . abilityLimit
@@ -195,6 +224,9 @@ abilityMetadataL = lens abilityMetadata $ \m x -> m {abilityMetadata = x}
 abilityTooltipL :: Lens' Ability (Maybe Text)
 abilityTooltipL = lens abilityTooltip $ \m x -> m {abilityTooltip = x}
 
+abilityResultLabelL :: Lens' Ability (Maybe Text)
+abilityResultLabelL = lens abilityResultLabel $ \m x -> m {abilityResultLabel = x}
+
 abilityCriteriaL :: Lens' Ability Criterion
 abilityCriteriaL = lens abilityCriteria $ \m x -> m {abilityCriteria = x}
 
@@ -239,6 +271,7 @@ instance FromJSON Ability where
         boolVal <- o .: "doesNotProvokeAttacksOfOpportunity"
         pure $ if boolVal then Just AnyEnemy else Nothing
     abilityTooltip <- o .:? "tooltip"
+    abilityResultLabel <- o .:? "resultLabel"
     abilityCanBeCancelled <- o .: "canBeCancelled"
     abilityDisplayAsAction <- o .:? "displayAsAction" .!= False
     abilityDisplayAs <-
@@ -258,6 +291,8 @@ instance FromJSON Ability where
     abilityIgnoreAllCosts <- o .:? "ignoreAllCosts" .!= False
     abilityFightCriteriaOverride <- o .:? "fightCriteriaOverride"
     abilityEvadeCriteriaOverride <- o .:? "evadeCriteriaOverride"
+    abilityNonBlocking <- o .:? "nonBlocking" .!= False
+    abilityBlocksIn <- o .:? "blocksIn"
 
     pure Ability {..}
 

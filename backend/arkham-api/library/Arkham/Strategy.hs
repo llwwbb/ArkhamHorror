@@ -18,6 +18,9 @@ data DamageStrategy
   | DamageDirect
   | DamageAssetsFirst AssetMatcher
   | HorrorAssetsFirst AssetMatcher
+  | -- | Both halves at once, for enemies whose damage *and* horror must be
+    -- assigned to matching assets first (Dark Matter's The Entity)
+    DamageAndHorrorAssetsFirst AssetMatcher
   | DamageFirst CardDef
   | SingleTarget
   | DamageEvenly
@@ -108,6 +111,14 @@ fromTopOfDeck n = (FromTopOfDeck n, ShuffleBackIn)
 fromBottomOfDeck :: Int -> (Zone, ZoneReturnStrategy)
 fromBottomOfDeck n = (FromBottomOfDeck n, ShuffleBackIn)
 
+-- | Look at the top n cards without moving anything. Use this, not
+-- 'fromTopOfDeck', for a `lookAt` that must not shuffle the deck.
+peekTopOfDeck :: Int -> (Zone, ZoneReturnStrategy)
+peekTopOfDeck n = (FromTopOfDeck n, DoNothing)
+
+peekBottomOfDeck :: Int -> (Zone, ZoneReturnStrategy)
+peekBottomOfDeck n = (FromBottomOfDeck n, DoNothing)
+
 fromDeck :: (Zone, ZoneReturnStrategy)
 fromDeck = (FromDeck, ShuffleBackIn)
 
@@ -124,6 +135,9 @@ instance FromJSON DamageStrategy where
       "DamageAssetsFirst" -> do
         matcher <- o .:? "contents" .!= AnyAsset
         pure $ DamageAssetsFirst matcher
+      "DamageAndHorrorAssetsFirst" -> do
+        matcher <- o .:? "contents" .!= AnyAsset
+        pure $ DamageAndHorrorAssetsFirst matcher
       _ -> $(mkParseJSON defaultOptions ''DamageStrategy) (Object o)
 
 $(deriveJSON defaultOptions ''ZoneReturnStrategy)

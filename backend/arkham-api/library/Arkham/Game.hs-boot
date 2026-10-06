@@ -39,11 +39,9 @@ import Arkham.Random
 import Arkham.Scenario.Types
 import Arkham.Skill.Types
 import Arkham.Story.Types
-import Arkham.Tracing
 import Arkham.Treachery.Types
 import Arkham.Zone
 import Control.Monad.Catch (MonadMask)
-import OpenTelemetry.Trace.Monad (MonadTracer)
 
 class HasGameRef a where
   gameRefL :: Lens' a (IORef Game)
@@ -101,12 +99,18 @@ instance HasChaosTokenValue ()
 
 delve :: Game -> Game
 withoutCanModifiers :: Game -> Game
-abilityMatches :: (HasGame m, Tracing m) => Ability -> AbilityMatcher -> m Bool
+abilityMatches :: HasGame m => Ability -> AbilityMatcher -> m Bool
 asIfTurn :: HasGame m => InvestigatorId -> ReaderT Game m a -> m a
 asActive :: HasGame m => InvestigatorId -> ReaderT Game m a -> m a
 
 instance HasDistance Game
 instance HasAbilities Game
+
+-- Abstract here: a SOURCE importer only needs the name to spell the signature
+-- below. The real definition, with its fields, is in "Arkham.Game".
+data RunObservers
+
+noRunObservers :: RunObservers
 
 runMessages
   :: ( HasGameRef env
@@ -116,13 +120,11 @@ runMessages
      , MonadReader env m
      , HasGameLogger m
      , HasDebugLevel m
-     , MonadTracer m
      , MonadMask m
-     , Tracing m
      )
   => Text
-  -> Maybe (Message -> IO ())
+  -> RunObservers
   -> m ()
-preloadModifiers :: (HasCallStack, Monad m, Tracing m) => Game -> m Game
-handleTraitRestrictedModifiers :: (Monad m, Tracing m) => Game -> m Game
+preloadModifiers :: (HasCallStack, Monad m) => Game -> m Game
+handleTraitRestrictedModifiers :: Monad m => Game -> m Game
 handleBlanked :: Monad m => Game -> m Game

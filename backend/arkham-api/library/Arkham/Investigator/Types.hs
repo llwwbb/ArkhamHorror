@@ -26,6 +26,7 @@ import Arkham.Classes.RunMessage.Internal
 import Arkham.Constants
 import Arkham.Deck qualified as Deck
 import Arkham.DeckBuilding.Adjustment
+import Arkham.Decklist.CardPool (ArkhamBuildCardPool)
 import Arkham.Discard
 import Arkham.Discover
 import Arkham.Draw.Types
@@ -102,6 +103,7 @@ type InvestigatorCard a = CardBuilder PlayerId a
 data instance Field Investigator :: Type -> Type where
   InvestigatorSealedChaosTokens :: Field Investigator [ChaosToken]
   InvestigatorTaboo :: Field Investigator (Maybe TabooList)
+  InvestigatorCardPool :: Field Investigator (Maybe ArkhamBuildCardPool)
   InvestigatorName :: Field Investigator Name
   InvestigatorSettings :: Field Investigator CardSettings
   InvestigatorRemainingActions :: Field Investigator Int
@@ -208,6 +210,7 @@ instance FromJSON (SomeField Investigator) where
     "InvestigatorName" -> pure $ SomeField InvestigatorName
     "InvestigatorSettings" -> pure $ SomeField InvestigatorSettings
     "InvestigatorTaboo" -> pure $ SomeField InvestigatorTaboo
+    "InvestigatorCardPool" -> pure $ SomeField InvestigatorCardPool
     "InvestigatorSealedChaosTokens" -> pure $ SomeField InvestigatorSealedChaosTokens
     "InvestigatorRemainingActions" -> pure $ SomeField InvestigatorRemainingActions
     "InvestigatorAdditionalActions" -> pure $ SomeField InvestigatorAdditionalActions
@@ -268,6 +271,9 @@ instance FromJSON (SomeField Investigator) where
     "InvestigatorBeganRoundAt" -> pure $ SomeField InvestigatorBeganRoundAt
     "InvestigatorPreviousLocation" -> pure $ SomeField InvestigatorPreviousLocation
     "InvestigatorSupplies" -> pure $ SomeField InvestigatorSupplies
+    "InvestigatorCluesInPool" -> pure $ SomeField InvestigatorCluesInPool
+    "InvestigatorSearch" -> pure $ SomeField InvestigatorSearch
+    "InvestigatorSideDeck" -> pure $ SomeField InvestigatorSideDeck
     _ -> error "Unknown Field Investigator"
 
 data InvestigatorForm
@@ -300,6 +306,11 @@ data InvestigatorAttrs = InvestigatorAttrs
   , investigatorPlacement :: Placement
   , investigatorActionsTaken :: [[Action]]
   , investigatorActionsPerformed :: [[Action]]
+  , -- | Actions performed that the "same type of action" checks do not see.
+    -- They are still actions the investigator performed -- the
+    -- 'InvestigatorActionsPerformed' field hands both lists out together -- but
+    -- they are not what the next action is compared against.
+    investigatorIgnoredPerformedActions :: [[Action]]
   , investigatorRemainingActions :: Int
   , investigatorEndedTurn :: Bool
   , investigatorDeck :: Deck PlayerCard
@@ -358,6 +369,7 @@ data InvestigatorAttrs = InvestigatorAttrs
   , -- deck building
     investigatorDeckBuildingAdjustments :: [DeckBuildingAdjustment]
   , investigatorTaboo :: Maybe TabooList
+  , investigatorCardPool :: Maybe ArkhamBuildCardPool
   , investigatorMutated :: Maybe Text -- for art display
   , investigatorDeckUrl :: Maybe Text
   , investigatorSettings :: CardSettings
@@ -422,10 +434,12 @@ instance Entity InvestigatorAttrs where
   overAttrs f = f
 
 instance HasCardDef InvestigatorAttrs where
-  toCardDef e = case lookup (investigatorCardCode e) (allInvestigatorCards <> allEncounterInvestigatorCards) of
-    Just def -> def
-    Nothing ->
-      error $ "missing card def for enemy " <> show (investigatorCardCode e)
+  toCardDef e =
+    case lookup (investigatorCardCode e) (allInvestigatorCards <> allEncounterInvestigatorCards)
+      <|> lookupCustomCardDef (investigatorCardCode e) of
+      Just def -> def
+      Nothing ->
+        error $ "missing card def for investigator " <> show (investigatorCardCode e)
 
 instance Named InvestigatorAttrs where
   toName = investigatorName
@@ -469,6 +483,9 @@ instance HasField "inGame" InvestigatorAttrs Bool where
 
 instance HasField "taboo" InvestigatorAttrs (Maybe TabooList) where
   getField = investigatorTaboo
+
+instance HasField "cardPool" InvestigatorAttrs (Maybe ArkhamBuildCardPool) where
+  getField = investigatorCardPool
 
 instance HasField "meta" InvestigatorAttrs Value where
   getField = investigatorMeta
@@ -572,9 +589,10 @@ instance Show Investigator where
 instance ToJSON Investigator where
   toJSON (Investigator a) = toJSON a
 
--- | Attrs as the form we are transfigured into sees them. A transfigured form never
--- gets SetupInvestigator, so its meta is uninitialized rather than inherited from the
--- investigator we transfigured from, whose meta is a different shape and still theirs.
+{- | Attrs as the form we are transfigured into sees them. A transfigured form never
+gets SetupInvestigator, so its meta is uninitialized rather than inherited from the
+investigator we transfigured from, whose meta is a different shape and still theirs.
+-}
 asFormAttrs :: InvestigatorAttrs -> InvestigatorAttrs
 asFormAttrs a = a {investigatorMeta = investigatorFormMeta a}
 
@@ -707,6 +725,7 @@ instance FromJSON InvestigatorAttrs where
     investigatorPlacement <- o .: "placement"
     investigatorActionsTaken <- o .: "actionsTaken"
     investigatorActionsPerformed <- o .: "actionsPerformed"
+    investigatorIgnoredPerformedActions <- o .:? "ignoredPerformedActions" .!= []
     investigatorRemainingActions <- o .: "remainingActions"
     investigatorEndedTurn <- o .: "endedTurn"
     investigatorDeck <- o .: "deck"
@@ -754,6 +773,7 @@ instance FromJSON InvestigatorAttrs where
     investigatorSkippedWindow <- o .:? "skippedWindow" .!= False
     investigatorDeckBuildingAdjustments <- o .: "deckBuildingAdjustments"
     investigatorTaboo <- o .:? "taboo"
+    investigatorCardPool <- o .:? "cardPool"
     investigatorMutated <- o .:? "mutated"
     investigatorDeckUrl <- o .:? "deckUrl"
     investigatorSettings <- o .:? "settings" .!= defaultCardSettings

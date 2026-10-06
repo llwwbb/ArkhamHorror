@@ -30,13 +30,16 @@ import Data.IntMap.Strict qualified as IntMap
 import UnliftIO.Exception qualified as UnliftIO
 
 import Arkham.Card.CardCode
-import Arkham.Tracing
+import Arkham.Log.Entry (LogRow)
+import Auth.ApiKey qualified as ApiKey
 import Auth.JWT qualified as JWT
 import Control.Monad.Logger (LogSource)
 import Data.Aeson (Result (Success), fromJSON)
 import Data.Bugsnag.Settings qualified as Bugsnag
 import Data.ByteString.Lazy qualified as BSL
+import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Data.Traversable (for)
+import Data.UUID (UUID)
 import Database.Persist.Sql (
   ConnectionPool,
   SqlBackend,
@@ -45,19 +48,16 @@ import Database.Persist.Sql (
  )
 import Database.Redis (
   Connection,
-  MessageCallback,
   PubSubController,
   RedisChannel,
-  addChannels,
-  removeChannels,
  )
 import GHC.Records
 import Network.Bugsnag.Exception (AsException (..))
 import Network.Bugsnag.Yesod (bugsnagYesodMiddleware)
 import Network.HTTP.Client.Conduit (HasHttpManager (..), Manager)
-import OpenTelemetry.Trace qualified as Trace
-import OpenTelemetry.Trace.Monad (MonadTracer (..), inSpan')
+import Network.HTTP.Types (status429)
 import Orphans ()
+import ThirdEdition.Store qualified as ThirdEdition
 import Yesod.Core.Types (Logger)
 import Yesod.Core.Unsafe qualified as Unsafe
 import "bugsnag" Network.Bugsnag qualified as Bugsnag
@@ -71,6 +71,13 @@ the overflow flag, which closes the WebSocket and triggers cleanup.
 data Subscriber = Subscriber
   { subQueue :: TBQueue BSL.ByteString
   , subOverflow :: TVar Bool
+  , subClosed :: TVar Bool
+  {- ^ Set when the room this socket is attached to has been deleted. The
+  sender loop drains whatever is still queued and then ends, which drops out
+  of its 'race_' and closes the connection -- so a client cannot keep a
+  deleted room alive, and cannot be left attached to one that no longer
+  exists. See 'closeRoomSubscribers'.
+  -}
   }
 
 data Room = Room
@@ -78,19 +85,32 @@ data Room = Room
   , roomNextSubId :: TVar Int
   , messageBrokerChannel :: RedisChannel
   , roomLogCache :: TVar (Maybe RoomLogCache)
-  -- ^ In-memory mirror of arkham_log_entries for this game, so updateGame
-  -- doesn't have to re-read the entire log from the DB on every action.
-  -- Validated against the locked game's step on each use; if the step
-  -- doesn't match (another server modified the game), we fall back to
-  -- reading from the DB and refresh the cache.
+  {- ^ In-memory mirror of arkham_log_entries for this game, so updateGame
+  doesn't have to re-read the entire log from the DB on every action.
+  Validated against the locked game's step on each use; if the step
+  doesn't match (another server modified the game), we fall back to
+  reading from the DB and refresh the cache.
+  -}
+  , roomUnsubscribe :: TVar (IO ())
+  {- ^ Tears down this room's single Redis subscription. There is exactly one
+  subscription per channel per pod, owned by the room rather than by any
+  one WebSocket, and it is created and destroyed under the rooms 'MVar'
+  (see 'getRoomIn' / 'releaseRoomIfEmpty') so that "room is in the map"
+  and "channel is subscribed" can never disagree. 'pure ()' when no Redis
+  broker is configured.
+  -}
   }
 
--- | Cache of one game's log entries. 'cacheStep' is the arkham_games.step
--- value at the time we cached. Invalidate (refetch from DB) when the
--- locked game's step doesn't match.
+{- | Cache of one game's log entries. 'cacheStep' is the arkham_games.step
+value at the time we cached. Invalidate (refetch from DB) when the
+locked game's step doesn't match.
+-}
 data RoomLogCache = RoomLogCache
   { cacheStep :: !Int
-  , cacheEntries :: ![Text]
+  , cacheEntries :: ![LogRow]
+  {- ^ A bounded tail, not the whole history; see
+  'Api.Arkham.Helpers.gameLogTailSize'.
+  -}
   }
 
 instance HasField "broker" Room RedisChannel where
@@ -109,7 +129,8 @@ newRoom chn = atomically do
   subs <- newTVar IntMap.empty
   next <- newTVar 0
   cache <- newTVar Nothing
-  pure $ Room subs next chn cache
+  unsub <- newTVar (pure ())
+  pure $ Room subs next chn cache unsub
 
 {- | Register a new WebSocket subscriber on the room. Returns the
 subscription id (used to unsubscribe) and the bounded queue the
@@ -119,7 +140,8 @@ subscribeToRoom :: MonadIO m => Room -> m (Int, Subscriber)
 subscribeToRoom room = liftIO $ atomically do
   q <- newTBQueue roomQueueBound
   overflow <- newTVar False
-  let sub = Subscriber q overflow
+  closed <- newTVar False
+  let sub = Subscriber q overflow closed
   subId <- readTVar (roomNextSubId room)
   writeTVar (roomNextSubId room) (subId + 1)
   modifyTVar' (roomSubscribers room) (IntMap.insert subId sub)
@@ -128,6 +150,19 @@ subscribeToRoom room = liftIO $ atomically do
 unsubscribeFromRoom :: MonadIO m => Room -> Int -> m ()
 unsubscribeFromRoom room subId = liftIO $ atomically do
   modifyTVar' (roomSubscribers room) (IntMap.delete subId)
+
+{- | Evict every socket on the room.
+
+Each sender loop finishes what it already has queued and then ends, so a
+message broadcast immediately before this one -- the notice saying why -- still
+reaches the client. Used when the room is being deleted rather than emptied:
+'releaseRoomIfEmpty' is for the ordinary case where the last subscriber has
+already left of their own accord.
+-}
+closeRoomSubscribers :: MonadIO m => Room -> m ()
+closeRoomSubscribers room = liftIO $ atomically do
+  subs <- readTVar (roomSubscribers room)
+  for_ (IntMap.elems subs) \Subscriber {subClosed} -> writeTVar subClosed True
 
 -- | Number of currently registered subscribers (used by the admin UI).
 roomClientCount :: MonadIO m => Room -> m Int
@@ -151,20 +186,6 @@ broadcastToRoom room msg = liftIO $ atomically do
 
 data MessageBroker = WebSocketBroker | RedisBroker Connection PubSubController
 
-addChannel :: (MonadIO m, HasApp m) => RedisChannel -> MessageCallback -> m ()
-addChannel chn handleIt = do
-  msgBroker <- getsApp appMessageBroker
-  case msgBroker of
-    WebSocketBroker -> pure ()
-    RedisBroker _ ctrl -> void $ addChannels ctrl [(chn, handleIt)] []
-
-removeChannel :: (MonadIO m, HasApp m) => RedisChannel -> m ()
-removeChannel chn = do
-  msgBroker <- getsApp appMessageBroker
-  case msgBroker of
-    WebSocketBroker -> pure ()
-    RedisBroker _ ctrl -> void $ removeChannels ctrl [chn] []
-
 {- | The foundation datatype for your application. This can be a good place to
 keep settings and values requiring initialization before your application
 starts running, such as database connections. Every handler will have
@@ -179,21 +200,21 @@ data App = App
   , appLogger :: Logger
   , appGameRooms :: !(MVar (Map ArkhamGameId Room))
   , appEventRooms :: !(MVar (Map ArkhamEpicEventId Room))
-  -- ^ Epic Multiplayer: per-event websocket rooms (organizer dashboard feed),
-  -- sibling of 'appGameRooms'.
+  {- ^ Epic Multiplayer: per-event websocket rooms (organizer dashboard feed),
+  sibling of 'appGameRooms'.
+  -}
+  , appThirdEditionRooms :: !(MVar (Map UUID Room))
+  -- ^ Third edition: per-table websocket rooms, sibling of 'appGameRooms'.
+  , appThirdEditionStore :: ThirdEdition.Store
+  , appPubSubHealth :: !(TVar UTCTime)
+  {- ^ When this pod last saw a message arrive on the pub/sub subscriber
+  socket. A half-open subscriber TCP connection is invisible to hedis --
+  it stays blocked in @recv@ and never throws -- so 'pubSubSupervisor'
+  publishes a heartbeat and watches this timestamp to decide whether the
+  subscription is actually alive. See 'pubSubHealthChannel'.
+  -}
   , appBugsnag :: Bugsnag.Settings
-  , appTracer :: Trace.Tracer
   }
-
-instance MonadTracer (HandlerFor App) where
-  getTracer = getsYesod appTracer
-
-instance Tracing (HandlerFor App) where
-  type SpanType (HandlerFor App) = Trace.Span
-  type SpanArgs (HandlerFor App) = Trace.SpanArguments
-  defaultSpanArgs = Trace.defaultSpanArguments
-  addAttribute = Trace.addAttribute
-  doTrace name args action = inSpan' name args action
 
 class Monad m => HasApp m where
   getApp :: m App
@@ -264,6 +285,20 @@ instance Yesod App where
       AdminP _ -> do
         _ <- getAdminUser
         pure Authorized
+      -- API keys are admin-only while they settle. Gated here rather than in the
+      -- handlers to match the admin routes above, and because a gate a new
+      -- endpoint has to remember to apply is a gate that will be forgotten.
+      --
+      -- `self` is deliberately excluded: it is the one endpoint a *key* calls
+      -- about itself, so the MCP server can ask what its credential may do and
+      -- offer only the tools it can use. `getAdminUser` goes through
+      -- `getRequestUserId`, which is JWT-only, so gating it would 401 every key
+      -- and take that away.
+      ApiV1ApiKeysP keys -> case keys of
+        ApiV1ApiKeySelfR -> pure Authorized
+        _ -> do
+          _ <- getAdminUser
+          pure Authorized
       ApiV1ArkhamP arkham -> case arkham of
         ApiV1ArkhamGamesP games -> case games of
           ApiV1ArkhamGamesImportR -> pure Authorized
@@ -417,10 +452,117 @@ tokenToUserId token = do
 getJwtSecret :: HandlerFor App Text
 getJwtSecret = getsYesod $ appJwtSecret . appSettings
 
+{- | The account owner, acting as themselves.
+
+Deliberately JWT-only: an API key is accepted by 'getScopedCaller' and nowhere
+else, so an endpoint added later is closed to keys until somebody says which
+scope opens it. The alternative -- keys accepted everywhere, each handler
+remembering to check -- fails open, and the failure is that a key granted for
+writing cards can delete the account.
+-}
 getRequestUserId :: Handler UserId
 getRequestUserId = do
   mToken <- JWT.lookupToken
   maybe notAuthenticated pure . join =<< for mToken tokenToUserId
+
+{- | Who is calling, when the route does not require anyone to be.
+
+For a route that answers everyone but can answer a signed-in caller with more:
+the investigator list is the same for the world and carries your own custom
+investigators on top. Deliberately not a key caller -- a route that widens its
+answer for whoever is asking should widen it for the owner only.
+-}
+lookupRequestUserId :: Handler (Maybe UserId)
+lookupRequestUserId = fmap join . traverse tokenToUserId =<< JWT.lookupToken
+
+{- | Who is calling, and what they are allowed to do.
+
+A JWT caller is the owner and carries every scope. A key caller carries only what
+it was granted, and must hold all of @required@ or the request is refused -- 403
+rather than 401, because the credential is good and the permission is not, and a
+client that retries authentication on a 401 would otherwise loop.
+-}
+data Caller = Caller
+  { callerUserId :: UserId
+  , callerScopes :: [ApiKey.Scope]
+  , callerApiKeyId :: Maybe ArkhamApiKeyId
+  -- ^ Absent for the owner's own session.
+  }
+
+getScopedCaller :: [ApiKey.Scope] -> Handler Caller
+getScopedCaller required = do
+  mKey <- ApiKey.lookupApiKeyHeader
+  case mKey of
+    Just presented -> callerFromKey required presented
+    Nothing -> do
+      userId <- getRequestUserId
+      pure $ Caller userId ApiKey.allScopes Nothing
+
+{- | Resolve a presented key, refusing it for every reason it might be refused,
+and charge the request against its rate limit.
+
+Looked up by digest, so the key itself is never stored and a dump of this table
+does not yield anyone's credentials.
+-}
+callerFromKey :: [ApiKey.Scope] -> Text -> Handler Caller
+callerFromKey required presented = do
+  now <- liftIO getCurrentTime
+  mRow <- runDB $ getBy $ UniqueApiKeyDigest (ApiKey.digestOf presented)
+  case mRow of
+    Nothing -> notAuthenticated
+    Just (Entity keyId key) -> do
+      when (isJust $ arkhamApiKeyRevokedAt key) $ permissionDenied "This API key has been revoked"
+      for_ (arkhamApiKeyExpiresAt key) \expiry ->
+        when (expiry <= now) $ permissionDenied "This API key has expired"
+
+      let granted = ApiKey.parseScopes (arkhamApiKeyScopes key)
+          missing = filter (`notElem` granted) required
+      unless (null missing) do
+        permissionDenied
+          $ "This API key is missing the scope(s): "
+          <> ApiKey.renderScopes missing
+          <> ". It has: "
+          <> ApiKey.renderScopes granted
+
+      -- A write is what is worth capping; a read costs a query and is not a way
+      -- to fill a disk.
+      let isWrite = ApiKey.cardsWrite `elem` required
+      runDB $ chargeApiKey now keyId key isWrite
+
+      pure $ Caller (arkhamApiKeyUserId key) granted (Just keyId)
+
+{- | Note the key as used, and count the write against a fixed hourly window.
+
+On the row rather than in the process: in the app a counter could only ever be
+per-replica, and a limit that a second replica doubles is not a limit. It also
+holds for someone calling the API directly instead of through the MCP server,
+which is the case a limiter in front of the MCP server cannot see.
+-}
+chargeApiKey :: UTCTime -> ArkhamApiKeyId -> ArkhamApiKey -> Bool -> SqlPersistT Handler ()
+chargeApiKey now keyId key isWrite = do
+  let
+    windowStart = arkhamApiKeyUsageWindowStart key
+    withinWindow = maybe False (\started -> diffUTCTime now started < 3600) windowStart
+    used = if withinWindow then arkhamApiKeyUsageCount key else 0
+  when (isWrite && used >= ApiKey.writeLimitPerHour) do
+    lift
+      $ sendResponseStatus status429
+      $ object
+        [ "message"
+            .= ( "This API key has made "
+                   <> tshow ApiKey.writeLimitPerHour
+                   <> " writes in the last hour, which is its limit. It will reset within the hour."
+               )
+        ]
+  update keyId
+    $ [ArkhamApiKeyLastUsedAt =. Just now]
+    <> [ field
+       | isWrite
+       , field <-
+           [ ArkhamApiKeyUsageCount =. used + 1
+           , ArkhamApiKeyUsageWindowStart =. Just (if withinWindow then fromMaybe now windowStart else now)
+           ]
+       ]
 
 getAdminUser :: Handler (Entity User)
 getAdminUser = do

@@ -13,10 +13,10 @@ import Data.Text qualified as T
 import GHC.OverloadedLabels
 import GHC.Records
 
-
--- | The display key of a custom token: the part after the final colon
--- (":circus-ex-mortis:moon" -> "moon"). Drives the format tag ("{moon}"),
--- the label ("Moon"), and the frontend icon key (ct_moon.png).
+{- | The display key of a custom token: the part after the final colon
+(":circus-ex-mortis:moon" -> "moon"). Drives the format tag ("{moon}"),
+the label ("Moon"), and the frontend icon key (ct-moon.png).
+-}
 customTokenKey :: Text -> Text
 customTokenKey slug = case T.splitOn ":" slug of
   [] -> slug
@@ -68,7 +68,11 @@ instance ToGameLoggerFormat ChaosToken where
   format c = format c.face
 
 instance ToGameLoggerFormat ChaosTokenFace where
-  format c = "{token:\"" <> tshow c <> "\"}"
+  format c = "{token:\"" <> tokenFaceKey c <> "\"}"
+   where
+    tokenFaceKey = \case
+      CustomToken slug -> slug
+      face -> tshow face
 
 instance ToDisplay ChaosTokenFace where
   toDisplay = \case
@@ -91,6 +95,7 @@ instance ToDisplay ChaosTokenFace where
     CurseToken -> "{curse}"
     BlessToken -> "{bless}"
     FrostToken -> "{frost}"
+    BloodToken -> "{blood}"
     CustomToken slug -> "{" <> customTokenKey slug <> "}"
 
 instance HasField "id" ChaosToken ChaosTokenId where
@@ -128,10 +133,12 @@ data ChaosTokenFace
   | CurseToken
   | BlessToken
   | FrostToken
-  | -- | Open constructor for campaign/scenario-specific homebrew tokens,
-    -- identified by slug (e.g. @":circus-ex-mortis:moon"@). Display name,
-    -- icon key, and JSON form derive from the slug's last segment; reveal
-    -- behavior comes from 'Arkham.Homebrew.Tokens.customTokenDefs'.
+  | BloodToken
+  | {- | Open constructor for campaign/scenario-specific homebrew tokens,
+    identified by slug (e.g. @":circus-ex-mortis:moon"@). Display name,
+    icon key, and JSON form derive from the slug's last segment; reveal
+    behavior comes from 'Arkham.Homebrew.Tokens.customTokenDefs'.
+    -}
     CustomToken Text
   deriving stock (Show, Eq, Ord, Data)
 
@@ -192,13 +199,34 @@ instance IsLabel "curse" ChaosTokenFace where
 instance IsLabel "frost" ChaosTokenFace where
   fromLabel = FrostToken
 
--- | All official token faces (custom homebrew faces are open-ended and
--- deliberately excluded).
+instance IsLabel "blood" ChaosTokenFace where
+  fromLabel = BloodToken
+
+{- | All official token faces (custom homebrew faces are open-ended and
+deliberately excluded).
+-}
 allChaosTokenFaces :: [ChaosTokenFace]
 allChaosTokenFaces =
-  [ PlusOne, Zero, MinusOne, MinusTwo, MinusThree, MinusFour, MinusFive
-  , MinusSix, MinusSeven, MinusEight, Skull, Cultist, Tablet, ElderThing
-  , AutoFail, ElderSign, CurseToken, BlessToken, FrostToken
+  [ PlusOne
+  , Zero
+  , MinusOne
+  , MinusTwo
+  , MinusThree
+  , MinusFour
+  , MinusFive
+  , MinusSix
+  , MinusSeven
+  , MinusEight
+  , Skull
+  , Cultist
+  , Tablet
+  , ElderThing
+  , AutoFail
+  , ElderSign
+  , CurseToken
+  , BlessToken
+  , FrostToken
+  , BloodToken
   ]
 
 instance HasField "isNumber" ChaosTokenFace Bool where
@@ -279,6 +307,7 @@ isSymbolChaosToken = \case
   CurseToken -> True
   BlessToken -> True
   FrostToken -> True
+  BloodToken -> True
   CustomToken _ -> True
   _ -> False
 
@@ -328,6 +357,7 @@ chaosTokenLabel = \case
   CurseToken -> "Curse"
   BlessToken -> "Bless"
   FrostToken -> "Frost"
+  BloodToken -> "Blood"
   CustomToken slug -> capitalizeFirst (customTokenKey slug)
 
 mconcat
@@ -349,10 +379,11 @@ mconcat
 instance ToJSONKey ChaosTokenFace
 instance FromJSONKey ChaosTokenFace
 
--- | Kept compatible with the original all-nullary string encoding: official
--- faces encode as their constructor name, custom faces as their slug. Unknown
--- strings parse as 'CustomToken' (with the legacy "MoonToken" name remapped),
--- so saves survive both directions.
+{- | Kept compatible with the original all-nullary string encoding: official
+faces encode as their constructor name, custom faces as their slug. Unknown
+strings parse as 'CustomToken' (with the legacy "MoonToken" name remapped),
+so saves survive both directions.
+-}
 instance ToJSON ChaosTokenFace where
   toJSON (CustomToken slug) = String slug
   toJSON face = String (tshow face)

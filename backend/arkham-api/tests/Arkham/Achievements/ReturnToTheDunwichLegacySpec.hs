@@ -7,16 +7,24 @@ damage assignment) rather than replaying whole scenarios.
 module Arkham.Achievements.ReturnToTheDunwichLegacySpec (spec) where
 
 import Arkham.Asset.Cards qualified as Assets
-import Arkham.CampaignLogKey (CampaignLogKey (YouHaveIdentifiedTheSolution), recorded, toCampaignLogKey)
+import Arkham.CampaignLogKey (
+  CampaignLogKey (YouHaveIdentifiedTheSolution),
+  recorded,
+  toCampaignLogKey,
+ )
 import Arkham.CampaignStep (CampaignStep (InterludeStep))
 import Arkham.Campaigns.TheDunwichLegacy.Key
 import Arkham.Difficulty
-import Arkham.Enemy.Cards qualified as Enemies
+import Arkham.Enemy.CardDefs.ReturnToTheDunwichLegacy.ReturnToLostInTimeAndSpace qualified as Enemies
+import Arkham.Enemy.CardDefs.TheDunwichLegacy.ExtracurricularActivity qualified as Enemies
+import Arkham.Enemy.CardDefs.TheDunwichLegacy.TheMiskatonicMuseum qualified as Enemies
+import Arkham.Enemy.CardDefs.TheDunwichLegacy.WhereDoomAwaits qualified as Enemies
+import Arkham.Enemy.CardDefs.TheDunwichLegacy.Whippoorwills qualified as Enemies
 import Arkham.Investigator.Cards qualified as Investigators
 import Arkham.Matcher (AssetMatcher (AnyAsset))
 import Arkham.Resolution
 import Arkham.Source
-import Arkham.Treachery.Cards qualified as Treacheries
+import Arkham.Treachery.CardDefs.TheDunwichLegacy.Sorcery qualified as Treacheries
 import Helpers.Achievements
 import Helpers.UltimatumsAndBoons (Ultimatum (..), withUltimatums)
 import TestImport.New
@@ -195,7 +203,8 @@ spec = describe "Return to the Dunwich Legacy achievements" $ do
       experiment `spawnAt` location
       concoction <- self `putAssetIntoPlay` Assets.alchemicalConcoction
       earned <- didEarnDunwich WhatIsThisStuffAnyway
-      run $ Defeated (toTarget experiment) (toCardId experiment) (AbilitySource (AssetSource concoction) 1) []
+      run
+        $ Defeated (toTarget experiment) (toCardId experiment) (AbilitySource (AssetSource concoction) 1) []
       earned `refShouldBe` True
 
     -- regression: the concoction removes itself from the game on the passed
@@ -276,6 +285,19 @@ spec = describe "Return to the Dunwich Legacy achievements" $ do
       killWhippoorwill
       earned `refShouldBe` True
 
+    -- Stir the Pot damaging every enemy at a location has this shape: the
+    -- defeats resolve as branches of one Simultaneously, which used to lose
+    -- all but the first queued counter bump (#5694).
+    it "is earned when the three are defeated simultaneously" . gameTest $ \_ -> do
+      asReturnToTheDunwichLegacy
+      location <- testLocation
+      earned <- didEarnDunwich BirdHunting
+      birds <- replicateM 3 $ testEnemyWithDef Enemies.whippoorwill id
+      for_ birds (`spawnAt` location)
+      run
+        $ Simultaneously [Defeated (toTarget bird) (toCardId bird) (TestSource mempty) [] | bird <- birds]
+      earned `refShouldBe` True
+
     it "resets the count on a turn boundary" . gameTest $ \self -> do
       asReturnToTheDunwichLegacy
       location <- testLocation
@@ -286,6 +308,10 @@ spec = describe "Return to the Dunwich Legacy achievements" $ do
             run $ Defeated (toTarget bird) (toCardId bird) (TestSource mempty) []
       killWhippoorwill
       killWhippoorwill
+      -- A real turn boundary: the turn history (which the count is read off)
+      -- is cleared on `After (EndTurn _)`, not on EndTurn itself.
+      run $ EndTurn (toId self)
+      run $ After $ EndTurn (toId self)
       run $ BeginTurn (toId self)
       killWhippoorwill
       earned `refShouldBe` False

@@ -49,7 +49,7 @@ import Arkham.Evade qualified as Evade
 import Arkham.Exhaust qualified as Exhaust
 import Arkham.Fight
 import Arkham.Fight qualified as Fight
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers
 import Arkham.Helpers.Act
 import Arkham.Helpers.Agenda
@@ -109,7 +109,6 @@ import Arkham.Source
 import Arkham.Spawn
 import Arkham.Target
 import Arkham.Token
-import Arkham.Tracing
 import Arkham.Trait (Trait)
 import Arkham.Window (Window (..), WindowType, defaultWindows)
 import Arkham.Window qualified as Window
@@ -151,7 +150,7 @@ withBatchedTimings w body = do
     body
     checkWindows [after]
 
-selectEach :: (Query a, HasGame m, Tracing m) => a -> (QueryElement a -> m ()) -> m ()
+selectEach :: (Query a, HasGame m) => a -> (QueryElement a -> m ()) -> m ()
 selectEach matcher f = select matcher >>= traverse_ f
 
 checkWindows :: ReverseQueue m => [Window] -> m ()

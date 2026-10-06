@@ -3,6 +3,8 @@ module Arkham.Event.Events.DenyExistence (denyExistence, DenyExistence (..)) whe
 import Arkham.Classes.HasQueue (popMessageMatching_, replaceMessageMatching)
 import Arkham.Event.Cards qualified as Cards
 import Arkham.Event.Import.Lifted hiding (Discarded)
+import Arkham.Helpers.Cost (cancelCostPaymentFrom)
+import Arkham.I18n
 import Arkham.Window
 
 newtype DenyExistence = DenyExistence EventAttrs
@@ -23,31 +25,34 @@ denyExistence = event DenyExistence Cards.denyExistence
 instance RunMessage DenyExistence where
   runMessage msg e@(DenyExistence attrs) = runQueueT $ case msg of
     InvestigatorPlayEvent iid eid mTarget windows _ | eid == toId attrs -> do
-      let
-        go str w = Label str [ResolveEvent iid eid mTarget [w]]
-        choices = flip mapMaybe windows $ \w -> case windowType w of
-          WouldDiscardFromHand {} -> Just $ go "discard cards" w
-          LostResources {} -> Just $ go "lose resources" w
-          LostActions {} -> Just $ go "lose actions" w
-          WouldTakeDamage {} -> Just $ go "take damage" w
-          WouldTakeHorror {} -> Just $ go "take horror" w
-          _ -> Nothing
-      chooseOrRunOne iid choices
+      let resolve w = push $ ResolveEvent iid eid mTarget [w]
+      chooseOrRunOneM iid $ cardI18n $ scope "denyExistence" $ for_ windows \w -> case windowType w of
+        WouldDiscardFromHand {} -> labeled "cancelDiscardFromHand" $ resolve w
+        LostResources _ _ n -> countVar n $ labeled "cancelLoseResources" $ resolve w
+        LostActions _ _ n -> countVar n $ labeled "cancelLoseActions" $ resolve w
+        WouldTakeDamage _ _ n _ -> unscoped $ countVar n $ labeled "cancelDamage" $ resolve w
+        WouldTakeHorror _ _ n -> unscoped $ countVar n $ labeled "cancelHorror" $ resolve w
+        _ -> pure ()
       pure e
     ResolveEvent _ eid _ [w] | eid == toId attrs -> do
       cancelWindowBatch [w]
       lift $ case windowType w of
         WouldDiscardFromHand iid source -> do
+          cancelCostPaymentFrom source
           popMessageMatching_ \case
             Do (DiscardFromHand handDiscard) -> handDiscard.investigator == iid && handDiscard.source == toSource source
             _ -> False
         LostResources iid source n -> do
+          cancelCostPaymentFrom source
           popMessageMatching_ (== Do (LoseResources iid source n))
         LostActions iid source n -> do
+          cancelCostPaymentFrom source
           popMessageMatching_ (== Do (LoseActions iid source n))
-        WouldTakeDamage _source (InvestigatorTarget iid) n _ -> do
+        WouldTakeDamage source (InvestigatorTarget iid) n _ -> do
+          cancelCostPaymentFrom source
           push $ CancelDamage iid n
-        WouldTakeHorror _source (InvestigatorTarget iid) n -> do
+        WouldTakeHorror source (InvestigatorTarget iid) n -> do
+          cancelCostPaymentFrom source
           push $ CancelHorror iid n
         _ -> error "Invalid window"
       popMessageMatching_ $ \case

@@ -3,7 +3,9 @@ module Arkham.Event.Events.DenyExistence5 (denyExistence5, DenyExistence5 (..)) 
 import Arkham.Classes.HasQueue (popMessageMatching_, replaceMessageMatching)
 import Arkham.Event.Cards qualified as Cards
 import Arkham.Event.Import.Lifted hiding (Discarded, drawCards)
+import Arkham.Helpers.Cost (cancelCostPaymentFrom)
 import Arkham.Helpers.Message (drawCards)
+import Arkham.I18n
 import Arkham.Window
 
 newtype DenyExistence5 = DenyExistence5 EventAttrs
@@ -24,20 +26,19 @@ denyExistence5 = event DenyExistence5 Cards.denyExistence5
 instance RunMessage DenyExistence5 where
   runMessage msg e@(DenyExistence5 attrs) = runQueueT $ case msg of
     InvestigatorPlayEvent iid eid mTarget windows _ | eid == toId attrs -> do
-      let
-        go str w = Label str [ResolveEvent iid eid mTarget [w]]
-        choices = flip mapMaybe windows $ \w -> case windowType w of
-          WouldDiscardFromHand {} -> Just $ go "discard cards" w
-          LostResources {} -> Just $ go "lose resources" w
-          LostActions {} -> Just $ go "lose actions" w
-          WouldTakeDamage {} -> Just $ go "take damage" w
-          WouldTakeHorror {} -> Just $ go "take horror" w
-          _ -> Nothing
-      chooseOrRunOne iid choices
+      let resolve w = push $ ResolveEvent iid eid mTarget [w]
+      chooseOrRunOneM iid $ cardI18n $ scope "denyExistence5" $ for_ windows \w -> case windowType w of
+        WouldDiscardFromHand {} -> labeled "drawInstead" $ resolve w
+        LostResources _ _ n -> countVar n $ labeled "gainResourcesInstead" $ resolve w
+        LostActions _ _ n -> countVar n $ labeled "gainActionsInstead" $ resolve w
+        WouldTakeDamage _ _ n _ -> countVar n $ labeled "healDamageInstead" $ resolve w
+        WouldTakeHorror _ _ n -> countVar n $ labeled "healHorrorInstead" $ resolve w
+        _ -> pure ()
       pure e
     ResolveEvent _ eid _ [w] | eid == toId attrs -> do
       lift $ case windowType w of
         WouldDiscardFromHand iid source -> do
+          cancelCostPaymentFrom source
           let drawing = drawCards iid source
           replaceMessageMatching
             \case
@@ -47,15 +48,19 @@ instance RunMessage DenyExistence5 where
               Do (DiscardFromHand handDiscard) -> [drawing handDiscard.amount]
               _ -> []
         LostResources iid source n -> do
+          cancelCostPaymentFrom source
           replaceMessageMatching (== Do (LoseResources iid source n))
             $ \_ -> [TakeResources iid n source False]
         LostActions iid source n -> do
+          cancelCostPaymentFrom source
           replaceMessageMatching (== Do (LoseActions iid source n))
             $ \_ -> [GainActions iid source n]
         WouldTakeDamage source (InvestigatorTarget iid) n _ -> do
+          cancelCostPaymentFrom source
           pushAll
             [CancelDamage iid n, HealDamage (InvestigatorTarget iid) source n]
         WouldTakeHorror source (InvestigatorTarget iid) n -> do
+          cancelCostPaymentFrom source
           pushAll
             [CancelHorror iid n, HealHorror (InvestigatorTarget iid) source n]
         _ -> error "Invalid window"

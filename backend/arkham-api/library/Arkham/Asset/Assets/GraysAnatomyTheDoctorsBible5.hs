@@ -56,11 +56,11 @@ instance RunMessage GraysAnatomyTheDoctorsBible5 where
             selectCount $ EffectWithTarget (toTarget tid) <> EffectWithCardCode cardCode <> EffectWithMetaInt 2
 
           chooseOneM iid $ cardI18n do
-            labeled' "graysAnatomyTheDoctorsBible5.healPlus" do
+            labeled "graysAnatomyTheDoctorsBible5.healPlus" do
               when (healX < 3) do
                 createCardEffect Cards.graysAnatomyTheDoctorsBible5 (effectInt 1) (attrs.ability 1) tid
               doStep (n - 1) msg'
-            labeled' "graysAnatomyTheDoctorsBible5.damagePlus" do
+            labeled "graysAnatomyTheDoctorsBible5.damagePlus" do
               when (damageX < 3) do
                 createCardEffect Cards.graysAnatomyTheDoctorsBible5 (effectInt 2) (attrs.ability 1) tid
               doStep (n - 1) msg'
@@ -90,5 +90,5 @@ graysAnatomyTheDoctorsBible5Effect =
 instance RunMessage GraysAnatomyTheDoctorsBible5Effect where
   runMessage msg e@(GraysAnatomyTheDoctorsBible5Effect attrs) = runQueueT $ case msg of
     AssignedHealing target | attrs.target == target && attrs.metaInt == Just 1 -> disableReturn e
-    AssignedDamage target _ _ | attrs.target == target && attrs.metaInt == Just 2 -> disableReturn e
+    AssignedDamage target _ _ _ | attrs.target == target && attrs.metaInt == Just 2 -> disableReturn e
     _ -> GraysAnatomyTheDoctorsBible5Effect <$> liftRunMessage msg attrs

@@ -7,6 +7,7 @@ const englishCatalogPath = resolve('src/locales/en/gameBoard/ultimatumsAndBoons.
 const chineseCatalogPath = resolve('src/locales/zh/gameBoard/ultimatumsAndBoons.json')
 const chineseGameBoardPath = resolve('src/locales/zh/gameBoard/gameBoard.ts')
 const gameOptionsPath = resolve('src/arkham/components/NewCampaign/GameOptions.vue')
+const refractionsPath = resolve('src/arkham/refractions.ts')
 const chineseLabelPath = resolve('src/locales/zh/label.json')
 
 function leafEntries(value, prefix = '') {
@@ -22,11 +23,7 @@ function placeholders(value) {
 }
 
 test('Chinese game creation translates every Ultimatum and Boon option', () => {
-  assert.equal(
-    existsSync(chineseCatalogPath),
-    true,
-    'missing Chinese Ultimatums and Boons catalog',
-  )
+  assert.equal(existsSync(chineseCatalogPath), true, 'missing Chinese Ultimatums and Boons catalog')
 
   const englishCatalog = JSON.parse(readFileSync(englishCatalogPath, 'utf8'))
   const chineseCatalog = JSON.parse(readFileSync(chineseCatalogPath, 'utf8'))
@@ -40,12 +37,16 @@ test('Chinese game creation translates every Ultimatum and Boon option', () => {
   )
 
   const gameOptions = readFileSync(gameOptionsPath, 'utf8')
+  const refractions = readFileSync(refractionsPath, 'utf8')
   const optionTags = [
-    ...new Set(
-      [...gameOptions.matchAll(/'(BoonOf[A-Za-z]+|UltimatumOf[A-Za-z]+)'/g)].map(
+    ...new Set([
+      ...[...gameOptions.matchAll(/'(BoonOf[A-Za-z]+|UltimatumOf[A-Za-z]+)'/g)].map(
         (match) => match[1],
       ),
-    ),
+      ...[...refractions.matchAll(/^\s*(BoonOf[A-Za-z]+|UltimatumOf[A-Za-z]+):/gm)].map(
+        (match) => match[1],
+      ),
+    ]),
   ].sort()
 
   assert.deepEqual(
@@ -80,8 +81,5 @@ test('Chinese game board bundles the Ultimatums and Boons catalog', () => {
 test('Chinese game creation translates the Morrigan weakness choice label', () => {
   const labels = JSON.parse(readFileSync(chineseLabelPath, 'utf8'))
 
-  assert.equal(
-    labels.ultimatumsAndBoons?.returnWeakness,
-    '选择一张要放回收藏的弱点',
-  )
+  assert.equal(labels.ultimatumsAndBoons?.returnWeakness, '选择一张要放回收藏的弱点')
 })

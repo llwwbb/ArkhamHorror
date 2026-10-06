@@ -5,8 +5,8 @@ import { useDebug } from '@/arkham/debug'
 import { computed } from 'vue';
 import { ChaosBag } from '@/arkham/types/ChaosBag';
 import * as Cards from '@/arkham/types/Card';
-import { chaosTokenImage, type TokenFace } from '@/arkham/types/ChaosToken';
-import { scenarioToI18n } from '@/arkham/types/Scenario';
+import { chaosTokenImage, customTokenKey, type TokenFace } from '@/arkham/types/ChaosToken';
+import { chaosTokenEffectKey, symbolChaosTokenFaces } from '@/arkham/types/Scenario';
 import { Game } from '@/arkham/types/Game';
 import { Enemy } from '@/arkham/types/Enemy';
 import { Modifier, cannotCommitCardsToWords } from '@/arkham/types/Modifier';
@@ -20,6 +20,7 @@ import * as ArkhamGame from '@/arkham/types/Game';
 import { imgsrc, formatContent } from '@/arkham/helpers';
 import { cardArt, portraitImage, sourceCardCode } from '@/arkham/cardImages';
 import ChaosBagView from '@/arkham/components/ChaosBag.vue';
+import SkillTestDraw from '@/arkham/components/debug/SkillTestDraw.vue';
 import Token from '@/arkham/components/Token.vue';
 import { useI18n } from 'vue-i18n';
 import { useMenu } from '@/composable/menu';
@@ -87,9 +88,12 @@ const yourModifiers = computed(() => {
   return (investigator.modifiers ?? []).filter(shouldRenderYourModifiers)
 })
 
+const shouldRenderSkillTestModifier = (mod: Modifier) =>
+  mod.type.tag !== 'MetaModifier' || mod.type.contents === 'ThreeAces1'
+
 const modifiers = computed(() =>
   [...(props.game.investigators[props.skillTest.investigator]?.modifiers ?? []).
-    filter(shouldRender), ...yourModifiers.value, ...(props.skillTest.modifiers ?? [])]) 
+    filter(shouldRender), ...yourModifiers.value, ...(props.skillTest.modifiers ?? []).filter(shouldRenderSkillTestModifier)]) 
 const committedCards = computed(() => props.skillTest.committedCards)
 const choices = computed(() => ArkhamGame.choices(props.game, props.playerId))
 const skipTriggersAction = computed(() => choices.value.findIndex((c) => c.tag === MessageType.SKIP_TRIGGERS_BUTTON))
@@ -163,17 +167,39 @@ function modifierSource(mod: Modifier) {
   return sourceCardCode(mod.source, props.game)
 }
 
-const targetCard = computed(() => {
-  if (!props.skillTest.targetCard) {
-    if (!props.skillTest.sourceCard) return null
-    return props.game.cards[props.skillTest.sourceCard]
-  }
-  return props.game.cards[props.skillTest.targetCard]
+const concealedTarget = computed(() => {
+  // ConcealedCardTarget carries the mini-card's id, and targetDecoder flattens a
+  // ProxyTarget down to the proxied target's contents, so both land here as a string
+  const contents = props.skillTest.target?.contents
+  if (typeof contents !== 'string') return null
+  return props.game.concealed[contents] ?? null
 })
 
 const isConcealed = computed(() => {
+  if (concealedTarget.value) return true
   return props.skillTest.source.tag === 'AbilitySource' && props.skillTest.source.contents[0].tag === 'ConcealedCardSource'
 })
+
+// a concealed mini-card has no card to show, and falling back to the source would
+// put the attacking asset in the target slot
+const targetCardId = computed(() =>
+  props.skillTest.targetCard ?? (isConcealed.value ? null : props.skillTest.sourceCard)
+)
+
+const targetCard = computed(() => {
+  if (!targetCardId.value) return null
+  return props.game.cards[targetCardId.value]
+})
+
+const cardIsRevealed = (cardId: string | null | undefined) => {
+  if (!cardId) return true
+  const location = Object.values(props.game.locations).find(
+    (candidate) => candidate.cardId === cardId,
+  )
+  return location?.revealed ?? true
+}
+
+const targetCardRevealed = computed(() => cardIsRevealed(targetCardId.value))
 
 type SwarmEnemy = Omit<Enemy, "placement"> & {
   placement: { tag: "AsSwarm"; swarmHost: string; swarmCard: Cards.Card };
@@ -198,8 +224,10 @@ const sourceCard = computed(() => {
   if (props.skillTest.sourceCard === props.skillTest.targetCard) return null
   const card = props.game.cards[props.skillTest.sourceCard]
   if (targetCard.value === card) return null
-  return card  
+  return card
 })
+
+const sourceCardRevealed = computed(() => cardIsRevealed(props.skillTest.sourceCard))
 
 const applyResultsAction = computed(() => {
   return choices.value.findIndex((c) => c.tag === "SkillTestApplyResultsButton");
@@ -219,6 +247,10 @@ const skillValue = computed(() => {
 const testResult = computed(() => {
   const result = skillTestResults.value
   if (result !== null) {
+    // A forced result (Scrape By (1), Lab Coat (1)) overrides the tested values,
+    // so it can't be derived from them -- take the engine's own answer.
+    const forced = props.skillTest.resultForced ? props.skillTest.result?.contents?.[1] : undefined
+    if (forced !== undefined) return forced
     const {skillTestResultsDifficulty} = result
     return skillValue.value - skillTestResultsDifficulty
   } else {
@@ -243,42 +275,27 @@ const tokenEffects = computed(() => {
     return displayedToken.modifiedFaces?.length ? displayedToken.modifiedFaces : [token.face]
   })
 
-  const difficulty = ['Easy', 'Standard'].includes(scenario.difficulty) ? 'easyStandard' : 'hardExpert'
+  // The printed symbols first, in their canonical order, then any homebrew token
+  // that came out, in the order it was revealed.
+  const effectFaces = [
+    ...(symbolChaosTokenFaces as readonly TokenFace[]).filter((face) => faces.includes(face)),
+    ...new Set(faces.filter((face) => customTokenKey(face) !== null)),
+  ]
 
-  // lowercase the first letter
-  const lowerFirst = (str: string) => str.charAt(0).toLowerCase() + str.slice(1)
-
-  const baseRef = scenario.reference.replace(/b$/, '')
-
-  const tokenScope =
-    baseRef === 'c10501' || baseRef === 'c10502'
-      ? (scenario.reference.endsWith('b') ? '.act2' : '.act1')
-      : ''
-
-
-  return (["Skull", "Cultist", "Tablet", "ElderThing"] as TokenFace[]).filter((face) => faces.includes(face)).map((face) => 
-    `<img src='${chaosTokenImage(face)}' /><span>`
-          + formatContent(t(`${scenarioToI18n(scenario)}${tokenScope}.tokens.${difficulty}.${lowerFirst(face)}`)) + `</span>`
-          )
+  return effectFaces
+    .flatMap((face) => {
+      const key = chaosTokenEffectKey(scenario, face)
+      if (!key) return []
+      // Scenarios without a `tokens` block in their locale (every homebrew one
+      // so far) get the key back from `t`; showing it would leak the raw path.
+      const text = t(key)
+      if (text === key) return []
+      return [{ face, image: chaosTokenImage(face), html: formatContent(text) }]
+    })
 })
 
-const createModifier = (target: {tag: string, contents: string}, modifier: {tag: string, contents: unknown}) => 
-  debug.send(props.game.id,
-    { tag: 'CreateWindowModifierEffect'
-    , contents:
-      [ {tag: 'EffectSkillTestWindow', contents: props.skillTest.id}
-      , { tag: 'EffectModifiers'
-        , contents:
-          [ { source: {tag: 'GameSource'}
-            , type: modifier
-            , activeDuringSetup: false
-            , card: null}
-          ]
-        }
-      , {tag: 'GameSource'}
-      , target
-      ]
-    })
+const createModifier = (target: {tag: string, contents: string}, modifier: {tag: string, contents: unknown}) =>
+  debug.skillTestModifier(props.game.id, props.skillTest.id, target, modifier)
 
 const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
   const amount = event.shiftKey ? 5 : 1
@@ -322,7 +339,14 @@ const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
             <Card :game="game" :card="swarmHost" :revealed="true" playerId="" />
           </div>
         </div>
-        <Card v-else-if="targetCard" :game="game" :card="targetCard" class="target-card" :revealed="true" playerId="" />
+        <Card
+          v-else-if="targetCard"
+          :game="game"
+          :card="targetCard"
+          class="target-card"
+          :revealed="targetCardRevealed"
+          playerId=""
+        />
         <img
           v-else-if="isConcealed"
           :src="imgsrc('mini-cards/concealed-card.jpg')"
@@ -370,7 +394,13 @@ const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
             class="portrait"
             :src="investigatorPortrait"
           />
-          <Card v-if="sourceCard" :game="game" :card="sourceCard" :revealed="true" playerId="" />
+          <Card
+            v-if="sourceCard"
+            :game="game"
+            :card="sourceCard"
+            :revealed="sourceCardRevealed"
+            playerId=""
+          />
         </div>
       </div>
       <ChaosBagView
@@ -384,16 +414,19 @@ const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
         <Token v-for="focusedToken in focusedChaosTokens" :key="focusedToken.id" :token="focusedToken" :playerId="playerId" :game="game" @choose="choose" />
       </div>
       <div v-if="tokenEffects.length > 0" class="token-effects">
-        <div class="token-effect" v-for="effect in tokenEffects" :key="effect" v-html="effect"></div>
+        <div class="token-effect" v-for="effect in tokenEffects" :key="effect.face">
+          <div class="token-effect__token"><img :src="effect.image" /></div>
+          <div class="token-effect__text"><span v-html="effect.html"></span></div>
+        </div>
       </div>
       <div v-if="debug.active && skillTest.result?.tag == 'Unrun' && !['SkillTestFastWindow1', 'SkillTestFastWindow2'].includes(skillTest.step)">
         <button @click="debug.send(game.id, {tag: 'SkillTestMessage', contents: {tag: 'PassSkillTest_'}})">{{ $t('skillTestActions.passSkillTest') }}</button>
         <button @click="debug.send(game.id, {tag: 'SkillTestMessage', contents: {tag: 'FailSkillTest_'}})">{{ $t('skillTestActions.failSkillTest') }}</button>
       </div>
+      <SkillTestDraw v-if="debug.active" :gameId="game.id" :skillTest="skillTest" :chaosBag="chaosBag" />
       <div v-if="committedCards.length > 0" class="committed-skills" key="committed-skills">
         <template v-if="skillTest.step === 'CommitCardsFromHandToSkillTestStep'">
           <h2>{{t('toBeCommitted')}}</h2>
-          <p class='note'>{{t('toBeCommittedNote')}}</p>
         </template>
         <template v-else>
           <h2>{{t('committedCards')}}</h2>
@@ -479,6 +512,9 @@ const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
           <template v-if="modifier.type.tag === 'OtherModifier' && modifier.type.contents === 'SkillTestAutomaticallySucceeds'">
             <span class="text">{{ $t('modifier.skillTestAutomaticallySucceeds') }}</span>
           </template>
+          <template v-if="modifier.type.tag === 'MetaModifier' && modifier.type.contents === 'ThreeAces1'">
+            <span class="text">{{ $t('modifier.skillTestAutomaticallySucceeds') }}</span>
+          </template>
           <template v-if="modifier.type.tag === 'OtherModifier' && modifier.type.contents === 'RevealAnotherChaosToken'">
             <span class="text">{{ $t('modifier.revealAnotherChaosToken') }}</span>
           </template>
@@ -537,6 +573,7 @@ const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
 
   .question-choices, :deep(.question-choices) {
     gap: 0px;
+    padding: 0;
   }
 }
 
@@ -982,6 +1019,8 @@ i.iconSkillAgility {
 
 .focused-chaos-tokens {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 8px;
@@ -993,17 +1032,44 @@ i.iconSkillAgility {
 }
 
 .token-effect {
-  background: transparent;
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: stretch;
+  background: rgba(10, 11, 15, 0.66);
+
+  & + .token-effect {
+    border-top: 1px solid rgba(255, 255, 255, 0.09);
+  }
+}
+
+.token-effect__token {
+  display: grid;
+  place-items: center;
+  padding: 8px 0;
+  background: rgba(0, 0, 0, 0.42);
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+
+  img {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.token-effect__text {
   display: flex;
-  gap: 10px;
-  padding: 10px;
-  align-items: start;
-  color: var(--title);
-  justify-content: start;
+  align-items: center;
+  padding: 9px 14px;
   text-align: left;
+  color: #dbe0e7;
+  font-family: 'Noto Sans', Avenir, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+
   :deep(img) {
-    width: 25px;
-    flex-shrink: 0;
+    height: 1.1em;
+    vertical-align: -0.15em;
   }
 }
 
@@ -1025,12 +1091,6 @@ i.iconSkillAgility {
 .test-source {
   width: 100%;
   align-items: flex-start;
-}
-
-.note {
-  background: var(--neutral-extra-dark);
-  color: #888;
-  padding: 5px;
 }
 
 .skip-triggers-notice {

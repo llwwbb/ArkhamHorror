@@ -9,7 +9,7 @@ import Arkham.Classes.HasGame
 import Arkham.Classes.Query
 import Arkham.Distance
 import Arkham.Enemy.Types (Enemy, Field (EnemyLocation))
-import {-# SOURCE #-} Arkham.GameEnv (getCard, getDistance)
+import Arkham.GameEnv (getCard, getDistance)
 import Arkham.Helpers.Agenda
 import Arkham.Helpers.Card (getModifiedCardCost)
 import Arkham.Helpers.Doom
@@ -31,14 +31,13 @@ import Arkham.Scenario.Types (Field (..))
 import Arkham.ScenarioLogKey
 import Arkham.Target
 import Arkham.Token
-import Arkham.Tracing
 
-calculatePrinted :: (HasGame m, Tracing m) => Maybe GameCalculation -> m Int
+calculatePrinted :: HasGame m => Maybe GameCalculation -> m Int
 calculatePrinted = \case
   Nothing -> pure 0
   Just calculation -> calculate calculation
 
-calculate :: (HasCallStack, HasGame m, Tracing m) => GameCalculation -> m Int
+calculate :: (HasCallStack, HasGame m) => GameCalculation -> m Int
 calculate = go
  where
   go = \case
@@ -51,6 +50,7 @@ calculate = go
     SubtractCalculation d1 d2 -> (-) <$> go d1 <*> go d2
     MultiplyCalculation d1 d2 -> (*) <$> go d1 <*> go d2
     RecordedCount key -> getRecordCount key
+    HasRecordCalculation key -> bool 0 1 <$> getHasRecord key
     ScenarioCount key -> scenarioCount key
     CountActs m -> selectCount m
     CountAgendas m -> selectCount m

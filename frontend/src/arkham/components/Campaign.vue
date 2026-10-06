@@ -2,12 +2,14 @@
 import { computed } from 'vue';
 import type { Game } from '@/arkham/types/Game';
 import type { Campaign } from '@/arkham/types/Campaign';
+import type { Question } from '@/arkham/types/Question';
 import StoryQuestion from '@/arkham/components/StoryQuestion.vue';
 import Scenario from '@/arkham/components/Scenario.vue';
 import UpgradeDeck from '@/arkham/components/UpgradeDeck.vue';
 import ChooseDeck from '@/arkham/components/ChooseDeck.vue';
 import ContinueCampaign from '@/arkham/components/ContinueCampaign.vue';
 import UltimatumsAndBoonsQuestion from '@/arkham/components/UltimatumsAndBoonsQuestion.vue';
+import { homebrewQuestionPanel } from '@/arkham/homebrewQuestionPanels';
 import { handleEmbeddedI18n } from '@/arkham/i18n';
 import { useI18n } from 'vue-i18n';
 
@@ -35,17 +37,48 @@ async function choose(idx: number) {
   emit('choose', idx)
 }
 
+// What deferred deck setup actually asks: trauma is ChooseAmounts, Eldritch
+// Brand and Spiritual Healing are ChooseOne, and Ultimatums & Boons arrives
+// labelled (ChooseDeck routes that one to its own panel). Question types with a
+// renderer of their own -- PickDestiny, PickSupplies, Read -- are deliberately
+// absent: <Question> draws nothing for them.
+function isDeckSetupQuestion(question: Question | null | undefined): boolean {
+  if (!question) return false
+  const inner = question.tag === 'QuestionLabel' ? question.question : question
+  return inner.tag === 'ChooseAmounts' || inner.tag === 'ChooseOne'
+}
+
 const chooseDeck = computed(() => {
   if (props.game.campaign && props.game.campaign.step?.tag === 'ChooseDecksStep') return true
-  // Deck screen only while someone actually has a ChooseDeck question parked.
-  // gameState alone is not enough: it can be stuck at IsChooseDecks with a
-  // different question pending (e.g. after a lost DoneChoosingDecks), and
-  // rendering by state would mask that question behind an inert deck screen.
-  return Object.values(props.game.question).some((q) => {
+
+  const hasDeckQuestion = Object.values(props.game.question).some((q) => {
     if (!q) return false
-    if (q.tag === 'ChooseDeck') return true
-    return q.tag === 'QuestionLabel' && q.question.tag === 'ChooseDeck'
+    if (q.tag === 'ChooseDeck' || q.tag === 'ChooseJoinDeck') return true
+    return q.tag === 'QuestionLabel'
+      && (q.question.tag === 'ChooseDeck' || q.question.tag === 'ChooseJoinDeck')
   })
+  if (hasDeckQuestion) return true
+
+  // The interactive parts of deck setup -- In the Thick of It's trauma, Eldritch
+  // Brand, starting xp -- are deferred past the deck-selection barrier, so they
+  // run once every seat has answered ChooseDeck but before the continuation that
+  // leaves IsChooseDecks. By then nobody holds a ChooseDeck question and the
+  // campaign step has already moved on to what follows, so these asks would drop
+  // into a floating modal over an empty page. Keep the deck screen up instead:
+  // it renders a seated player's pending question in that player's own row.
+  //
+  // gameState alone is still not enough, and this is the original hazard here
+  // (e.g. after a lost DoneChoosingDecks): the deck screen can only show a
+  // question that belongs to a SEATED player, in that player's row, and only the
+  // shapes <Question> draws. Anything else would be masked behind an inert deck
+  // screen, so it keeps the existing path. Upgrades reuse IsChooseDecks and are
+  // likewise left alone.
+  if (props.game.gameState.tag !== 'IsChooseDecks') return false
+  if (props.game.campaign?.step?.tag === 'UpgradeDeckStep') return false
+
+  const seated = new Set(Object.values(props.game.investigators).map((i) => i.playerId))
+  const pending = Object.entries(props.game.question).filter(([, q]) => !!q)
+  return pending.length > 0 && pending.every(([pid, q]) => seated.has(pid) && isDeckSetupQuestion(q))
 })
 
 
@@ -106,25 +139,15 @@ const continueCampaign = computed(() => {
 })
 
 const upgradeDeck = computed(() => {
-  if (props.game.campaign && props.game.campaign.step?.tag === 'UpgradeDeckStep') return true
-
-  const question = Object.values(props.game.question)[0]
-
-  if (question === null || question == undefined) {
-    return false
-  }
-
-  const { tag } = question
-
-  if (tag === 'ChooseUpgradeDeck' && props.game.gameState.tag === 'IsChooseDecks') {
-    return true
-  }
-
-  if (tag === 'QuestionLabel') {
-    return question.question.tag === 'ChooseUpgradeDeck'
-  }
-
-  return false
+  // The campaign step can remain parked on UpgradeDeckStep while killed/insane
+  // investigator handling advances through its continuation. Render this screen
+  // only while an upgrade question actually exists; otherwise it can mask the
+  // newly produced question behind a permanent "waiting" panel.
+  return Object.values(props.game.question).some((question) => {
+    if (!question) return false
+    if (question.tag === 'ChooseUpgradeDeck') return true
+    return question.tag === 'QuestionLabel' && question.question.tag === 'ChooseUpgradeDeck'
+  })
 })
 
 const pickDestiny = computed(() => {
@@ -176,11 +199,24 @@ const inScenarioStep = computed(() => {
 // of the Morrígan's weakness swap asked between deck loads). It must render
 // through the same question branches as an active game, or the screen is blank.
 const hasQuestion = computed(() => Object.keys(props.game.question).length > 0)
+
+/* A question a homebrew campaign draws itself (Dark Matter's Science Expansion
+ * shop). Matched on the question's own label, so the campaign owns the panel's
+ * layout and styles instead of inheriting StoryQuestion's generic card row --
+ * whose card images are marked `no-overlay` and so cannot be zoomed. */
+const homebrewPanel = computed(() => {
+  for (const [pid, question] of Object.entries(props.game.question)) {
+    if (question?.tag !== 'QuestionLabel') continue
+    const component = homebrewQuestionPanel(question.label)
+    if (component) return { playerId: pid, component }
+  }
+  return null
+})
 </script>
 
 <template>
   <div v-if="upgradeDeck" id="game" class="game">
-    <UpgradeDeck :game="game" :playerId="playerId" @choose="choose" />
+    <UpgradeDeck :game="game" :playerId="playerId" @choose="choose" @update="update" />
   </div>
   <div v-else-if="chooseDeck" id="game" class="game">
     <h2 v-if="questionLabel" class="title question-label">{{ questionLabel }}</h2>
@@ -199,8 +235,16 @@ const hasQuestion = computed(() => Object.keys(props.game.question).length > 0)
     />
   </div>
   <div v-else-if="game.gameState.tag === 'IsActive' || hasQuestion" id="game" class="game">
+    <component
+      v-if="homebrewPanel"
+      :is="homebrewPanel.component"
+      :game="game"
+      :playerId="homebrewPanel.playerId"
+      :viewOnly="homebrewPanel.playerId !== playerId"
+      @choose="choose"
+    />
     <UltimatumsAndBoonsQuestion
-      v-if="ultimatumsAndBoonsQuestion"
+      v-else-if="ultimatumsAndBoonsQuestion"
       :game="game"
       :playerId="ultimatumsAndBoonsQuestion.playerId"
       :viewOnly="ultimatumsAndBoonsQuestion.playerId !== playerId"
@@ -219,7 +263,7 @@ const hasQuestion = computed(() => Object.keys(props.game.question).length > 0)
       :canChooseSideStory="continueScenario.canChooseSideStory"
     />
     <Scenario
-      v-else-if="game.scenario && game.scenario.started && Object.entries(game.investigators).length > 0 && !inScenarioStep"
+      v-else-if="(game.gameState.tag === 'IsActive' || game.gameState.tag === 'IsOver') && game.scenario && game.scenario.started && Object.entries(game.investigators).length > 0 && !inScenarioStep"
       :game="game"
       :scenario="game.scenario"
       :playerId="playerId"

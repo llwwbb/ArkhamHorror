@@ -36,6 +36,9 @@ difficultyL = lens skillTestDifficulty $ \m x -> m {skillTestDifficulty = x}
 originalDifficultyL :: Lens' SkillTest (Maybe SkillTestDifficulty)
 originalDifficultyL = lens skillTestOriginalDifficulty $ \m x -> m {skillTestOriginalDifficulty = x}
 
+difficultyIncreaseL :: Lens' SkillTest Int
+difficultyIncreaseL = lens skillTestDifficultyIncrease $ \m x -> m {skillTestDifficultyIncrease = x}
+
 subscribersL :: Lens' SkillTest [Target]
 subscribersL = lens skillTestSubscribers $ \m x -> m {skillTestSubscribers = x}
 
@@ -62,6 +65,9 @@ committedCardsL = lens skillTestCommittedCards $ \m x -> m {skillTestCommittedCa
 
 resultL :: Lens' SkillTest SkillTestResult
 resultL = lens skillTestResult $ \m x -> m {skillTestResult = x}
+
+resultForcedL :: Lens' SkillTest Bool
+resultForcedL = lens skillTestResultForced $ \m x -> m {skillTestResultForced = x}
 
 typeL :: Lens' SkillTest SkillTestType
 typeL = lens skillTestType $ \m x -> m {skillTestType = x}

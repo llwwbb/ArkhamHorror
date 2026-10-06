@@ -13,6 +13,24 @@ newtype CardCode = CardCode {unCardCode :: Text}
 exceptionCardCodes :: [Text]
 exceptionCardCodes = ["03047a", "03047b", "03047c", "03279a", "03279b"]
 
+-- these card codes end in a/b but are two *distinct printings*, not two sides of
+-- one card, so they must compare exactly. Written in Rock's rail tunnels are
+-- separate cards (or the two quantity-2 copies, which carry different rail
+-- icons); letting them cross-match makes set-aside lookups grab the wrong copy.
+distinctPrintingCardCodes :: [Text]
+distinctPrintingCardCodes =
+  [ "10510a"
+  , "10510b"
+  , "10511a"
+  , "10511b"
+  , "10512a"
+  , "10512b"
+  , "10513a"
+  , "10513b"
+  , "10514a"
+  , "10514b"
+  ]
+
 flippedCardCode :: CardCode -> CardCode
 flippedCardCode (CardCode a) = case T.unsnoc a of
   Just (base, 'b') -> CardCode base
@@ -24,6 +42,8 @@ instance HasField "flipped" CardCode CardCode where
 -- We special case the stranger since ADB calls them a b c
 instance Eq CardCode where
   (CardCode a) == (CardCode b)
+    | a `elem` distinctPrintingCardCodes || b `elem` distinctPrintingCardCodes = a == b
+  (CardCode a) == (CardCode b)
     | a `elem` exceptionCardCodes || b `elem` exceptionCardCodes =
         a == b || (a <> "b") == b || a == (b <> "b")
   (CardCode a) == (CardCode b) =
@@ -31,8 +51,18 @@ instance Eq CardCode where
    where
     sideSuffixes = "abcd" :: [Char]
     isSideSuffix = (`elem` sideSuffixes)
-    toBase = T.dropWhileEnd isSideSuffix
-    sideOf = listToMaybe . T.unpack . T.takeWhileEnd isSideSuffix
+    -- Only the *final* character designates a side. Eating the whole trailing
+    -- run of letters breaks card numbers that themselves end in one: the four
+    -- children of Public School 187 are cards 63a-63d, so ":dark-matter:063da"
+    -- (William's back) and ":dark-matter:063db" (William's front) must pair with
+    -- each other. With a greedy tail both reduced to base "063" with sides 'd'
+    -- and... 'd', while 063da instead compared equal to 063cb (Tilde's front),
+    -- since 'c' and 'd' complement.
+    splitSide t = case T.unsnoc t of
+      Just (base, c) | isSideSuffix c -> (base, Just c)
+      _ -> (t, Nothing)
+    toBase = fst . splitSide
+    sideOf = snd . splitSide
     complements (Just x) (Just y) = case x of
       'a' -> y == 'b'
       'b' -> y == 'a'

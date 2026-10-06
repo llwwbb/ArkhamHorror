@@ -16,6 +16,7 @@ import Arkham.Helpers.Modifiers
 import Arkham.Helpers.Source
 import Arkham.Id
 import Arkham.Investigator.Types (Field (..))
+import Arkham.Location.Group
 import Arkham.Location.Types (Field (..))
 import Arkham.LocationSymbol
 import Arkham.Matcher hiding (LocationCard)
@@ -27,21 +28,33 @@ import Arkham.Prelude
 import Arkham.Projection
 import Arkham.Source
 import Arkham.Target
-import Arkham.Tracing
 import Arkham.Treachery.Types (Field (..), TreacheryAttrs)
 import Arkham.Window (Window (..))
 import Arkham.Window qualified as Window
 import Data.Aeson.Key qualified as Aeson
 
-getConnectedLocations :: (HasGame m, Tracing m) => LocationId -> m [LocationId]
+getConnectedLocations :: HasGame m => LocationId -> m [LocationId]
 getConnectedLocations = fieldMap LocationConnectedLocations toList
 
-toConnections :: (HasGame m, Tracing m) => LocationId -> m [LocationSymbol]
+toConnections :: HasGame m => LocationId -> m [LocationSymbol]
 toConnections lid =
   fieldMap LocationCard (cdLocationRevealedConnections . toCardDef) lid
 
-getConnectedMatcher :: (HasGame m, Tracing m) => ForMovement -> LocationId -> m LocationMatcher
-getConnectedMatcher forMovement l = cached (ConnectedMatcherKey l forMovement) $ do
+getConnectedMatcher :: HasGame m => ForMovement -> LocationId -> m LocationMatcher
+getConnectedMatcher forMovement l =
+  cached (ConnectedMatcherKey l forMovement)
+    $ LocationMatchAny
+    . uncurry (<>)
+    <$> connectedMatcherParts forMovement l
+
+{- | The two halves of a location's connections: the printed ones (its own connection
+symbols and directions) and the ones a modifier granted. The map draws them differently
+-- a printed connection belongs to a location group as a whole, a granted one to the
+single location that was granted it -- so they are kept apart rather than merged here.
+-}
+connectedMatcherParts
+  :: HasGame m => ForMovement -> LocationId -> m ([LocationMatcher], [LocationMatcher])
+connectedMatcherParts forMovement l = do
   isRevealed <- field LocationRevealed l
   directionalMatchers <- fieldMap LocationConnectsTo (map (`LocationInDirection` self) . setToList) l
   base <-
@@ -50,8 +63,13 @@ getConnectedMatcher forMovement l = cached (ConnectedMatcherKey l forMovement) $
       else field LocationConnectedMatchers l
 
   modifiers <- getModifiers (LocationTarget l)
-  LocationMatchAny
-    <$> foldM applyModifier (base <> directionalMatchers) modifiers
+  -- A location that "loses" a connection symbol stops connecting to that symbol; the
+  -- symbol matchers are what the card def turned its printed connections into.
+  let lostSymbols = [sym | LosesConnectionSymbol sym <- modifiers]
+      keeps = \case
+        Matcher.LocationWithSymbol sym -> sym `notElem` lostSymbols
+        _ -> True
+  (filter keeps base <> directionalMatchers,) <$> foldM applyModifier [] modifiers
  where
   applyModifier current (ConnectedToWhen whenMatcher matcher) = do
     matches <- elem l <$> select whenMatcher
@@ -62,16 +80,21 @@ getConnectedMatcher forMovement l = cached (ConnectedMatcherKey l forMovement) $
   applyModifier current _ = pure current
   self = LocationWithId l
 
-isAt :: (HasGame m, Tracing m, AsId a, IdOf a ~ LocationId) => InvestigatorId -> a -> m Bool
+isAt :: (HasGame m, AsId a, IdOf a ~ LocationId) => InvestigatorId -> a -> m Bool
 isAt iid (asId -> lid) = fieldMap InvestigatorLocation (elem lid) iid
 
-whenAt :: (HasGame m, Tracing m, AsId a, IdOf a ~ LocationId) => InvestigatorId -> a -> m () -> m ()
+whenAt :: (HasGame m, AsId a, IdOf a ~ LocationId) => InvestigatorId -> a -> m () -> m ()
 whenAt iid lid = whenM (isAt iid lid)
 
-placementLocation :: (HasCallStack, HasGame m, Tracing m) => Placement -> m (Maybe LocationId)
+placementLocation :: (HasCallStack, HasGame m) => Placement -> m (Maybe LocationId)
 placementLocation = \case
+  AsSelfLocation {} -> pure Nothing
   AtLocation lid -> pure $ Just lid
+  -- At several locations at once: callers that can only hold one take the first.
+  AtLocations (lid :| _) -> pure $ Just lid
   AttachedToLocation lid -> pure $ Just lid
+  -- On the connection, not on either end, so it is at neither.
+  BetweenLocations _ _ -> pure Nothing
   -- Use the safe (join) read: an entity may briefly reference an investigator who
   -- has been removed from the game (e.g. while a group swap parks on deck choice),
   -- and a location lookup during a matcher scan must not crash on the missing id.
@@ -93,18 +116,29 @@ placementLocation = \case
   StillInEncounterDiscard -> pure Nothing
   AsSwarm eid _ -> fieldMayJoin EnemyLocation eid
   HiddenInHand _ -> pure Nothing
+  -- Face down in a threat area: not in play, so it has no location.
+  FacedownInThreatArea _ -> pure Nothing
   OnTopOfDeck _ -> pure Nothing
   NextToAgenda -> pure Nothing
   NextToAct -> pure Nothing
+  NextToScenarioReference -> pure Nothing
   Near _ -> pure Nothing
   InTheShadows -> pure Nothing
   OutOfGame _ -> pure Nothing
   InPosition _ -> pure Nothing
 
-class Locateable a where
-  getLocationOf :: (HasGame m, Tracing m) => a -> m (Maybe LocationId)
+{- | Every location a placement is at. Only 'AtLocations' answers with more than
+one; everything else defers to 'placementLocation'.
+-}
+placementLocations :: (HasCallStack, HasGame m) => Placement -> m [LocationId]
+placementLocations = \case
+  AtLocations lids -> pure $ toList lids
+  placement -> maybeToList <$> placementLocation placement
 
-withLocationOf :: (Locateable a, HasGame m, Tracing m) => a -> (LocationId -> m ()) -> m ()
+class Locateable a where
+  getLocationOf :: HasGame m => a -> m (Maybe LocationId)
+
+withLocationOf :: (Locateable a, HasGame m) => a -> (LocationId -> m ()) -> m ()
 withLocationOf a f = getLocationOf a >>= traverse_ f
 
 instance Locateable ConcealedCardId where
@@ -134,7 +168,7 @@ instance Locateable TreacheryAttrs where
 instance Locateable Placement where
   getLocationOf = placementLocation
 
-onSameLocation :: (HasGame m, Tracing m, Locateable a, Locateable b) => a -> b -> m Bool
+onSameLocation :: (HasGame m, Locateable a, Locateable b) => a -> b -> m Bool
 onSameLocation a b = do
   mlid1 <- getLocationOf a
   mlid2 <- getLocationOf b
@@ -142,13 +176,13 @@ onSameLocation a b = do
     (Just l1, Just l2) -> l1 == l2
     _ -> False
 
-isDiscoveringLastClue :: (HasGame m, Tracing m) => LocationId -> Int -> m Bool
+isDiscoveringLastClue :: HasGame m => LocationId -> Int -> m Bool
 isDiscoveringLastClue lid n = do
   clues <- field LocationClues lid
   pure $ clues - n <= 0 && clues /= 0
 
 locationMatches
-  :: (HasGame m, Tracing m, HasCallStack)
+  :: (HasGame m, HasCallStack)
   => InvestigatorId
   -> Source
   -> Window
@@ -228,13 +262,13 @@ locationMatches investigatorId source window locationId matcher' = do
     _ -> locationId <=~> matcher
 
 getCanMoveTo
-  :: (Sourceable source, HasGame m, Tracing m) => InvestigatorId -> source -> LocationId -> m Bool
+  :: (Sourceable source, HasGame m) => InvestigatorId -> source -> LocationId -> m Bool
 getCanMoveTo iid source lid =
   cached (CanMoveToLocationKey iid (toSource source) lid) do
     elem lid <$> getCanMoveToLocations iid source
 
 getCanMoveToLocations
-  :: (Sourceable source, HasGame m, Tracing m) => InvestigatorId -> source -> m [LocationId]
+  :: (Sourceable source, HasGame m) => InvestigatorId -> source -> m [LocationId]
 getCanMoveToLocations iid source = cached (CanMoveToLocationsKey iid (toSource source)) do
   modifiers <- getModifiers iid
   let includeEmpty = if CanEnterEmptySpace `elem` modifiers then IncludeEmptySpace else id
@@ -246,7 +280,7 @@ getCanMoveToLocations iid source = cached (CanMoveToLocationsKey iid (toSource s
   getCanMoveToLocations_ iid source ls
 
 getCanMoveToLocations_
-  :: (Sourceable source, HasGame m, Tracing m)
+  :: (Sourceable source, HasGame m)
   => InvestigatorId -> source -> [LocationId] -> m [LocationId]
 getCanMoveToLocations_ iid source ls = cached (CanMoveToLocationsKey_ iid (toSource source) ls) do
   canMove <-
@@ -262,17 +296,23 @@ getCanMoveToLocations_ iid source ls = cached (CanMoveToLocationsKey_ iid (toSou
           mods <- getModifiers lid
           let extraCostsToLeave = mconcat [c | AdditionalCostToLeave c <- mods]
           let barricaded = if CanIgnoreBarriers `elem` imods then [] else concat [xs | Barricades xs <- mods]
+          -- "You cannot enter X except by <source>". This is the only move query that
+          -- knows the moving effect's source, so it is where CannotEnterExcept is honored.
+          let entryExceptions = [(l', sm) | CannotEnterExcept l' sm <- imods]
           ls & filter (and . sequence [(/= lid), (`notElem` barricaded)]) & filterM \l -> do
             mods' <- getModifiers l
             pcosts <- filterM ((l <=~>) . fst) [(ma, c) | AdditionalCostToEnterMatching ma c <- imods]
             revealed' <- field LocationRevealed l
             baseEnter <- mwhen (not revealed') <$> field LocationCostToEnterUnrevealed l -- Added for cards like Nimble
             let extraCostsToEnter = baseEnter <> concatMap snd pcosts <> mconcat [c | AdditionalCostToEnter c <- mods']
-            getCanAffordCost iid source [#move] [] (extraCostsToLeave <> extraCostsToEnter)
+            andM
+              [ allM (sourceMatches (toSource source)) [sm | (l', sm) <- entryExceptions, l' == l]
+              , getCanAffordCost iid source [#move] [] (extraCostsToLeave <> extraCostsToEnter)
+              ]
     else pure []
 
 getCanMoveToMatchingLocations
-  :: (HasGame m, Tracing m, Sourceable source)
+  :: (HasGame m, Sourceable source)
   => InvestigatorId
   -> source
   -> Matcher.LocationMatcher
@@ -283,22 +323,50 @@ getCanMoveToMatchingLocations iid source matcher = do
   let includeEmpty = if CanEnterEmptySpace `elem` modifiers then IncludeEmptySpace else id
   filter (`elem` ls) <$> select (includeEmpty matcher)
 
+{- | The mover's own 'MovesAsIfConnectedTo' modifiers, rewritten as connections on the
+location it is standing on. A connection query reads the START location's modifiers, so
+a connection that only some movers have cannot live on the location; it is injected for
+the duration of the query instead. Hunter movement does the same thing for
+'HunterConnectedTo' (see 'Arkham.Enemy.Runner'). Empty for every mover that has none,
+and in that case the query runs untouched so the connection cache still applies.
+-}
+getMoverConnections
+  :: (HasGame m, Targetable mover)
+  => mover -> LocationId -> m [ModifierType]
+getMoverConnections mover lid = do
+  mods <- getModifiers mover
+  pure [ConnectedToWhen (Matcher.LocationWithId lid) m | MovesAsIfConnectedTo m <- mods]
+
 -- TODO: CACHE
 getConnectedMoveLocations
-  :: (Sourceable source, HasGame m, Tracing m) => InvestigatorId -> source -> m [LocationId]
-getConnectedMoveLocations iid source =
-  getCanMoveToMatchingLocations iid source
-    $ Matcher.ConnectedFrom ForMovement (Matcher.locationWithInvestigator iid)
+  :: (Sourceable source, HasGame m) => InvestigatorId -> source -> m [LocationId]
+getConnectedMoveLocations iid source = do
+  let matcher = Matcher.ConnectedFrom ForMovement (Matcher.locationWithInvestigator iid)
+  getLocationOf iid >>= \case
+    Nothing -> getCanMoveToMatchingLocations iid source matcher
+    Just lid ->
+      getMoverConnections iid lid >>= \case
+        [] -> getCanMoveToMatchingLocations iid source matcher
+        extra ->
+          withModifiers lid (toModifiers iid extra)
+            $ getCanMoveToMatchingLocations iid source matcher
 
 -- TODO: CACHE
 getAccessibleLocations
-  :: (Sourceable source, HasGame m, Tracing m) => InvestigatorId -> source -> m [LocationId]
-getAccessibleLocations iid source =
-  getCanMoveToMatchingLocations iid source
-    $ Matcher.AccessibleFrom ForMovement (Matcher.locationWithInvestigator iid)
+  :: (Sourceable source, HasGame m) => InvestigatorId -> source -> m [LocationId]
+getAccessibleLocations iid source = do
+  let matcher = Matcher.AccessibleFrom ForMovement (Matcher.locationWithInvestigator iid)
+  getLocationOf iid >>= \case
+    Nothing -> getCanMoveToMatchingLocations iid source matcher
+    Just lid ->
+      getMoverConnections iid lid >>= \case
+        [] -> getCanMoveToMatchingLocations iid source matcher
+        extra ->
+          withModifiers lid (toModifiers iid extra)
+            $ getCanMoveToMatchingLocations iid source matcher
 
 getCanLeaveCurrentLocation
-  :: (Sourceable source, HasGame m, Tracing m) => InvestigatorId -> source -> m Bool
+  :: (Sourceable source, HasGame m) => InvestigatorId -> source -> m Bool
 getCanLeaveCurrentLocation iid source = do
   mLocation <- selectOne $ Matcher.locationWithInvestigator iid
   case mLocation of
@@ -345,7 +413,17 @@ replaceLocation
 replaceLocation location card = push $ Msg.ReplaceLocation (asId location) (toCard card) Msg.DefaultReplace
 
 getLocationGlobalMeta
-  :: (FromJSON a, HasGame m, Tracing m, ToId location LocationId) => Aeson.Key -> location -> m (Maybe a)
+  :: (FromJSON a, HasGame m, ToId location LocationId) => Aeson.Key -> location -> m (Maybe a)
 getLocationGlobalMeta key (asId -> lid) = do
   globalMeta <- field LocationGlobalMeta lid
   pure $ lookup key globalMeta >>= maybeResult
+
+{- | Put a location into a group's box after setup, at the end of it. Lost in Time and
+Space puts its locations into play as the scenario runs, so the index cannot be handed
+out up front the way 'Arkham.Scenario.Setup.placeLocationGroup' does; it is counted from
+the members already there and then stored, so it stays fixed from that point on.
+-}
+joinLocationGroup :: ReverseQueue m => LocationId -> LocationGroupKey -> m ()
+joinLocationGroup lid key = do
+  members <- select $ LocationInGroup key
+  push $ Msg.SetLocationGroup lid (GroupMembership key (length members))

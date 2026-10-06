@@ -4,7 +4,6 @@
 
 module Arkham.Scenarios.FortuneAndFolly.Helpers (module Arkham.Scenarios.FortuneAndFolly.Helpers, module X) where
 
-import Arkham.Scenarios.FortuneAndFolly.PlayingCard as X
 import Arkham.Ability.Types
 import Arkham.Capability
 import Arkham.Card
@@ -17,11 +16,10 @@ import Arkham.Id
 import Arkham.Message.Lifted
 import Arkham.Modifier
 import Arkham.Prelude
-import Arkham.Scenarios.DarkSideOfTheMoon.Helpers as X (
+import Arkham.Scenarios.FortuneAndFolly.PlayingCard as X
+import Arkham.Scenarios.TheDreamEaters.DarkSideOfTheMoon.Helpers as X (
   getAlarmLevel,
   getMaxAlarmLevel,
-  reduceAlarmLevel,
-  reduceAlarmLevelBy,
  )
 import Arkham.Source
 import Arkham.Target
@@ -40,6 +38,11 @@ data CheckGameIcons = CheckGameIcons
   , n :: Int
   , cards :: [EncounterCard]
   , mulligan :: Mulligan
+  , setAside :: [EncounterCard]
+  {- ^ Cards removed from the hand by a mulligan. They stay set aside (out of the
+  encounter discard) until the check resolves, so a mid-check reshuffle can't
+  pull them back into the encounter deck.
+  -}
   }
   deriving stock (Eq, Show)
 
@@ -47,10 +50,30 @@ data Mulligan = CanMulligan Int | NoMulligan
   deriving stock (Eq, Show)
 
 decrementMulligan :: Mulligan -> Mulligan
-decrementMulligan (CanMulligan n) | n > 1 = CanMulligan (n -1)
+decrementMulligan (CanMulligan n) | n > 1 = CanMulligan (n - 1)
 decrementMulligan _ = NoMulligan
 
-foldMap (deriveJSON defaultOptions) [''Mulligan, ''CheckGameIcons]
+foldMap (deriveJSON defaultOptions) [''Mulligan]
+deriveToJSON defaultOptions ''CheckGameIcons
+
+-- Hand written so that @setAside@ stays optional: 'CheckGameIcons' is serialized
+-- into the persisted message queue, and games parked mid-check were saved before
+-- the field existed.
+instance FromJSON CheckGameIcons where
+  parseJSON = withObject "CheckGameIcons" \o -> do
+    target <- o .: "target"
+    investigator <- o .: "investigator"
+    n <- o .: "n"
+    cards <- o .: "cards"
+    mulligan <- o .: "mulligan"
+    setAside <- o .:? "setAside" .!= []
+    pure $ CheckGameIcons {target, investigator, n, cards, mulligan, setAside}
+
+{- | All cards this check is holding: the ones checked so far plus anything the
+investigator has set aside with a mulligan.
+-}
+checkedCards :: CheckGameIcons -> [EncounterCard]
+checkedCards params = params.cards <> params.setAside
 
 checkGameIcons
   :: (Targetable target, ReverseQueue m) => target -> InvestigatorId -> Mulligan -> Int -> m ()
@@ -62,6 +85,7 @@ checkGameIcons (toTarget -> target) iid mulligan n =
       , investigator = iid
       , mulligan
       , n
+      , setAside = []
       , target
       }
 
@@ -87,7 +111,8 @@ sequential :: (HasGame m, HasCardDef a) => [a] -> m Bool
 sequential cards = do
   playingCards <- mapMaybeM toPlayingCard cards
   let sortedRanks = sort $ map rankValue playingCards
-  pure $ and $ zipWith (\a b -> b == a + 1) sortedRanks (drop 1 sortedRanks)
+  -- fewer than two ranks is vacuously "in a row", which would be a free win
+  pure $ length sortedRanks > 1 && and (zipWith (\a b -> b == a + 1) sortedRanks (drop 1 sortedRanks))
 
 toPlayingCard :: (HasCardDef a, HasGame m) => a -> m (Maybe PlayingCard)
 toPlayingCard a = do
@@ -118,3 +143,18 @@ raiseAlarmLevel source iids = do
 raiseAlarmLevelOf :: (Sourceable source, ReverseQueue m) => source -> InvestigatorId -> m ()
 raiseAlarmLevelOf source iid = raiseAlarmLevel source [iid]
 {-# INLINE raiseAlarmLevelOf #-}
+
+{- | "An investigator's alarm level cannot be reduced below 1 or raised above 10."
+That floor is Fortune and Folly's alone, which is why this shadows the Dark Side
+of the Moon helper of the same name instead of re-exporting it.
+-}
+reduceAlarmLevelBy :: (Sourceable source, ReverseQueue m) => Int -> source -> InvestigatorId -> m ()
+reduceAlarmLevelBy n (toSource -> source) iid = do
+  current <- getAlarmLevel iid
+  let n' = min n (max 0 (current - 1))
+  when (n' > 0) $ removeTokens source iid AlarmLevel n'
+{-# INLINE reduceAlarmLevelBy #-}
+
+reduceAlarmLevel :: (Sourceable source, ReverseQueue m) => source -> InvestigatorId -> m ()
+reduceAlarmLevel source = reduceAlarmLevelBy 1 source
+{-# INLINE reduceAlarmLevel #-}

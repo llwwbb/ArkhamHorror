@@ -14,7 +14,6 @@ import Arkham.Helpers.SkillTest.Lifted (parley)
 import Arkham.Matcher hiding (DiscoverClues, EnemyEvaded)
 import Arkham.Projection
 import Arkham.Taboo
-import Arkham.Tracing
 import Data.Map.Strict qualified as Map
 
 data Command = GoCommand | CowerCommand | BetrayCommand | MercyCommand | ConfessCommand | DistractCommand
@@ -138,7 +137,7 @@ allCommands a =
          | a `hasCustomization` Distract
          ]
 
-determineMeta :: (HasGame m, Tracing m) => EventAttrs -> m Value
+determineMeta :: HasGame m => EventAttrs -> m Value
 determineMeta attrs = do
   let used = getMetaKeyDefault "used" [] attrs
   case attrs.placement of
@@ -198,7 +197,7 @@ runAbility iid attrs canTonguetwister = do
 instance RunMessage PowerWord where
   runMessage msg e@(PowerWord attrs) = runQueueT $ case msg of
     PlayThisEvent iid (is attrs -> True) -> do
-      enemies <- select $ enemyAtLocationWith iid <> NonEliteEnemy
+      enemies <- select $ enemyAtLocationWith iid <> NonEliteEnemy <> EnemyCanHaveAttachments
       chooseOne
         iid
         [targetLabel enemy [PlaceEvent attrs.id $ AttachedToEnemy enemy] | enemy <- enemies]
@@ -239,22 +238,28 @@ instance RunMessage PowerWord where
               when (notNull enemies) do
                 chooseOrRunOne
                   iid
-                  [ targetLabel enemy [DealDamage (EnemyTarget enemy) $ nonAttack (Just iid) (attrs.ability 1) 1] | enemy <- enemies
+                  [ targetLabel enemy [DealDamage (EnemyTarget enemy) $ nonAttack (Just iid) (attrs.ability 1) 1]
+                  | enemy <- enemies
                   ]
             MercyCommand -> do
               let source = attrs.ability 1
+              let atEnemy = at_ (locationWithEnemy eid)
               damage <- field EnemyHealthDamage eid
               horror <- field EnemySanityDamage eid
               horrorInvestigators <-
-                if horror > 0 then select (HealableInvestigator source #horror $ colocatedWith iid) else pure []
+                if horror > 0 then select (HealableInvestigator source #horror atEnemy) else pure []
               damageInvestigators <-
-                if damage > 0 then select (HealableInvestigator source #damage $ colocatedWith iid) else pure []
+                if damage > 0 then select (HealableInvestigator source #damage atEnemy) else pure []
               choices <- forToSnd (nub $ horrorInvestigators <> damageInvestigators) $ \investigator -> capture do
                 chooseOrRunOne iid
-                  $ [ Label ("$label.healDamage count=i:" <> tshow damage) [HealDamage (toTarget investigator) source damage]
+                  $ [ Label
+                        ("$label.healDamage count=i:" <> tshow damage)
+                        [HealDamage (toTarget investigator) source damage]
                     | investigator `elem` damageInvestigators
                     ]
-                  <> [ Label ("$label.healHorror count=i:" <> tshow horror) [HealHorror (toTarget investigator) source horror]
+                  <> [ Label
+                         ("$label.healHorror count=i:" <> tshow horror)
+                         [HealHorror (toTarget investigator) source horror]
                      | investigator `elem` horrorInvestigators
                      ]
 

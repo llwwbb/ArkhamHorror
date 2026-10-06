@@ -19,6 +19,7 @@ import Arkham.Id
 import Arkham.Json
 import Arkham.Key
 import Arkham.Layout
+import Arkham.Location.Group
 import Arkham.Location.Grid
 import Arkham.Name
 import Arkham.Prelude
@@ -32,6 +33,7 @@ import Arkham.Source
 import Arkham.Target
 import Arkham.Tarot
 import Arkham.Token
+import Arkham.TokenBag (CustomChaosBag)
 import Arkham.Xp
 import Arkham.Zone
 import Control.Lens (_Just)
@@ -57,11 +59,25 @@ class
   ) =>
   IsScenario a
 
+{- | A scenario builder with its concrete type hidden.  Lives here rather than
+in "Arkham.Scenario" so the generated registry can name it without importing
+the module that consumes the registry.
+-}
+data SomeScenario = forall a. IsScenario a => SomeScenario (Difficulty -> a)
+
+{- | Scenarios carry their card code in their attrs, so the registry key is
+recoverable from the builder itself.
+-}
+someScenarioCardCode :: SomeScenario -> CardCode
+someScenarioCardCode (SomeScenario s) = unScenarioId $ scenarioId $ toAttrs $ Scenario (s Easy)
+
 data instance Field Scenario :: Type -> Type where
   ScenarioCardsUnderActDeck :: Field Scenario [Card]
   ScenarioCardsNextToActDeck :: Field Scenario [Card]
   ScenarioCardsUnderAgendaDeck :: Field Scenario [Card]
   ScenarioCardsUnderScenarioReference :: Field Scenario [Card]
+  ScenarioActStack :: Field Scenario (IntMap [Card])
+  ScenarioAgendaStack :: Field Scenario (IntMap [Card])
   ScenarioDiscard :: Field Scenario [EncounterCard]
   ScenarioEncounterDeck :: Field Scenario (Deck EncounterCard)
   ScenarioHasEncounterDeck :: Field Scenario Bool
@@ -77,6 +93,7 @@ data instance Field Scenario :: Type -> Type where
   ScenarioResignedCardCodes :: Field Scenario [CardCode]
   ScenarioResolvedStories :: Field Scenario [StoryId]
   ScenarioChaosBag :: Field Scenario ChaosBag
+  ScenarioCustomChaosBags :: Field Scenario (Map Text CustomChaosBag)
   ScenarioInResolution :: Field Scenario Bool
   ScenarioIsPrelude :: Field Scenario Bool
   ScenarioSetAsideCards :: Field Scenario [Card]
@@ -92,6 +109,7 @@ data instance Field Scenario :: Type -> Type where
   ScenarioDefeatedEnemies :: Field Scenario (Map EnemyId DefeatedEnemyAttrs)
   ScenarioGrid :: Field Scenario Grid
   ScenarioLocationLayout :: Field Scenario [GridTemplateRow]
+  ScenarioLocationGroups :: Field Scenario [LocationGroup]
 
 deriving stock instance Show (Field Scenario typ)
 
@@ -111,6 +129,12 @@ data ScenarioAttrs = ScenarioAttrs
   , scenarioCompletedAgendaStack :: IntMap [Card]
   , scenarioCompletedActStack :: IntMap [Card]
   , scenarioLocationLayout :: [GridTemplateRow]
+  , {- | Groups of locations the frontend draws as one box, routing connections to and
+    from the box rather than to each location inside it. Membership is recorded per
+    location ('Arkham.Location.Types.LocationGroupMembership'); this only declares each
+    group's key and how its box arranges its members.
+    -}
+    scenarioLocationGroups :: [LocationGroup]
   , scenarioGrid :: Grid
   , scenarioDecks :: Map ScenarioDeckKey [Card]
   , scenarioDeckDiscards :: Map ScenarioDeckKey [Card]
@@ -126,6 +150,7 @@ data ScenarioAttrs = ScenarioAttrs
   , scenarioNoRemainingInvestigatorsHandler :: Target
   , scenarioVictoryDisplay :: [Card]
   , scenarioChaosBag :: ChaosBag
+  , scenarioCustomChaosBags :: Map Text CustomChaosBag
   , scenarioEncounterDeck :: Deck EncounterCard
   , scenarioHasEncounterDeck :: Bool
   , scenarioDiscard :: [EncounterCard]
@@ -315,6 +340,7 @@ scenario f cardCode name difficulty layout =
       , scenarioCardsNextToActDeck = mempty
       , scenarioCardsNextToAgendaDeck = mempty
       , scenarioLocationLayout = layout
+      , scenarioLocationGroups = []
       , scenarioGrid = initGrid
       , scenarioDecks = mempty
       , scenarioDeckDiscards = mempty
@@ -328,6 +354,7 @@ scenario f cardCode name difficulty layout =
       , scenarioNoRemainingInvestigatorsHandler = ScenarioTarget
       , scenarioVictoryDisplay = mempty
       , scenarioChaosBag = emptyChaosBag
+      , scenarioCustomChaosBags = mempty
       , scenarioEncounterDeck = mempty
       , scenarioEncounterDecks = mempty
       , scenarioHasEncounterDeck = True
@@ -442,6 +469,7 @@ instance FromJSON ScenarioAttrs where
     scenarioCompletedAgendaStack <- o .: "completedAgendaStack"
     scenarioCompletedActStack <- o .: "completedActStack"
     scenarioLocationLayout <- o .: "locationLayout"
+    scenarioLocationGroups <- o .:? "locationGroups" .!= []
     scenarioGrid <- o .:? "grid" .!= initGrid
     scenarioDecks <- o .: "decks"
     scenarioDeckDiscards <- o .:? "deckDiscards" .!= mempty
@@ -454,6 +482,7 @@ instance FromJSON ScenarioAttrs where
     scenarioNoRemainingInvestigatorsHandler <- o .: "noRemainingInvestigatorsHandler"
     scenarioVictoryDisplay <- o .: "victoryDisplay"
     scenarioChaosBag <- o .: "chaosBag"
+    scenarioCustomChaosBags <- o .:? "customChaosBags" .!= mempty
     scenarioEncounterDeck <- o .: "encounterDeck"
     scenarioHasEncounterDeck <- o .: "hasEncounterDeck"
     scenarioDiscard <- o .: "discard"

@@ -7,13 +7,13 @@ import Arkham.Capability
 import Arkham.Card
 import Arkham.Helpers (unDeck)
 import Arkham.Helpers.Asset
+import Arkham.I18n
 import Arkham.Investigator.Types (Field (InvestigatorDeck, InvestigatorHand))
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Modifier
 import Arkham.Projection
 import Arkham.SkillType
-import Arkham.Scenarios.TheBlobThatAteEverything.Helpers (scenarioI18n)
 
 newtype LtWilsonStewart = LtWilsonStewart AssetAttrs
   deriving anyclass (IsAsset, HasModifiersFor)
@@ -47,19 +47,19 @@ instance RunMessage LtWilsonStewart where
       let
         skills card = cdSkills $ toCardDef card
         countIcon s = count (== SkillIcon s) . skills
-        healChoice = do
+        healChoice = cardI18n $ scope "ltWilsonStewart" do
           when canHealDamage do
-            scenarioI18n (labeled' "ltWilsonStewart.healDamage") $ healDamage attrs (attrs.ability 1) 1
+            labeled "healDamage" $ healDamage attrs (attrs.ability 1) 1
           when canHealHorror do
-            scenarioI18n (labeled' "ltWilsonStewart.healHorror") $ healHorror attrs (attrs.ability 1) 1
-        wildChoice = do
-          scenarioI18n (labeled' "ltWilsonStewart.gainSkillValue") do
+            labeled "healHorror" $ healHorror attrs (attrs.ability 1) 1
+        wildChoice = cardI18n $ scope "ltWilsonStewart" do
+          labeled "plus1SkillValue" do
             nextSkillTestModifier iid (attrs.ability 1) iid (AnySkillValue 1)
           when canDrawCards do
-            scenarioI18n (labeled' "ltWilsonStewart.drawCard") $ drawCards iid (attrs.ability 1) 1
+            labeled "drawCard" $ drawCards iid (attrs.ability 1) 1
           healChoice
           when canGainResources do
-            scenarioI18n (labeled' "ltWilsonStewart.gainResource") $ gainResources iid (attrs.ability 1) 1
+            labeled "gainResource" $ gainResources iid (attrs.ability 1) 1
         go card = do
           let wills = countIcon #willpower card
           when (wills > 0) $ nextSkillTestModifier iid (attrs.ability 1) iid (AnySkillValue wills)

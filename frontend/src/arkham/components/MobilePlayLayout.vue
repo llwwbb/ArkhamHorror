@@ -14,7 +14,7 @@ import {
   UserGroupIcon,
 } from '@heroicons/vue/20/solid'
 import type { Game } from '@/arkham/types/Game'
-import type { GameModals } from '@/arkham/composables/useGameModals'
+import type { LogEntry } from '@/arkham/types/GameLog'
 import type { GameUndoApi } from '@/arkham/composables/useGameUndo'
 import { providePhoneShell } from '@/arkham/composables/phoneShell'
 import { useGameIndexes } from '@/arkham/composables/useGameIndexes'
@@ -23,9 +23,7 @@ import { MessageType } from '@/arkham/types/Message'
 import { useMenu } from '@/composable/menu'
 import { useDebug } from '@/arkham/debug'
 import MobilePhaseBar from '@/arkham/components/MobilePhaseBar.vue'
-import ActiveGameModals from '@/arkham/components/ActiveGameModals.vue'
 import ChoiceModal from '@/arkham/components/ChoiceModal.vue'
-import GameMain from '@/arkham/components/GameMain.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
 import OverlayDrawer from '@/components/OverlayDrawer.vue'
 import PlayerHandCards from '@/arkham/components/PlayerHandCards.vue'
@@ -37,8 +35,9 @@ const props = defineProps<{
   game: Game
   gameId: string
   playerId: string
-  gameLog: readonly string[]
-  modals: GameModals
+  gameLog: readonly LogEntry[]
+  canUndo: boolean
+  canChat: boolean
   undoApi: GameUndoApi
 }>()
 
@@ -47,6 +46,9 @@ const emit = defineEmits<{
   update: [Game]
   fileBug: []
   undoScenario: []
+  undoLog: [step: number, label: string]
+  say: [text: string]
+  loadOlder: [beforeSeq: number]
 }>()
 
 const router = useRouter()
@@ -286,15 +288,7 @@ function runMenuItem(action: () => void) {
     <div id="mobile-bottom-drawer-dock" ref="bottomDockEl" class="mobile-bottom-drawer-dock"></div>
 
     <main class="mobile-main">
-      <ActiveGameModals :game="game" :playerId="playerId" :modals="modals" />
-      <GameMain
-        :game="game"
-        :game-id="gameId"
-        :player-id="playerId"
-        :game-log="gameLog"
-        @choose="emit('choose', $event)"
-        @update="emit('update', $event)"
-      />
+      <slot />
     </main>
 
     <!-- 停靠版 Question：入流停靠在底部抽屉之上（不再 fixed 浮层，避免遮住手牌/角色抽屉，spec §4）。
@@ -364,7 +358,15 @@ function runMenuItem(action: () => void) {
 
     <OverlayDrawer :open="logOpen" side="right" @close="logOpen = false">
       <div class="mobile-log">
-        <GameLog :game="game" :gameLog="gameLog" @undo="undoApi.undo" />
+        <GameLog
+          :entries="gameLog"
+          :can-undo="canUndo"
+          :can-chat="canChat"
+          :player-id="playerId"
+          @undo="(step, label) => emit('undoLog', step, label)"
+          @say="emit('say', $event)"
+          @load-older="emit('loadOlder', $event)"
+        />
       </div>
     </OverlayDrawer>
 

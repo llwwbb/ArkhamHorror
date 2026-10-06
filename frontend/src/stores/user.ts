@@ -1,9 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import api from '@/api'
+import api from '@/api';
+import { getToken, setToken, clearToken } from '@/authToken';
+import {
+  Credentials,
+  Registration,
+  Authentication,
+  User,
+} from '@/types';
 import { normalizeLocale } from '@/locales/messages'
 import { disableRemotePush, refreshRemotePush } from '@/pushNotifications'
-import { Credentials, Registration, Authentication, User } from '@/types'
 
 export interface UserState {
   currentUser: User | null
@@ -14,6 +20,9 @@ export const useUserStore = defineStore('user', () => {
   const currentUser = ref<User | null>(null)
   const token = ref<string | null>(null)
   const isAdmin = ref(false)
+  // set when the server rejected our token rather than the player signing out,
+  // so the sign-in form can say why they are looking at it
+  const sessionExpired = ref(false)
 
   async function authenticate(credentials: Credentials) {
     const authentication = await api.post<Authentication>('authenticate', credentials)
@@ -35,7 +44,7 @@ export const useUserStore = defineStore('user', () => {
     } catch {
       // Local push state is cleared even when the authenticated delete fails.
     } finally {
-      localStorage.removeItem('arkham-token')
+      clearToken()
       delete api.defaults.headers.common.Authorization
       signOut()
     }
@@ -43,8 +52,8 @@ export const useUserStore = defineStore('user', () => {
 
   async function setCurrentUser() {
     if (token.value) {
-      localStorage.setItem('arkham-token', token.value)
-      api.defaults.headers.common.Authorization = `Token ${token.value}`
+      setToken(token.value);
+      api.defaults.headers.common.Authorization = `Token ${token.value}`;
       try {
         const whoami = await api.get<User>('whoami')
         currentUser.value = whoami.data
@@ -63,8 +72,8 @@ export const useUserStore = defineStore('user', () => {
 
   async function loadUserFromStorage() {
     if (currentUser.value) return
-    const tokenFromStorage = localStorage.getItem('arkham-token')
-    if (tokenFromStorage !== null && tokenFromStorage !== undefined) {
+    const tokenFromStorage = getToken();
+    if (tokenFromStorage !== null) {
       token.value = tokenFromStorage
       await setCurrentUser()
     }
@@ -75,15 +84,5 @@ export const useUserStore = defineStore('user', () => {
     token.value = null
   }
 
-  return {
-    token,
-    currentUser,
-    isAdmin,
-    loadUserFromStorage,
-    authenticate,
-    register,
-    logout,
-    deleteAccount,
-    setCurrentUser,
-  }
+  return { token, currentUser, isAdmin, sessionExpired, loadUserFromStorage, authenticate, register, logout, deleteAccount, setCurrentUser }
 })

@@ -1,12 +1,10 @@
 module Arkham.Event.Events.Beguile (beguile) where
 
 import Arkham.Ability
-import Arkham.Constants
 import Arkham.Enemy.Types (Field (..))
 import Arkham.Event.Cards qualified as Cards
 import Arkham.Event.Import.Lifted
 import Arkham.Helpers.Modifiers
-import Arkham.Location.Types (Field (..))
 import Arkham.Matcher
 import Arkham.Message qualified as Msg
 import Arkham.Projection
@@ -45,7 +43,7 @@ instance HasAbilities Beguile where
 instance RunMessage Beguile where
   runMessage msg e@(Beguile attrs) = runQueueT $ case msg of
     PlayThisEvent iid (is attrs -> True) -> do
-      selectOneToHandle iid attrs $ NonEliteEnemy <> enemyAtLocationWith iid
+      selectOneToHandle iid attrs $ NonEliteEnemy <> EnemyCanHaveAttachments <> enemyAtLocationWith iid
       pure e
     HandleTargetChoice _iid (isSource attrs -> True) (EnemyTarget eid) -> do
       push $ PlaceEvent attrs.id $ AttachedToEnemy eid
@@ -96,20 +94,17 @@ instance RunMessage Beguile where
                 select $ RevealedLocation <> LocationCanBeEnteredBy eid <> connectedFrom (locationWithEnemy eid)
               chooseOne iid [targetLabel location [EnemyMove eid location] | location <- locations]
           2 -> do
-            field EnemyLocation eid >>= traverse_ \lid -> do
-              abilities <-
-                filter (and . sequence [abilityBasic, (== AbilityInvestigate) . abilityIndex])
-                  <$> field LocationAbilities lid
-              case abilities of
-                [x] ->
-                  pushAll
-                    [ Msg.AbilityIsSkillTest $ AbilityRef (toSource attrs) 1
-                    , UseAbility
-                        iid
-                        (overAbilityActions (const []) $ doesNotProvokeAttacksOfOpportunity $ decreaseAbilityActionCost x 1)
-                        (defaultWindows iid)
-                    ]
-                _ -> error "expected exactly 1 investigate action on location"
+            -- same query as the criteria; enemy-locations only surface their
+            -- basic investigate in the game ability list (see #5603)
+            abilities <- select $ BasicAbility <> #investigate <> AbilityOnLocation (locationWithEnemy eid)
+            for_ (listToMaybe abilities) \x ->
+              pushAll
+                [ Msg.AbilityIsSkillTest $ AbilityRef (toSource attrs) 1
+                , UseAbility
+                    iid
+                    (overAbilityActions (const []) $ doesNotProvokeAttacksOfOpportunity $ decreaseAbilityActionCost x 1)
+                    (defaultWindows iid)
+                ]
           3 -> do
             field EnemyLocation eid >>= traverse_ \lid -> do
               sid <- getRandom

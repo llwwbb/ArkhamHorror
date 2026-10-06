@@ -31,7 +31,7 @@ instance RunMessage TakadaHirokoAeroplaneMechanicResolute where
     UseThisAbility iid (isSource attrs -> True) 1 -> do
       gainResourcesIfCan iid (attrs.ability 1) 1
       campaignI18n
-        $ chooseAmount'
+        $ chooseAmount
           iid
           "takadaHirokoAeroplaneMechanic.resourcesToTake"
           "$resources"

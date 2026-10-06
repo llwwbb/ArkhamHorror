@@ -7,7 +7,7 @@ import Arkham.Capability
 import Arkham.Helpers.Modifiers (ModifierType (..), modified_)
 import Arkham.I18n
 import Arkham.Message.Lifted.Choose
-import Arkham.Placement
+import Arkham.Message.Lifted.Placement
 
 newtype BackInjury = BackInjury AssetAttrs
   deriving anyclass IsAsset
@@ -28,10 +28,10 @@ instance RunMessage BackInjury where
   runMessage msg t@(BackInjury attrs) = runQueueT $ case msg of
     Revelation iid (isSource attrs -> True) -> do
       chooseOrRunOneM iid do
-        (cardI18n $ labeled' "backInjury.putBackInjuryIntoPlayInYourThreatArea") do
-          putCardIntoPlay iid attrs
+        (cardI18n $ labeled "backInjury.putBackInjuryIntoPlayInYourThreatArea") do
+          place attrs (InThreatArea iid)
         whenM (lift $ can.shuffle.deck iid) do
-          (cardI18n $ labeled' "backInjury.take1DamageAndShuffleItIntoYourDeck") do
+          (cardI18n $ labeled "backInjury.take1DamageAndShuffleItIntoYourDeck") do
             assignDamage iid attrs 1
             shuffleIntoDeck iid attrs
       pure t

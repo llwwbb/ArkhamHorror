@@ -4,7 +4,7 @@ import Arkham.Ability
 import Arkham.Asset.Cards qualified as Cards
 import Arkham.Asset.Import.Lifted
 import Arkham.Card
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers.Card (playIsValidAfterSeal)
 import Arkham.Helpers.Modifiers (ModifierType (..), modifySelect)
 import Arkham.Investigator.Types (Field (..))
@@ -29,7 +29,7 @@ instance HasAbilities TriggerMan3 where
   getAbilities (TriggerMan3 x) =
     [ controlledAbility x 1 (exists $ InHandOf NotForPlay You <> basic (#illicit <> #asset))
         $ freeReaction
-        $ AssetEntersPlay #when (be x)
+        $ AssetEntersPlay #after (be x)
     , controlledAbility
         x
         2

@@ -4,7 +4,7 @@ import Arkham.Ability
 import Arkham.Asset.Cards qualified as Cards
 import Arkham.Asset.Import.Lifted
 import Arkham.Card
-import {-# SOURCE #-} Arkham.GameEnv (findAllCards)
+import Arkham.GameEnv (findAllCards)
 import Arkham.Helpers.Investigator hiding (findCard)
 import Arkham.Matcher
 
@@ -17,7 +17,7 @@ missDoyle1 = ally MissDoyle1 Cards.missDoyle1 (2, 2)
 
 instance HasAbilities MissDoyle1 where
   getAbilities (MissDoyle1 a) =
-    [ restricted a 1 ControlsThis $ forced $ AssetEntersPlay #when (be a)
+    [ restricted a 1 ControlsThis $ forced $ AssetEntersPlay #after (be a)
     , mkAbility a 2 $ SilentForcedAbility $ AssetLeavesPlay #when (be a)
     ]
 

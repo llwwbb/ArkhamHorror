@@ -2,7 +2,7 @@ import * as JsonDecoder from 'ts.data.json'
 import scenarios from '@/arkham/data/scenarios'
 import type { Game } from '@/arkham/types/Game'
 import type { Scenario } from '@/arkham/types/Scenario'
-import { toCamelCase } from '@/arkham/helpers'
+import { imgsrc, toCamelCase } from '@/arkham/helpers'
 import { useI18n } from 'vue-i18n';
 import { scenarioIdToI18n } from '@/arkham/types/Scenario'
 import { ScenarioOptions, defaultScenarioOptions, scenarioOptionsDecoder } from '@/arkham/types/ScenarioOptions';
@@ -31,6 +31,7 @@ export type CampaignStep
   | ResupplyPoint
   | CheckpointStep
   | CampaignSpecificStep
+  | CampaignOptionStep
   | ContinueCampaignStep
   | StandaloneScenarioStep
   | StandaloneScenarioStepWithOptions
@@ -57,6 +58,22 @@ export type CampaignSpecificStep = {
   tag: 'CampaignSpecificStep';
   contents: [string, string | null];
 }
+
+/* An extra action the campaign offered on the continuation screen. The step the
+ * screen was showing rides along so the campaign can hand the table back to it;
+ * nothing here needs it, so only the key is decoded. */
+export type CampaignOptionStep = {
+  tag: 'CampaignOptionStep';
+  contents: string;
+}
+
+export const campaignOptionStepDecoder = JsonDecoder.object<CampaignOptionStep>(
+  {
+    tag: JsonDecoder.literal('CampaignOptionStep'),
+    contents: JsonDecoder.tuple([JsonDecoder.string(), JsonDecoder.succeed()], 'contents').map(([key]) => key),
+  },
+  'CampaignOptionStep',
+);
 
 export type EpilogueStep = {
   tag: 'EpilogueStep';
@@ -229,6 +246,7 @@ export const campaignStepDecoder = JsonDecoder.oneOf<CampaignStep>(
     prologueStepDecoder,
     resupplyPointStepDecoder,
     campaignSpecificStepDecoder,
+    campaignOptionStepDecoder,
     scenarioStepDecoder,
     scenarioStepWithOptionsDecoder,
     standaloneScenarioStepDecoder,
@@ -374,4 +392,25 @@ export function campaignStepName(game: Game, step: CampaignStep, scenario?: Scen
   }
 
   return "Unknown step: " + step.tag
+}
+
+/** The encounter-set icon for a step that names a scenario, if it names one. */
+export function campaignStepIcon(step: CampaignStep): string | null {
+  const scenarioId = step.tag === 'ScenarioStep'
+    ? step.contents
+    : step.tag === 'ScenarioStepWithOptions'
+      || step.tag === 'StandaloneScenarioStep'
+      || step.tag === 'StandaloneScenarioStepWithOptions'
+      ? step.contents[0]
+      : null
+
+  if (!scenarioId) return null
+
+  const homebrewMatch = scenarioId.match(/^c?:([^:]+):(.+)$/)
+  if (homebrewMatch) {
+    const [, campaignId, setId] = homebrewMatch
+    return imgsrc(`homebrew/${campaignId}/sets/${setId}.png`)
+  }
+
+  return imgsrc(`sets/${scenarioId.replace(/^c/, '')}.png`)
 }

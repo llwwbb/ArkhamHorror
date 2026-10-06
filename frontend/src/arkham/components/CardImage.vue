@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import { useAttrs, ref, computed, watch } from 'vue'
-import { cardImg, imgsrc } from '@/arkham/helpers'
+import { useAttrs, inject, ref, computed, watch, type Ref } from 'vue'
+import { altFrontImage, cardBackImage, cardFrontImage } from '@/arkham/cardArt'
 import { CardDef } from '@/arkham/types/CardDef'
 import { ArrowPathIcon } from '@heroicons/vue/20/solid'
 
@@ -13,63 +13,39 @@ const attrs = useAttrs()
 
 const props = defineProps<{ card: CardDef }>()
 
-const flipped = ref(false)
+// An ancestor (e.g. the card browser) can provide a shared flip state to flip
+// every card it renders at once. Individual flips still work on top of it, and
+// cards rendered later (a new filter) start on the side everything else is on.
+const flipAll = inject<Ref<boolean> | null>('cardFlipAll', null)
 
-// A double-sided card whose OWN art is the 'b' side (e.g. an enemy that is the
-// back of an agenda: art "…016b", otherSide "…016"). Its front is the other
-// side, so default to showing that and put its own art on the back.
-const backPrimary = computed(() => {
-  const {otherSide, doubleSided, art} = props.card
-  return !!(doubleSided && otherSide && /b$/.test(art)
-    && otherSide.replace(/^c/, '') === art.replace(/b$/, ''))
-})
+// The card browser shows every printing as it was printed, rather than the art
+// the player's preferences would swap in during a game.
+const ignoreVariants = inject<boolean>('cardIgnoreArtVariants', false)
 
-const image = computed(() => {
-  const {cardType} = props.card
-  if (cardType == 'LocationType' && props.card.doubleSided)
-    return cardImg(`${props.card.art}b`)
+const wantsFlip = ref(flipAll?.value ?? false)
 
-  if (backPrimary.value)
-    return cardImg(props.card.otherSide!.replace(/^c/, ''))
+if (flipAll) watch(flipAll, (value) => { wantsFlip.value = value })
 
-  return cardImg(props.card.art)
-})
-const backImage = computed(() => {
-  const {cardType, otherSide, doubleSided} = props.card
-  if (backPrimary.value)
-    return cardImg(props.card.art)
+const image = computed(() => cardFrontImage(props.card, ignoreVariants))
+const backImage = computed(() => cardBackImage(props.card, ignoreVariants))
 
-  if (otherSide)
-    return cardImg(otherSide.replace(/^c/, ''))
+// Every card can be turned over, generic backs included; only a back whose art
+// turns out not to exist (an unimplemented placeholder) loses the flip.
+const backMissing = ref(false)
+watch(backImage, () => { backMissing.value = false })
 
-  if (['ActType', 'AgendaType', 'ScenarioType', 'InvestigatorType'].includes(cardType))
-    return cardImg(`${props.card.art.replace(/a$/, '')}b`)
+const flippable = computed(() => !backMissing.value)
+const flipped = computed(() => wantsFlip.value && flippable.value)
 
-  if ('LocationType' == cardType) {
-    if (props.card.doubleSided)
-      return cardImg(props.card.art)
-    return imgsrc('backs/back_encounter.jpg')
-  }
+// Some cards store their front art as an 'a' side; retry there once.
+const frontSrc = ref(image.value)
+watch(image, (src) => { frontSrc.value = src })
 
-  if (['EnemyType', 'StoryType'].includes(cardType) && props.card.doubleSided)
-    return cardImg(`${props.card.art}b`)
-
-  if (doubleSided)
-    return cardImg(`${props.card.art.replace(/a$/, '')}b`)
-
-  if (['EnemyType', 'StoryType', 'TreacheryType', 'EncounterAssetType', 'EncounterEventType'].includes(cardType)) {
-    if (props.card.meta?.customBack)
-      return imgsrc(`backs/${props.card.meta.customBack}`)
-    return imgsrc('backs/back_encounter.jpg')
-  }
-
-  // Player-type cards (e.g. earned Artifact assets) may also define a custom back.
-  if (props.card.meta?.customBack)
-    return imgsrc(`backs/${props.card.meta.customBack}`)
-
-  return imgsrc('backs/back_player.jpg')
-
-})
+function onFrontError() {
+  if (frontSrc.value !== image.value) return
+  const alt = altFrontImage(image.value)
+  if (alt) frontSrc.value = alt
+}
 
 // Full-height backs (an act/agenda that flips to an enemy or location) are stored
 // portrait; act/agenda faces are landscape. Detect from the loaded back image
@@ -90,20 +66,22 @@ const vertical = computed(() => flipped.value && backVertical.value)
       <img
         loading="lazy"
         :class="['card', 'card-front', { flipped }, attrs.class]"
-        :src="image"
+        :src="frontSrc"
+        @error="onFrontError"
         v-bind="attrs"
       />
-      <button @click.prevent="flipped = !flipped"><ArrowPathIcon aria-hidden="true" /></button>
+      <button v-if="flippable" @click.prevent.stop="wantsFlip = !wantsFlip"><ArrowPathIcon aria-hidden="true" /></button>
     </div>
-    <div class="back" :class="{flipped}">
+    <div v-if="flippable" class="back" :class="{flipped}">
       <img
         loading="lazy"
         :class="['card', 'card-back', { flipped }, attrs.class]"
         :src="backImage"
         @load="updateBackOrientation"
+        @error="backMissing = true"
         v-bind="attrs"
       />
-      <button @click.prevent="flipped = !flipped"><ArrowPathIcon aria-hidden="true" /></button>
+      <button @click.prevent.stop="wantsFlip = !wantsFlip"><ArrowPathIcon aria-hidden="true" /></button>
     </div>
   </div>
 </template>

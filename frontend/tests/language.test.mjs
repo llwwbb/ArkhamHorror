@@ -48,7 +48,8 @@ test('Simplified Chinese uses its own UI messages', async () => {
 
   assert.equal(uiLocaleFor('zh-cn'), 'zh-cn')
   assert.equal(uiLocaleFor('zh'), 'zh')
-  assert.equal(uiLocaleFor('de'), 'en')
+  assert.equal(uiLocaleFor('de'), 'de')
+  assert.equal(uiLocaleFor('pt'), 'en')
 })
 
 test('bootstrap initializes Vue I18n with the normalized UI locale', async () => {

@@ -56,6 +56,8 @@ frontend/public/img/arkham/sets/
 frontend/public/img/arkham/customizations/
 frontend/public/img/arkham/seals/
 frontend/public/img/arkham/playing-cards/
+# 3rd edition art, also on the CDN under img/ah3e/
+frontend-3ed/public/img/
 
 **/postgres_password.txt
 k8s/
@@ -98,13 +100,6 @@ tmp/
 .agents/
 .windsurf/
 skills-lock.json
-
-# ML pipeline artifacts (training data, trained-model output, venv)
-/data/
-ml/.venv/
-ml/__pycache__/
-ml/model/
-*.pyc
 
 # Local homebrew working data (guide transcriptions, codegen maps); the
 # checked-in guide is docs/homebrew.md

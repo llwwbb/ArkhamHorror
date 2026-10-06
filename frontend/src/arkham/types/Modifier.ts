@@ -49,6 +49,8 @@ export type ModifierType
   | CannotDiscoverCluesAt
   | CannotBeDamaged
   | DamageDealt
+  | HealthModifier
+  | SanityModifier
   | DiscoveredClues
   | SkillTestResultValueModifier
   | AutomaticallyFailIfSucceedByAtLeast
@@ -64,6 +66,7 @@ export type ModifierType
   | UseEncounterDeck
   | CannotCommitCards
   | DoNotDrawConnection
+  | FewerSlots
   | Difficulty
   | ScenarioModifier
   | RevealAnotherChaosToken
@@ -72,6 +75,7 @@ export type ModifierType
   | HandSizeCardCount
   | HandSize
   | ScenarioModifierValue
+  | MetaModifier
   | AsIfInHand
   | AsIfInHandFor
 
@@ -109,6 +113,11 @@ export type ScenarioModifierValue = {
   contents: [string, any]
 }
 
+export type MetaModifier = {
+  tag: "MetaModifier"
+  contents: unknown
+}
+
 export type HandSizeCardCount = {
   tag: "HandSizeCardCount"
   contents: number
@@ -144,6 +153,11 @@ export type DoNotDrawConnection = {
   contents: [string, string]
 }
 
+export type FewerSlots = {
+  tag: "FewerSlots"
+  contents: [string, number]
+}
+
 export type DiscoveredClues = {
   tag: "DiscoveredClues"
   contents: number
@@ -161,6 +175,16 @@ export type AutomaticallyFailIfSucceedByAtLeast = {
 
 export type DamageDealt = {
   tag: "DamageDealt"
+  contents: number
+}
+
+export type HealthModifier = {
+  tag: "HealthModifier"
+  contents: number
+}
+
+export type SanityModifier = {
+  tag: "SanityModifier"
   contents: number
 }
 
@@ -261,6 +285,7 @@ type UIModifierType =
   | 'Locus'
   | 'Ethereal'
   | 'Explosion'
+  | 'OnFire'
   | 'Oversized'
   | { tag: 'ImportantToScenario', contents: string }
   | { tag: 'OverlayCheckmark', top: number, left: number }
@@ -278,6 +303,8 @@ export type Modifier = {
   type: ModifierType;
   source: Source;
   card?: Card;
+  // Set when an effect published this modifier, so debug can disable it.
+  effect?: string;
 }
 
 const modifierTypeDecoder = JsonDecoder.oneOf<ModifierType>([
@@ -325,6 +352,11 @@ const modifierTypeDecoder = JsonDecoder.oneOf<ModifierType>([
       tag: JsonDecoder.literal('HandSize'),
       contents: JsonDecoder.number()
     }, 'HandSize'),
+  JsonDecoder.object<MetaModifier>(
+    {
+      tag: JsonDecoder.literal('MetaModifier'),
+      contents: JsonDecoder.succeed()
+    }, 'MetaModifier'),
   JsonDecoder.object<DiscoveredClues>(
     {
       tag: JsonDecoder.literal('DiscoveredClues'),
@@ -365,6 +397,16 @@ const modifierTypeDecoder = JsonDecoder.oneOf<ModifierType>([
       tag: JsonDecoder.literal('DamageDealt'),
       contents: JsonDecoder.number()
     }, 'DamageDealt'),
+  JsonDecoder.object<HealthModifier>(
+    {
+      tag: JsonDecoder.literal('HealthModifier'),
+      contents: JsonDecoder.number()
+    }, 'HealthModifier'),
+  JsonDecoder.object<SanityModifier>(
+    {
+      tag: JsonDecoder.literal('SanityModifier'),
+      contents: JsonDecoder.number()
+    }, 'SanityModifier'),
   JsonDecoder.object<AddSkillValue>(
     {
       tag: JsonDecoder.literal('AddSkillValue'),
@@ -444,6 +486,11 @@ const modifierTypeDecoder = JsonDecoder.oneOf<ModifierType>([
       tag: JsonDecoder.literal('DoNotDrawConnection'),
       contents: JsonDecoder.tuple([JsonDecoder.string(), JsonDecoder.string()], 'DoNotDrawConnection')
     }, 'DoNotDrawConnection'),
+  JsonDecoder.object<FewerSlots>(
+    {
+      tag: JsonDecoder.literal('FewerSlots'),
+      contents: JsonDecoder.tuple([JsonDecoder.string(), JsonDecoder.number()], 'FewerSlots')
+    }, 'FewerSlots'),
   JsonDecoder.object<AsIfInHand>(
     {
       tag: JsonDecoder.literal('AsIfInHand'),
@@ -472,6 +519,7 @@ const modifierTypeDecoder = JsonDecoder.oneOf<ModifierType>([
         JsonDecoder.object({ tag: JsonDecoder.literal('Locus') }, 'Locus').map(() => "Locus"),
         JsonDecoder.object({ tag: JsonDecoder.literal('Ethereal') }, 'Ethereal').map(() => "Ethereal"),
         JsonDecoder.object({ tag: JsonDecoder.literal('Explosion') }, 'Explosion').map(() => "Explosion"),
+        JsonDecoder.object({ tag: JsonDecoder.literal('OnFire') }, 'OnFire').map(() => "OnFire"),
         JsonDecoder.object({ tag: JsonDecoder.literal('Oversized') }, 'Oversized').map(() => "Oversized"),
         JsonDecoder.object({ tag: JsonDecoder.literal('ImportantToScenario'), contents: JsonDecoder.string() }, 'ImportantToScenario'),
         JsonDecoder.object({
@@ -500,5 +548,6 @@ const modifierTypeDecoder = JsonDecoder.oneOf<ModifierType>([
 export const modifierDecoder = JsonDecoder.object<Modifier>({
   type: modifierTypeDecoder,
   source: sourceDecoder,
-  card: v2Optional(cardDecoder)
+  card: v2Optional(cardDecoder),
+  effect: v2Optional(JsonDecoder.string())
 }, 'Modifier')

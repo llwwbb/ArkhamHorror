@@ -38,6 +38,11 @@ data TheDrownedCityKey
     ThePowerWasDiverted
   | -- | The Grand Vault
     TheInnerSanctumWasUnsealed
+  | {- | Obsidian Canyons, Prove Your Worth. Two halves of one "Remember" note:
+    who tied the ropes, and who they chose to help.
+    -}
+    HelpedWithTheRopes
+  | WasHelpedWithTheRopes
   | -- | Alien Glyphs (translated glyph record; recorded-set of rune letters "A".."Z")
     DiscoveredGlyphs
   | -- | R'lyeh map (recorded-set of the scenario names crossed off the map)
@@ -45,9 +50,31 @@ data TheDrownedCityKey
   | -- | Interlude III: The Awakening / Return to Arkham
     YourAlliesHaveAPlan
   | TheInvestigatorsStoodTogether
-  | -- | The Doom of Arkham
-    CthulhuWasDrivenAway
+  | IsStrongInTheirFaith
+  | MadeBank
+  | UnderstandsTheFuture
+  | FoundTheirTrueHome
+  | SworeAnOathToProtectOthers
+  | FoundNewWork
+  | PulledTheirWeight
+  | LearnedTheSecretTruth
+  | LostTheirFaith
+  | -- | Sepulchre of the Sleeper
+    TheInvestigatorsDidNotConfrontTheNightmare
+  | TheInvestigatorsHaltedCthulhusAwakening
+  | {- | The Doom of Arkham. @FloodedNeighborhoods@ is a recorded-set of the card
+    codes of each location that was flooded when Part I ended.
+    -}
+    FloodedNeighborhoods
+  | {- | Ultimatum of Spoilage: the card codes of the Expedition @Item@ assets
+    that have been defeated or discarded, and so can no longer be chosen during
+    setup for the rest of the campaign.
+    -}
+    SpoiledExpeditionItems
+  | CthulhuWasDrivenAway
   | CthulhuAnnihilatedTheExpedition
+  | CthulhuAnnihilatedTheCityOfArkham
   | CthulhuWasBanished
+  | ArkhamWasDestroyed
   deriving stock (Show, Eq, Ord, Generic, Data)
   deriving anyclass (ToJSON, FromJSON)

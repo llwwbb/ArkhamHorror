@@ -1,20 +1,32 @@
 <script lang="ts" setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { achievementCatalog, achievementChecklists, type AchievementEntry } from '@/arkham/achievements'
+import { achievementCatalog, achievementChecklists, achievementEntryScope, achievementSections, type AchievementEntry, type AchievementPart } from '@/arkham/achievements'
 import type { Achievement } from '@/arkham/types/Achievement'
 
 const props = defineProps<{
   achievements: Achievement[]
   userAchievements?: Achievement[]
   campaignId?: string
+  // The mini-campaign being played, when the campaign has that split and only
+  // one half is in play. Null means show every section (the full campaign, or
+  // any campaign without a split).
+  part?: AchievementPart | null
 }>()
 
 const { t } = useI18n()
 
+// A mini-campaign only shows its own printed list; the other half's achievements
+// are unreachable in that game. The full interconnected campaign shows both.
 const entries = computed<AchievementEntry[]>(() =>
-  achievementCatalog.filter((entry) => entry.campaignId === props.campaignId)
+  achievementCatalog.filter(
+    (entry) => entry.campaignId === props.campaignId && (!props.part || entry.part === props.part)
+  )
 )
+
+// The Dream-Eaters prints one achievement list per mini-campaign. Every other
+// campaign yields one unlabelled section.
+const sections = computed(() => achievementSections(entries.value))
 
 const byTag = computed(() => new Map(props.achievements.map((row) => [row.achievement, row])))
 
@@ -54,9 +66,11 @@ const earnedDate = (row: Achievement | null): string | null => {
 <template>
   <div class="log-section">
     <h3 class="section-title">{{ t('achievements.tabTitle') }}</h3>
+    <template v-for="section in sections" :key="section.part ?? 'all'">
+    <h4 v-if="section.part" class="part-title">{{ t(`achievements.parts.${section.part}`) }}</h4>
     <ul class="entry-list">
       <li
-        v-for="entry in entries"
+        v-for="entry in section.entries"
         :key="entry.tag"
         class="entry"
         :class="{ earned: !!earnedRow(entry) }"
@@ -64,10 +78,10 @@ const earnedDate = (row: Achievement | null): string | null => {
         <font-awesome-icon :icon="['fas', 'trophy']" class="entry-icon" aria-hidden="true" />
         <div class="entry-body">
           <span class="entry-name">
-            {{ t(`achievements.entries.${entry.tag}.name`) }}
+            {{ t(`${achievementEntryScope(entry.tag)}.name`) }}
             <span v-if="earnedDate(earnedRow(entry))" class="entry-date">{{ earnedDate(earnedRow(entry)) }}</span>
           </span>
-          <span class="entry-text">{{ t(`achievements.entries.${entry.tag}.text`) }}</span>
+          <span class="entry-text">{{ t(`${achievementEntryScope(entry.tag)}.text`) }}</span>
           <ul v-if="checklist(entry)" class="checklist">
             <li
               v-for="item in checklist(entry)"
@@ -76,12 +90,13 @@ const earnedDate = (row: Achievement | null): string | null => {
               :class="{ checked: isChecked(entry, item) }"
             >
               <span class="checkbox" aria-hidden="true">{{ isChecked(entry, item) ? '☑' : '☐' }}</span>
-              {{ t(`achievements.entries.${entry.tag}.items.${item}`) }}
+              {{ t(`${achievementEntryScope(entry.tag)}.items.${item}`) }}
             </li>
           </ul>
         </div>
       </li>
     </ul>
+    </template>
   </div>
 </template>
 
@@ -114,6 +129,21 @@ const earnedDate = (row: Achievement | null): string | null => {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* Mini-campaign divider (The Dream-Eaters' two printed lists). */
+.part-title {
+  font-family: teutonic, sans-serif;
+  font-size: 0.95em;
+  font-weight: normal;
+  color: rgba(217, 184, 69, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 14px 0 8px;
+}
+
+.part-title:first-of-type {
+  margin-top: 0;
 }
 
 .entry {

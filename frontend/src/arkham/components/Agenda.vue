@@ -4,10 +4,10 @@ import { ComputedRef, computed, ref, watch } from 'vue';
 import { useCardStore } from '@/stores/cards';
 import { useDebug } from '@/arkham/debug';
 import { useI18n } from 'vue-i18n';
-import { imgsrc, groupBy } from '@/arkham/helpers';
+import { cardImg, imgsrc, groupBy } from '@/arkham/helpers';
 import { type Game } from '@/arkham/types/Game';
-import { type Card, cardImage, asCardCode } from '@/arkham/types/Card'
-import { cardImage as cardCodeImage } from '@/arkham/cardImages'
+import { type Card, cardImage, asCardCode, toCardContents } from '@/arkham/types/Card'
+import { cardImage as cardCodeImage, resolvedSideArt } from '@/arkham/cardImages'
 import * as ArkhamGame from '@/arkham/types/Game';
 import { AbilityLabel, AbilityMessage, type Message } from '@/arkham/types/Message';
 import { MessageType } from '@/arkham/types/Message';
@@ -16,6 +16,8 @@ import PoolItem from '@/arkham/components/PoolItem.vue';
 import Treachery from '@/arkham/components/Treachery.vue';
 import Event from '@/arkham/components/Event.vue';
 import Enemy from '@/arkham/components/Enemy.vue';
+import Story from '@/arkham/components/Story.vue';
+import Investigator from '@/arkham/components/Investigator.vue';
 import StackIndicator from '@/arkham/components/StackIndicator.vue';
 import * as Arkham from '@/arkham/types/Agenda';
 import { useCardFlip } from '@/arkham/composables/useCardFlip';
@@ -60,7 +62,23 @@ const image = computed(() => {
   }
   return cardCodeImage(id.value)
 })
-const { displayedImage, flipping } = useCardFlip(image)
+const { displayedImage, flipping, flippingDiagonally } = useCardFlip(image)
+
+/* Errata that applies only to an agenda's back, so it is shown while the agenda is
+ * flipped and not before. Keyed by agenda id; the overlay picks it up from
+ * `data-errata`. The map holds i18n keys rather than translations so the lookup
+ * stays inside the computed — campaign messages load lazily, and translating at
+ * setup time would bake in the raw key whenever the scenario's file has not
+ * arrived yet. */
+const BACK_ERRATA_KEYS: Record<string, string> = {
+  c11691b: 'theDrownedCity.theDoomOfArkhamPartII.errata.theFinalSeal',
+}
+
+const backErrata = computed(() => {
+  if (!props.agenda.flipped) return null
+  const key = BACK_ERRATA_KEYS[id.value]
+  return key ? t(key) : null
+})
 
 const choices = computed(() => ArkhamGame.choices(props.game, props.playerId))
 
@@ -109,11 +127,24 @@ const showCardsUnderAgenda = () => emit('show', cardsUnder, 'Cards Under Agenda'
 
 const futureStack = computed(() => props.remainingStack.filter(c => asCardCode(c) !== props.agenda.id))
 
-const cardStage = (card: Card): number | null => {
-  const code = asCardCode(card)
-  return cardStore.cards.find((cardDef) =>
-    cardDef.cardCode === code || cardDef.cardCode === code.replace(/^c/, '')
-  )?.stage ?? null
+const cardDefFor = (code: string) => cardStore.cards.find((cardDef) =>
+  cardDef.cardCode === code || cardDef.cardCode === code.replace(/^c/, '')
+)
+
+const cardStage = (code: string): number | null => cardDefFor(code)?.stage ?? null
+
+// Cards sharing a stage are usually branch alternatives (only one of "All In" /
+// "Fold" is ever played), so they share a pip. Same-stage cards that also share
+// a title are variant printings of that agenda — Lost Quantum shuffles three
+// versions of agenda 1 into its deck and plays each in turn — so those get a
+// pip each.
+const cardTitle = (code: string): string => cardDefFor(code)?.name.title ?? code
+
+// The face a completed act/agenda was resolved on, so the popover can offer the
+// side that only ever flashed past on advance.
+const resolvedSideImage = (card: Card) => {
+  const art = toCardContents(card).art || asCardCode(card).replace(/^c/, '')
+  return cardImg(resolvedSideArt(art))
 }
 
 type StackIndicatorGroup = {
@@ -121,6 +152,7 @@ type StackIndicatorGroup = {
   state: 'completed' | 'current' | 'remaining'
   images: {
     src: string
+    back?: string
     current?: boolean
     passed?: boolean
   }[]
@@ -128,6 +160,7 @@ type StackIndicatorGroup = {
 
 type AgendaStackGroup = StackIndicatorGroup & {
   stage: number | null
+  titles: Set<string>
   firstIndex: number
 }
 
@@ -135,16 +168,22 @@ const groupedAgendaStack = computed<StackIndicatorGroup[]>(() => {
   const groups: AgendaStackGroup[] = []
 
   const addToGroup = (
-    stage: number | null,
+    code: string,
     fallbackKey: string,
+    fallbackStage: number | null,
     cardImage: StackIndicatorGroup['images'][number],
     preferredState: StackIndicatorGroup['state'],
     firstIndex: number,
   ) => {
-    const group = groups.find((g) => stage !== null ? g.stage === stage : g.label === fallbackKey)
+    const stage = cardStage(code) ?? fallbackStage
+    const title = cardTitle(code)
+    const group = groups.find((g) =>
+      stage !== null ? g.stage === stage && !g.titles.has(title) : g.label === fallbackKey
+    )
 
     if (group) {
       group.images.push(cardImage)
+      group.titles.add(title)
       if (preferredState === 'current') group.state = 'current'
       return
     }
@@ -152,6 +191,7 @@ const groupedAgendaStack = computed<StackIndicatorGroup[]>(() => {
     groups.push({
       label: stage === null ? fallbackKey : `Agenda ${stage}`,
       stage,
+      titles: new Set([title]),
       firstIndex,
       state: preferredState,
       images: [cardImage],
@@ -159,31 +199,31 @@ const groupedAgendaStack = computed<StackIndicatorGroup[]>(() => {
   }
 
   props.completedStack.forEach((card, i) => {
-    const stage = cardStage(card)
-    addToGroup(stage, `Agenda ${i + 1}`, { src: imgsrc(cardImage(card)), passed: true }, 'completed', i)
+    addToGroup(asCardCode(card), `Agenda ${i + 1}`, null, { src: imgsrc(cardImage(card)), back: resolvedSideImage(card), passed: true }, 'completed', i)
   })
 
   addToGroup(
-    props.agenda.sequence.step,
+    props.agenda.id,
     `Agenda ${props.agenda.sequence.step}`,
+    props.agenda.sequence.step,
     { src: image.value, current: true },
     'current',
     props.completedStack.length,
   )
 
   futureStack.value.forEach((card, i) => {
-    const stage = cardStage(card)
     addToGroup(
-      stage,
+      asCardCode(card),
       `Agenda ${props.completedStack.length + i + 2}`,
+      null,
       { src: imgsrc(cardImage(card)) },
-      stage === props.agenda.sequence.step ? 'current' : 'remaining',
+      'remaining',
       props.completedStack.length + i + 1,
     )
   })
 
   return groups.sort((a, b) => {
-    if (a.stage !== null && b.stage !== null) return a.stage - b.stage
+    if (a.stage !== null && b.stage !== null && a.stage !== b.stage) return a.stage - b.stage
     return a.firstIndex - b.firstIndex
   })
 })
@@ -199,9 +239,19 @@ const nextToEvents = computed(() => Object.values(props.game.events).
   filter((t) => t.placement.tag === "NextToAgenda").
   map((t) => t.id))
 
-const attachedEnemies = computed(() => Object.values(props.game.enemies).
-  filter((t) => t.placement.tag === "AttachedToAgenda").
+// Cthulhu deck action cards that stay in play (Fifth Eye, Hope Fades) live here.
+const nextToStories = computed(() => Object.values(props.game.stories).
+  filter((t) => t.placement.tag === "NextToAgenda").
   map((t) => t.id))
+
+const attachedEnemies = computed(() => Object.values(props.game.enemies).
+  filter((t) => t.placement.tag === "AttachedToAgenda" && t.placement.contents === id.value).
+  map((t) => t.id))
+
+// Blood on the Line parks a defeated investigator's mini-card beneath the agenda
+// until the act advances.
+const investigatorsUnder = computed(() => Object.values(props.game.investigators).
+  filter((i) => i.placement.tag === "AttachedToAgenda" && i.placement.contents === id.value))
 
 const groupedTreacheries = computed(() => Object.entries(groupBy([...props.agenda.treacheries, ...nextToTreacheries.value], (t) => props.game.treacheries[t].cardCode)))
 
@@ -249,11 +299,12 @@ const wards = computed(() => props.agenda.tokens[TokenType.Ward])
     <div class="agenda-main">
       <div class="agenda-card">
         <img
-        :class="{ 'agenda--can-progress': interactAction !== -1, 'card--sideways': !isVertical, 'card--flipping': flipping }"
+        :class="{ 'agenda--can-progress': interactAction !== -1, 'card--sideways': !isVertical, 'card--flipping': flipping, 'card--flipping-diagonal': flippingDiagonally }"
           class="card card--agenda"
           @click="$emit('choose', interactAction)"
           @load="updateOrientation"
           :src="displayedImage"
+          :data-errata="backErrata ?? undefined"
         />
         <div class="pool" v-if="!agenda.flipped">
           <template v-if="debug.active">
@@ -274,6 +325,18 @@ const wards = computed(() => props.agenda.tokens[TokenType.Ward])
             >+</button>
           </template>
         </div>
+      </div>
+      <div v-if="investigatorsUnder.length > 0" class="agenda-investigators">
+        <Investigator
+          v-for="investigator in investigatorsUnder"
+          :key="investigator.id"
+          :game="game"
+          :choices="choices"
+          :playerId="playerId"
+          :portrait="true"
+          :investigator="investigator"
+          @choose="$emit('choose', $event)"
+        />
       </div>
       <img
         v-for="(card, idx) in cardsNextTo"
@@ -300,6 +363,14 @@ const wards = computed(() => props.agenda.tokens[TokenType.Ward])
       <Event
         v-for="eventId in nextToEvents"
         :event="game.events[eventId]"
+        :game="game"
+        :playerId="playerId"
+        @choose="$emit('choose', $event)"
+      />
+      <Story
+        v-for="storyId in nextToStories"
+        :key="storyId"
+        :story="game.stories[storyId]"
         :game="game"
         :playerId="playerId"
         @choose="$emit('choose', $event)"
@@ -379,6 +450,21 @@ const wards = computed(() => props.agenda.tokens[TokenType.Ward])
   display: flex;
   align-items: center;
   height: var(--card-width);
+}
+
+/* The minis tuck under the card's bottom edge; .agenda-card is positioned and
+   z-indexed above them, so they read as sitting beneath the agenda. */
+.agenda-investigators {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  margin-top: calc(var(--card-width) * -0.15);
+  padding-left: 10px;
+
+  &:deep(.portrait) {
+    width: calc(var(--card-width) * 0.4);
+    box-shadow: 1px 1px 6px rgb(0 0 0 / 45%);
+  }
 }
 
 .agenda--can-progress {

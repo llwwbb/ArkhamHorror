@@ -13,12 +13,11 @@ newtype MoonlitForestFogBank = MoonlitForestFogBank LocationAttrs
 
 moonlitForestFogBank :: LocationCard MoonlitForestFogBank
 moonlitForestFogBank =
-  locationWith
+  location
     MoonlitForestFogBank
     Cards.moonlitForestFogBank
     3
     (Static 2)
-    connectsToAdjacent
 
 instance HasModifiersFor MoonlitForestFogBank where
   getModifiersFor (MoonlitForestFogBank a) = do
@@ -28,5 +27,4 @@ instance HasModifiersFor MoonlitForestFogBank where
     modifySelect a (LocationWithTitle "Moonlit Forest" <> connectedTo (be a)) [ShroudModifier 1]
 
 instance RunMessage MoonlitForestFogBank where
-  runMessage msg (MoonlitForestFogBank attrs) = runQueueT $ case msg of
-    _ -> MoonlitForestFogBank <$> liftRunMessage msg attrs
+  runMessage msg (MoonlitForestFogBank attrs) = runQueueT $ MoonlitForestFogBank <$> liftRunMessage msg attrs

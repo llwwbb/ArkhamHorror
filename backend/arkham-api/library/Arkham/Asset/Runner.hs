@@ -23,7 +23,7 @@ import Arkham.Damage
 import Arkham.DamageEffect
 import Arkham.DefeatedBy
 import Arkham.Event.Types (Field (EventUses))
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers.Calculation (calculate)
 import Arkham.Helpers.Card (getVictoryPoints)
 import Arkham.Helpers.Customization
@@ -54,7 +54,6 @@ import Arkham.Prelude
 import Arkham.Projection
 import Arkham.Timing qualified as Timing
 import Arkham.Token qualified as Token
-import Arkham.Tracing
 import Arkham.Window (mkAfter, mkWhen, mkWindow)
 import Arkham.Window qualified as Window
 import Arkham.Zone qualified as Zone
@@ -64,7 +63,7 @@ import Data.Aeson.Lens (_Bool)
 import Data.IntMap.Strict qualified as IntMap
 import Data.Map.Strict qualified as Map
 
-defeated :: (HasGame m, Tracing m) => AssetAttrs -> Source -> m (Maybe DefeatedBy)
+defeated :: HasGame m => AssetAttrs -> Source -> m (Maybe DefeatedBy)
 defeated AssetAttrs {assetId, assetAssignedHealthDamage, assetAssignedSanityDamage} source = do
   canBeDefeated <- withoutModifier assetId CannotBeDefeated
   remainingHealth <- field AssetRemainingHealth assetId
@@ -80,6 +79,25 @@ defeated AssetAttrs {assetId, assetAssignedHealthDamage, assetAssignedSanityDama
 hasUses :: AssetAttrs -> Bool
 hasUses = any (> 0) . toList . assetUses
 
+{- | Whether this asset soaks damage / horror without limit.
+
+An asset with no printed health (or sanity) that its controller is explicitly
+permitted to assign to has no capacity to clamp against -- Enchanted Armor (2)
+piles the tokens on and tests against the total. Mirrors the fallback in
+@AssetCanBeAssignedDamageBy@; without it the generic clamp places nothing.
+-}
+unlimitedSoak :: HasGame m => AssetAttrs -> m (Bool, Bool)
+unlimitedSoak a
+  | isJust (assetHealth a) && isJust (assetSanity a) = pure (False, False)
+  | otherwise = case a.controller of
+      Nothing -> pure (False, False)
+      Just iid -> do
+        mods <- getModifiers iid
+        pure
+          ( isNothing (assetHealth a) && CanAssignDamageToAsset (toId a) `elem` mods
+          , isNothing (assetSanity a) && CanAssignHorrorToAsset (toId a) `elem` mods
+          )
+
 instance RunMessage Asset where
   runMessage msg x@(Asset a) = do
     if x.placement.outOfGame
@@ -87,9 +105,18 @@ instance RunMessage Asset where
         ReturnLocationToGame _ -> Asset <$> runMessage msg a
         _ -> pure x
       else do
-        inPlay <- elem (toId x) <$> select AnyAsset
-        modifiers' <- if inPlay then getModifiers (toTarget x) else pure []
-        let msg' = if any (`elem` modifiers') [Blank, BlankExceptForcedAbilities] then Blanked msg else msg
+        -- Same operands, cheap one first: getModifiers reads the preloaded
+        -- modifier map, while `select AnyAsset` builds and scans the whole
+        -- in-play asset list. This runs for every asset on every message, so
+        -- test the rare condition (a Blank modifier) before confirming the
+        -- asset is in play.
+        modifiers' <- getModifiers (toTarget x)
+        msg' <-
+          if any (`elem` modifiers') [Blank, BlankExceptForcedAbilities]
+            then do
+              inPlay <- elem (toId x) <$> select AnyAsset
+              pure $ if inPlay then Blanked msg else msg
+            else pure msg
         Asset <$> runMessage msg' a
 
 instance RunMessage AssetAttrs where
@@ -172,6 +199,16 @@ instance RunMessage AssetAttrs where
           damageEffect = case source of
             EnemyAttackSource _ -> AttackDamageEffect
             _ -> NonAttackDamageEffect
+        -- FAQ (2.12): damage/horror dealt to an asset you control is also dealt to
+        -- you, so the controller's aggregate take windows go up alongside the
+        -- asset's. The soak path raises these in Arkham.Investigator.Runner.Damage
+        -- instead; damage dealt straight to an asset only passes through here.
+        let
+          takeWindows mk = case a.controller of
+            Nothing -> []
+            Just iid ->
+              [mk (Window.TakeDamage source damageEffect (toTarget iid) damage') | damage' > 0]
+                <> [mk (Window.TakeHorror source (toTarget iid) horror') | horror' > 0]
         when (damage' > 0 || horror' > 0) do
           pushAll
             $ [PlaceDamage source (toTarget a) damage' | damage' > 0]
@@ -186,6 +223,7 @@ instance RunMessage AssetAttrs where
                    <> [ mkWhen (Window.WouldTakeDamageOrHorror source (toTarget a) damage' horror')
                       | damage' > 0 || horror' > 0
                       ]
+                   <> takeWindows mkWhen
                , checkDefeated source aid
                , CheckWindows
                    $ [ mkAfter (Window.DealtDamage source damageEffect (toTarget a) damage')
@@ -197,17 +235,26 @@ instance RunMessage AssetAttrs where
                    <> [ mkWhen (Window.WouldTakeDamageOrHorror source (toTarget a) damage' horror')
                       | damage' > 0 || horror' > 0
                       ]
+                   <> takeWindows mkAfter
                ]
       pure a
     Msg.AssignAssetDamageWithCheck aid source damage horror doCheck | aid == assetId -> do
       canDamage <- matches a.id (AssetCanBeDamagedBySource source)
       when canDamage do
         mods <- getModifiers a
+        (soaksDamage, soaksHorror) <- unlimitedSoak a
         let n = sum [x | DamageTaken x <- mods]
             extraHealth = sum [x | HealthModifier x <- mods]
             extraSanity = sum [x | SanityModifier x <- mods]
-        let damage' = maybe 0 (min (damage + n) . subtract (assetDamage a) . (+ extraHealth)) assetHealth
-        let horror' = maybe 0 (min horror . subtract (assetHorror a) . (+ extraSanity)) assetSanity
+        let clamp amount cap current extra = maybe 0 (min amount . subtract current . (+ extra)) cap
+        let damage' =
+              if soaksDamage
+                then damage + n
+                else clamp (damage + n) assetHealth (assetDamage a) extraHealth
+        let horror' =
+              if soaksHorror
+                then horror
+                else clamp horror assetSanity (assetHorror a) extraSanity
         if doCheck
           then push $ Msg.DealAssetDirectDamage aid source damage' horror'
           else
@@ -240,7 +287,11 @@ instance RunMessage AssetAttrs where
       pure $ a & sealedChaosTokensL %~ (\ts -> if token `elem` ts then ts else token : ts)
     SealedChaosToken token _ _ -> do
       pure $ a & sealedChaosTokensL %~ filter (/= token)
-    UnsealChaosToken token -> pure $ a & sealedChaosTokensL %~ filter (/= token)
+    UnsealChaosToken token -> runQueueT do
+      when (token `elem` assetSealedChaosTokens) do
+        pushM $ checkWhen $ Window.ChaosTokenReleased (toTarget a) token
+        pushM $ checkAfter $ Window.ChaosTokenReleased (toTarget a) token
+      pure $ a & sealedChaosTokensL %~ filter (/= token)
     ReturnChaosTokensToPool tokens -> pure $ a & sealedChaosTokensL %~ filter (`notElem` tokens)
     RemoveAllChaosTokens face -> do
       pure $ a & sealedChaosTokensL %~ filter ((/= face) . chaosTokenFace)
@@ -321,7 +372,11 @@ instance RunMessage AssetAttrs where
         NotifySelfOfNoUses -> push $ SpentAllUses (toTarget a)
       pure $ a & tokensL .~ mempty
     RemoveTokens _ target tType n | isTarget a target -> do
-      when (tType == Clue && assetClues a - n <= 0) do
+      -- Only a clue that was actually there can be the *last* clue removed. Without the
+      -- `> 0` guard every clue-less asset fires this window on `RemoveAllClues`, so a single
+      -- InvestigatorDiscardAllClues broadcast costs one full CheckWindows pass per asset in
+      -- play (#5301). Mirrors the ClearTokens branch above and Location/Runner's guard.
+      when (tType == Clue && assetClues a > 0 && assetClues a - n <= 0) do
         pushAll $ windows [Window.LastClueRemovedFromAsset (toId a)]
       when (tokenIsUse tType) do
         case assetPrintedUses of
@@ -609,7 +664,11 @@ instance RunMessage AssetAttrs where
       pushAll [RemoveFromPlay $ toSource a, ObtainCard a.cardId]
       pure a
     Discard mInvestigator source target | a `isTarget` target -> do
-      cannotLeavePlay <- a `hasModifier` CannotLeavePlay
+      -- A card that cannot leave play and then prints its own way out --
+      -- "it cannot leave play except using the ability below" -- is the one
+      -- thing allowed to discard it, so a discard it sources itself is let
+      -- through. Everything else is still stopped.
+      cannotLeavePlay <- if isSource a source then pure False else a `hasModifier` CannotLeavePlay
       if cannotLeavePlay
         then pure a
         else do
@@ -661,6 +720,13 @@ instance RunMessage AssetAttrs where
       pure a
     RemovedFromPlay (isSource a -> True) -> do
       pure $ a & placementL .~ OutOfPlay Zone.RemovedZone
+    -- An asset placed directly on a location leaves play with it. An asset in an
+    -- investigator's play area, in a vehicle, or attached to another entity only
+    -- reaches the location through that host and leaves play when the host does,
+    -- #5426.
+    RemovedLocation lid | isDirectlyAtLocation lid a.placement -> do
+      push $ toDiscard GameSource a
+      pure a
     PlaceKey (isTarget a -> True) k -> do
       pure $ a & (keysL %~ insertSet k)
     HealAllDamage (isTarget a -> True) source | assetDamage a > 0 -> do
@@ -708,7 +774,12 @@ instance RunMessage AssetAttrs where
     ReplacedInvestigatorAsset iid aid | aid == assetId -> do
       pure $ a & placementL .~ InPlayArea iid & controllerL ?~ iid
     AddToVictory _ (AssetTarget aid) | aid == assetId -> do
-      pure $ a & placementL .~ OutOfPlay Zone.VictoryDisplayZone & controllerL .~ Nothing
+      -- leaving play removes every token, doom included (#5680)
+      pure
+        $ a
+        & (placementL .~ OutOfPlay Zone.VictoryDisplayZone)
+        & (controllerL .~ Nothing)
+        & (tokensL .~ mempty)
     AddToScenarioDeck key target | isTarget a target -> do
       pushAll
         [RemoveFromGame (toTarget a), AddCardToScenarioDeck key (toCard a)]
@@ -723,6 +794,8 @@ instance RunMessage AssetAttrs where
         _ -> False
 
       pure a
+    CardIsEnteringPlay _ card ->
+      pure $ a & cardsUnderneathL %~ filter (/= card)
     CardEnteredPlay _ card ->
       pure $ a & cardsUnderneathL %~ filter (/= card)
     Exhaust ea | a `isTarget` ea.target -> do
@@ -756,66 +829,73 @@ instance RunMessage AssetAttrs where
       pure $ a & cardsUnderneathL %~ filter (/= card)
     AddToHand _ cards -> do
       pure $ a & cardsUnderneathL %~ filter (`notElem` cards)
-    InvestigatorDrewPlayerCardFrom _ card _ -> do
+    InvestigatorDrewPlayerCardFrom _ card _ _ -> do
       pure $ a & cardsUnderneathL %~ filter (/= toCard card)
     InvestigatorDrewEncounterCard _ card -> do
       pure $ a & cardsUnderneathL %~ filter (/= toCard card)
     InvestigatorDrewEncounterCardFrom _ card _ -> do
       pure $ a & cardsUnderneathL %~ filter (/= toCard card)
     PlaceAsset aid placement | aid == assetId -> do
-      case a.placement of
-        StillInDiscard _ -> do
-          aid' <- getRandom
-          pushAll [ObtainCard (toCardId a), CreateAssetAt aid' (toCard a) placement]
-          pure a
-        StillInHand _ -> do
-          aid' <- getRandom
-          pushAll [ObtainCard (toCardId a), CreateAssetAt aid' (toCard a) placement]
-          pure a
-        _ -> do
-          let entersPlay = not (isInPlayPlacement a.placement) && isInPlayPlacement placement
-          modifiers <- getCombinedModifiers [toTarget a, CardIdTarget (toCardId a)]
-          let currentUses = Map.filterWithKey (\k _ -> tokenIsUse k) assetTokens
-          startingUses <- toModifiedStartingUses a assetPrintedUses
-          let uses = if currentUses == mempty && entersPlay then startingUses else mempty
+      -- An enemy that cannot have attachments refuses the attach, so the asset stays
+      -- where it was rather than landing on a host that cannot hold it.
+      cannotAttach <- case placement of
+        AttachedToEnemy eid -> hasModifier eid CannotHaveAttachments
+        _ -> pure False
+      if cannotAttach
+        then pure a
+        else case a.placement of
+          StillInDiscard _ -> do
+            aid' <- getRandom
+            pushAll [ObtainCard (toCardId a), CreateAssetAt aid' (toCard a) placement]
+            pure a
+          StillInHand _ -> do
+            aid' <- getRandom
+            pushAll [ObtainCard (toCardId a), CreateAssetAt aid' (toCard a) placement]
+            pure a
+          _ -> do
+            let entersPlay = not (isInPlayPlacement a.placement) && isInPlayPlacement placement
+            modifiers <- getCombinedModifiers [toTarget a, CardIdTarget (toCardId a)]
+            let currentUses = Map.filterWithKey (\k _ -> tokenIsUse k) assetTokens
+            startingUses <- toModifiedStartingUses a assetPrintedUses
+            let uses = if currentUses == mempty && entersPlay then startingUses else mempty
 
-          -- If the card wasn't in play, but moves into a play area we need to
-          -- update the controller
-          --
-          -- See: The Beyond: Bleak Netherworld
-          let
-            mController = case placement of
-              InPlayArea iid -> Just iid
-              InThreatArea iid -> Just iid
-              AttachedToAsset _ (Just (InPlayArea iid)) -> Just iid
-              _ -> Nothing
-            controllerF = case mController of
-              Just iid | entersPlay -> controllerL ?~ iid
-              Nothing | assetIsStory a -> controllerL .~ Nothing
-              _ -> id
-          -- we should update control here if need be
-          for_ placement.attachedTo $ pushM . checkAfter . Window.AttachCard a.controller (toCard a)
-          checkEntersThreatArea a placement
-
-          when entersPlay do
-            whenEnterMsg <- checkWindows [mkWhen (Window.EnterPlay $ toTarget a)]
-            afterEnterMsg <- checkWindows [mkAfter (Window.EnterPlay $ toTarget a)]
-            let startingDoom = sum [n | EntersPlayWithDoom n <- modifiers]
-
+            -- If the card wasn't in play, but moves into a play area we need to
+            -- update the controller
+            --
+            -- See: The Beyond: Bleak Netherworld
             let
-              mEnterPlayMsg = case placement of
-                InPlayArea iid -> Just $ CardEnteredPlay iid (toCard a)
-                InThreatArea iid -> Just $ CardEnteredPlay iid (toCard a)
-                AttachedToAsset _ (Just (InPlayArea iid)) -> Just $ CardEnteredPlay iid (toCard a)
+              mController = case placement of
+                InPlayArea iid -> Just iid
+                InThreatArea iid -> Just iid
+                AttachedToAsset _ (Just (InPlayArea iid)) -> Just iid
                 _ -> Nothing
+              controllerF = case mController of
+                Just iid | entersPlay -> controllerL ?~ iid
+                Nothing | assetIsStory a -> controllerL .~ Nothing
+                _ -> id
+            -- we should update control here if need be
+            for_ placement.attachedTo $ pushM . checkAfter . Window.AttachCard a.controller (toCard a)
+            checkEntersThreatArea a placement
 
-            pushAll
-              $ [ActionCannotBeUndone | not assetCanLeavePlayByNormalMeans]
-              <> [whenEnterMsg]
-              <> maybeToList mEnterPlayMsg
-              <> [PlaceDoom GameSource (toTarget a) startingDoom | startingDoom > 0]
-              <> [afterEnterMsg]
-          pure $ a & placementL .~ placement & controllerF & (tokensL %~ Map.unionWith (+) uses . coerce)
+            when entersPlay do
+              whenEnterMsg <- checkWindows [mkWhen (Window.EnterPlay $ toTarget a)]
+              afterEnterMsg <- checkWindows [mkAfter (Window.EnterPlay $ toTarget a)]
+              let startingDoom = sum [n | EntersPlayWithDoom n <- modifiers]
+
+              let
+                mEnterPlayMsg = case placement of
+                  InPlayArea iid -> Just $ CardEnteredPlay iid (toCard a)
+                  InThreatArea iid -> Just $ CardEnteredPlay iid (toCard a)
+                  AttachedToAsset _ (Just (InPlayArea iid)) -> Just $ CardEnteredPlay iid (toCard a)
+                  _ -> Nothing
+
+              pushAll
+                $ [ActionCannotBeUndone | not assetCanLeavePlayByNormalMeans]
+                <> [whenEnterMsg]
+                <> maybeToList mEnterPlayMsg
+                <> [PlaceDoom GameSource (toTarget a) startingDoom | startingDoom > 0]
+                <> [afterEnterMsg]
+            pure $ a & placementL .~ placement & controllerF & (tokensL %~ Map.unionWith (+) uses . coerce)
     Blanked msg' -> runMessage msg' a
     RemoveAllAttachments source target -> do
       case placementToAttached a.placement of

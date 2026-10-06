@@ -6,13 +6,14 @@ import * as Arkham from '@/arkham/types/Deck'
 import { fetchDecks, newGame, createEvent } from '@/arkham/api'
 import { useEventStore } from '@/arkham/stores/event'
 import type { Difficulty } from '@/arkham/types/Difficulty'
+import { campaignChapter } from '@/arkham/data'
 import type { Scenario, Campaign } from '@/arkham/data'
 import { storeToRefs } from 'pinia'
-import type { GameMode, MultiplayerVariant, CampaignType, AiSlotConfig } from '@/arkham/types/NewGame'
+import type { GameMode, MultiplayerVariant, CampaignType } from '@/arkham/types/NewGame'
 
 import { ACHIEVEMENT_CAMPAIGN_IDS } from '@/arkham/achievements'
 import officialCampaignJSON from '@/arkham/data/campaigns'
-import { homebrewCampaigns } from '@/arkham/homebrewData'
+import { homebrewCampaigns, homebrewSideStories } from '@/arkham/homebrewData'
 import scenarioJSON from '@/arkham/data/scenarios'
 import sideStoriesJSON from '@/arkham/data/side-stories'
 import { filterDisplayable, isDevBuild } from '@/arkham/displayRules'
@@ -22,7 +23,6 @@ import GameOptions from '@/arkham/components/NewCampaign/GameOptions.vue'
 
 type Step = 'ChooseMode' | 'GameOptions'
 type CampaignGroup = 'chapter1' | 'chapter2' | 'homebrew'
-type ScenarioGroup = 'sideStories' | 'challengeScenarios'
 
 const store = useUserStore()
 const { currentUser } = storeToRefs(store)
@@ -40,7 +40,6 @@ const gate = <T extends { alpha?: boolean; beta?: boolean; dev?: boolean }>(item
 
 const step = ref<Step>('ChooseMode')
 const campaignGroup = ref<CampaignGroup>('chapter1')
-const scenarioGroup = ref<ScenarioGroup>('sideStories')
 const gameMode = ref<GameMode>('Campaign')
 const includeTarotReadings = ref(false)
 const strictAsIfAt = ref(false)
@@ -60,7 +59,6 @@ const multiplayerVariant = ref<MultiplayerVariant>('WithFriends')
 const returnTo = ref(false)
 
 // Per-seat AI configuration (dev-only, Solo games only); see GameOptions.vue.
-const aiPlayers = ref<(AiSlotConfig | null)[]>([])
 
 const fullCampaignOptionKey = ref<string | null>(null)
 const recommendedOptionState = ref<Record<string, boolean>>({})
@@ -90,8 +88,8 @@ const timeLimitMinutes = ref(180)
 const miniCampaign = ref(false)
 
 const scenarios = computed<Scenario[]>(() => gate(scenarioJSON))
-const sideStories = computed<Scenario[]>(() => gate(sideStoriesJSON))
-const campaignJSON = dev ? [...officialCampaignJSON, ...homebrewCampaigns] : officialCampaignJSON
+const sideStories = computed<Scenario[]>(() => gate([...sideStoriesJSON, ...homebrewSideStories]))
+const campaignJSON = [...officialCampaignJSON, ...homebrewCampaigns]
 const campaigns = computed<Campaign[]>(() => gate(campaignJSON))
 
 const scenario = computed(() =>
@@ -151,6 +149,10 @@ const defaultCampaignName = computed(() => {
   }
 
   if (gameMode.value === 'SideStory' && scenario.value) {
+    if (returnTo.value && scenario.value.returnToVariant) {
+      return 'The Blob That Ate Everything ELSE!'
+    }
+
     if (scenario.value.scenarios && sideStoryMode.value !== 'campaign') {
       const part = scenario.value.scenarios.find((s) => s.id === sideStoryMode.value)
       if (part) return part.name
@@ -265,18 +267,28 @@ watch(selectedCampaign, (id) => {
   returnTo.value = false
   recommendedOptionState.value = {}
   ultimatumsAndBoons.value = []
-  strictAsIfAt.value = id != null && id >= '11'
+  strictAsIfAt.value = campaignChapter(campaignJSON.find((c) => c.id === id), id) === 2
 
   if (id === '09') fullCampaign.value = 'FullCampaign'
 })
 
-watch(campaign, (c) => {
-  const recs = ((c as any)?.recommendedOptions ?? []) as Array<{ type: 'toggle'; default?: boolean; option: { tag: string } }>
+type RecommendedOption = { tag: string; contents?: string }
+type RecommendedToggle = { type: 'toggle'; default?: boolean; option: RecommendedOption }
+
+// An option carrying `contents` (a `CampaignVariant`, say) needs both halves in
+// the state key, or two variants of the same tag would share one toggle.
+const recommendedOptionKey = (o: RecommendedOption) =>
+  o.contents ? `${o.tag}:${o.contents}` : o.tag
+
+const recommendedOptions = computed(
+  () => (((campaign.value as any)?.recommendedOptions ?? []) as RecommendedToggle[])
+    .filter((r) => r.type === 'toggle' && r.option?.tag)
+)
+
+watch(recommendedOptions, (recs) => {
   const next: Record<string, boolean> = {}
 
-  for (const r of recs) {
-    if (r.type === 'toggle' && r.option?.tag) next[r.option.tag] = r.default ?? true
-  }
+  for (const r of recs) next[recommendedOptionKey(r.option)] = r.default ?? true
 
   recommendedOptionState.value = { ...next, ...recommendedOptionState.value }
 }, { immediate: true })
@@ -298,25 +310,27 @@ fetchDecks().then((result) => {
 })
 
 // The toggle is only rendered for supported campaigns; a stale "off" from a
-// supported selection must not leak into an unsupported one.
+// supported selection must not leak into an unsupported one. A standalone
+// scenario has no campaign at all, and achievements are gated on the campaign,
+// so tracking is off rather than reported as on.
 const achievementsForCreate = (campaignId: string | null) =>
-  campaignId && ACHIEVEMENT_CAMPAIGN_IDS.includes(campaignId) ? achievementsEnabled.value : true
+  campaignId
+    ? ACHIEVEMENT_CAMPAIGN_IDS.includes(campaignId) ? achievementsEnabled.value : true
+    : false
 
 async function start() {
-  const enabledRecommendedOptions = Object.entries(recommendedOptionState.value)
-    .filter(([, enabled]) => enabled)
-    .map(([tag]) => ({ tag }))
+  const enabledRecommendedOptions = recommendedOptions.value
+    .filter((r) => recommendedOptionState.value[recommendedOptionKey(r.option)] ?? true)
+    .map((r) => r.option)
 
   const variant = fullCampaignOptionKey.value ? [{ 'tag': 'CampaignVariant', 'contents': fullCampaignOptionKey.value }] : [];
 
   const options = [
     ...enabledRecommendedOptions,
     ...variant,
-    ...(miniCampaign.value ? [{ tag: 'PlayAsMiniCampaign' }] : [])
+    ...(miniCampaign.value ? [{ tag: 'PlayAsMiniCampaign' }] : []),
+    ...(returnTo.value && scenario.value?.returnToVariant ? [{ tag: 'PlayWithTheBlobThatAteEverythingElse' }] : [])
   ]
-
-  // AI seats are only meaningful (and only sent) for Solo/multihanded games.
-  const aiPlayersForCreate = multiplayerVariant.value === 'Solo' ? aiPlayers.value : undefined
 
   // Epic Multiplayer side story: spin up an event aggregate (N group games +
   // shared state) instead of a single game, and land on the organizer dashboard.
@@ -333,6 +347,7 @@ async function start() {
       scenarioId: scenario.value.id,
       difficulty: selectedDifficulty.value,
       includeTarotReadings: includeTarotReadings.value,
+      playWithBlobElse: returnTo.value && scenario.value?.returnToVariant === true,
       timeLimitMinutes: minutes,
       groups: epicGroups.value.map((g, i) => ({
         name: g.name.trim() === '' ? `Group ${String.fromCharCode(65 + i)}` : g.name.trim(),
@@ -370,7 +385,6 @@ async function start() {
         includeTarotReadings.value,
         options,
         strictAsIfAt.value,
-        aiPlayersForCreate,
         ultimatumsAndBoons.value,
         achievementsForCreate(campaignId)
       ).then((game) => router.push(`/games/${game.id}`))
@@ -391,7 +405,6 @@ async function start() {
         includeTarotReadings.value,
         options,
         strictAsIfAt.value,
-        aiPlayersForCreate,
         ultimatumsAndBoons.value,
         achievementsForCreate(campaignId)
       ).then((game) => router.push(`/games/${game.id}`))
@@ -414,7 +427,6 @@ async function start() {
           v-model:selectedCampaign="selectedCampaign"
           v-model:selectedScenario="selectedScenario"
           v-model:campaignGroup="campaignGroup"
-          v-model:scenarioGroup="scenarioGroup"
           :campaigns="campaigns"
           :sideStories="sideStories"
           :campaign="campaign"
@@ -444,7 +456,6 @@ async function start() {
           v-model:imposeTimeLimit="imposeTimeLimit"
           v-model:timeLimitMinutes="timeLimitMinutes"
           v-model:miniCampaign="miniCampaign"
-          v-model:aiPlayers="aiPlayers"
           :gameMode="gameMode"
           :campaign="campaign"
           :scenario="scenario"

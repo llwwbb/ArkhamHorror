@@ -5,7 +5,7 @@ import { useDebug } from '@/arkham/debug';
 import { imgsrc } from '@/arkham/helpers';
 import type { Game } from '@/arkham/types/Game';
 import type { ConcealedCard } from '@/arkham/types/ConcealedCard';
-import { useMenu } from '@/composable/menu';
+import { useEscape } from '@/composable/escape';
 
 const props = defineProps<{
   game: Game
@@ -13,16 +13,9 @@ const props = defineProps<{
   playerId: string
 }>()
 
-const { addEntry } = useMenu()
-
 const emit = defineEmits<{ close: [] }>()
 
-addEntry({
-  id: `close-debug-${props.card.id}`,
-  content: "",
-  shortcut: "Escape",
-  action: () => emit('close')
-})
+useEscape(() => emit('close'))
 
 const imageName = computed(() => {
   switch (props.card.kind) {
@@ -67,7 +60,8 @@ const debug = useDebug()
 <template>
   <Draggable>
     <template #handle><h2>{{ $t('debug.concealedCard.title') }}</h2></template>
-    <div class="concealed-card--outer">
+    <div class="debug-modal debug-window">
+      <div class="concealed-card--outer">
       <div class="concealed-card" :data-index="card.id">
         <div class="card-frame">
           <div class="card-wrapper">
@@ -75,9 +69,8 @@ const debug = useDebug()
           </div>
         </div>
       </div>
-      <div class="buttons">
-        <button @click="emit('close')">{{ $t('debug.common.close') }}</button>
       </div>
+      <button class="debug-close" @click="emit('close')">{{ $t('debug.common.close') }}</button>
     </div>
   </Draggable>
 </template>
@@ -105,10 +98,11 @@ const debug = useDebug()
 }
 
 .concealed-card--outer {
-  padding: 10px;
   display: flex;
   flex-direction: row;
-  align-items: center;
+  /* Card pinned to the top: the button column is taller than the art, and
+     centring it left the card floating mid-panel. */
+  align-items: flex-start;
   gap: 10px;
 }
 

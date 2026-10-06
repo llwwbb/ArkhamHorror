@@ -24,7 +24,7 @@ const card = (code: string, name: string, text: string): ArkhamDBCard => ({
   real_text: text,
   type_code: 'asset',
   is_unique: false,
-  double_sided: false,
+  double_sided: true,
 })
 
 async function flushOverlay() {

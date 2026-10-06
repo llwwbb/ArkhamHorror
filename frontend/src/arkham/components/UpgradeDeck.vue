@@ -1,8 +1,10 @@
 <script lang="ts" setup>
 import { displayTabooList } from '@/arkham/taboo';
+import { portraitImage } from '@/arkham/cardImages'
 import { ref, computed, inject } from 'vue';
-import { upgradeDeck } from '@/arkham/api';
-import { imgsrc, localizeArkhamDBBaseUrl, processArkhamBuildDeck } from '@/arkham/helpers';
+import { fetchGame, upgradeDeck } from '@/arkham/api';
+import { useStepPoller } from '@/arkham/composables/useStepPoller';
+import { localizeArkhamDBBaseUrl, processArkhamBuildDeck } from '@/arkham/helpers';
 import { ArkhamDbDecklist } from '@/arkham/types/Deck';
 import { Game } from '@/arkham/types/Game';
 import { Investigator } from '@/arkham/types/Investigator';
@@ -35,9 +37,33 @@ const fetching = ref(false)
 // the player must be told rather than left looking at an unchanged screen (#5256).
 const submitError = ref<string | null>(null)
 const props = defineProps<Props>()
-const emit = defineEmits<{ choose: [value: number] }>()
+const emit = defineEmits<{ choose: [value: number]; update: [game: Game] }>()
 const choose = (idx: number) => emit('choose', idx)
 const waiting = ref(false)
+
+function hasUpgradeQuestions(game: Game): boolean {
+  return Object.values(game.question).some((question) =>
+    question.tag === 'ChooseUpgradeDeck'
+      || (question.tag === 'QuestionLabel' && question.question.tag === 'ChooseUpgradeDeck')
+  )
+}
+
+// Probing the step first keeps this off the expensive game endpoint for every
+// tick where nobody has answered anything.
+const waitingPoll = useStepPoller({
+  gameId: () => props.game.id,
+  onChange: async () => {
+    const { game } = await fetchGame(props.game.id)
+    emit('update', game)
+    if (!hasUpgradeQuestions(game)) waiting.value = false
+  },
+  shouldContinue: () => waiting.value,
+})
+
+function waitForOtherPlayers() {
+  waiting.value = true
+  waitingPoll.start()
+}
 const deck = ref<string | null>(null)
 const deckUrl = ref<string | null>(null)
 const deckList = ref<ArkhamDbDecklist | null>(null)
@@ -331,13 +357,16 @@ function loadDeckFromFile(e: Event) {
 
 /* The cards this decklist would ADD to the campaign deck -- the same notion of an upgrade the
  * engine uses (UpgradeDeck's deckDiff). Empty means the pull changed nothing. */
+function campaignDeck() {
+  const iid = originalInvestigatorId.value
+  return (iid ? props.game.campaign?.decks[iid] : undefined) ?? []
+}
+
 function addedCardCodes(list: ArkhamDbDecklist | null): string[] {
   if (!list?.slots) return []
-  const iid = originalInvestigatorId.value
-  const campaignDeck = (iid ? props.game.campaign?.decks[iid] : undefined) ?? []
 
   const owned = new Map<string, number>()
-  for (const card of campaignDeck) {
+  for (const card of campaignDeck()) {
     const code = normalizeCardCode(card.cardCode)
     owned.set(code, (owned.get(code) ?? 0) + 1)
   }
@@ -350,17 +379,63 @@ function addedCardCodes(list: ArkhamDbDecklist | null): string[] {
   })
 }
 
+function customizationCheckmarks(value: string): Map<number, number> {
+  const result = new Map<number, number>()
+  for (const entry of value.split(',')) {
+    const [rawIndex, rawCount] = entry.split('|')
+    const index = Number(rawIndex)
+    const count = Number(rawCount)
+    if (Number.isInteger(index) && Number.isInteger(count) && count > 0) result.set(index, count)
+  }
+  return result
+}
+
+function hasCustomizationXpChanges(list: ArkhamDbDecklist): boolean {
+  let meta: Record<string, unknown>
+  try {
+    meta = typeof list.meta === 'string' ? JSON.parse(list.meta) : (list.meta ?? {})
+  } catch {
+    return false
+  }
+
+  const current = new Map<string, Map<number, number>>()
+  for (const card of campaignDeck()) {
+    if (!card.customizations) continue
+    current.set(normalizeCardCode(card.cardCode), new Map(
+      card.customizations
+        .filter(([, [count]]) => count > 0)
+        .map(([index, [count]]) => [index, count]),
+    ))
+  }
+
+  const incoming = new Map<string, Map<number, number>>()
+  for (const [key, value] of Object.entries(meta)) {
+    if (!key.startsWith('cus_') || typeof value !== 'string') continue
+    incoming.set(normalizeCardCode(key.slice(4)), customizationCheckmarks(value))
+  }
+
+  const codes = new Set([...current.keys(), ...incoming.keys()])
+  return [...codes].some((code) => {
+    const before = current.get(code) ?? new Map<number, number>()
+    const after = incoming.get(code) ?? new Map<number, number>()
+    const indexes = new Set([...before.keys(), ...after.keys()])
+    return [...indexes].some((index) => before.get(index) !== after.get(index))
+  })
+}
+
 /* arkham.build (and ArkhamDB) create the upgraded version the moment you click Upgrade,
  * BEFORE any XP is spent, so pulling too early applies a deck with no changes and closes the
  * upgrade window for good -- the whole of #5257. Confirm instead of silently consuming it.
- * Only when XP is actually unspent, so a genuine no-change upgrade stays quiet. */
+ * Only when XP is actually unspent and neither cards nor customization XP changed. */
 const pendingNoChangeUpgrade = ref(false)
 
 const unspentXp = computed(() => xp.value ?? 0)
 
 function wouldChangeNothing(): boolean {
   if (!deckList.value) return false
-  return unspentXp.value > 0 && addedCardCodes(deckList.value).length === 0
+  return unspentXp.value > 0
+    && addedCardCodes(deckList.value).length === 0
+    && !hasCustomizationXpChanges(deckList.value)
 }
 
 async function upgrade(force = false) {
@@ -375,14 +450,13 @@ async function upgrade(force = false) {
    fetching.value = true
    upgradeDeck(props.game.id, originalInvestigatorId.value, deckUrl.value ?? undefined, deckList.value).then(() => {
       if(!solo) {
-        waiting.value = true
+        waitForOtherPlayers()
       }
     }).catch((e) => {
       // A rejected upgrade left the game untouched, so keep the form usable and say why.
       submitError.value = submitErrorMessage(e, t('upgrade.upgradeFailed'))
     }).finally(() => {
       fetching.value = false;
-      waiting.value = false;
     });
     deckUrl.value = null;
     deck.value = null;
@@ -395,7 +469,7 @@ async function skip() {
   submitError.value = null
   upgradeDeck(props.game.id, investigatorId.value).then(() => {
     if(!solo) {
-      waiting.value = true
+      waitForOtherPlayers()
     }
     skipping.value = false
   }).catch((e) => {
@@ -435,7 +509,7 @@ const tabooList = function (investigator: Investigator) {
 
     <div v-if="!waiting" class="panel">
       <template v-if="question && investigator && question.tag !== 'ChooseUpgradeDeck'">
-        <img v-if="investigatorId" class="portrait" :src="imgsrc(`portraits/${investigatorId.replace('c', '')}.jpg`)" />
+        <img v-if="investigatorId" class="portrait" :src="portraitImage(investigatorId)" />
         <div v-if="question && playerId == investigator.playerId" class="content question-pane">
           <h3 v-if="questionLabel" class="question-label">{{ questionLabel }}</h3>
           <Question :game="game" :playerId="playerId" @choose="choose" />
@@ -448,7 +522,7 @@ const tabooList = function (investigator: Investigator) {
       </template>
       <template v-else>
         <template v-if="investigatorId && killedInvestigators.includes(investigatorId)">
-          <img class="portrait killed" :src="imgsrc(`portraits/${investigatorId.replace('c', '')}.jpg`)" />
+          <img class="portrait killed" :src="portraitImage(investigatorId)" />
           <div class="content">
             <p class="killed-prompt">{{ $t('upgrade.killed') }}</p>
             <p v-if="error" class="error">{{ error }}</p>
@@ -470,7 +544,7 @@ const tabooList = function (investigator: Investigator) {
           </div>
         </template>
         <template v-else>
-          <img v-if="investigatorId" class="portrait" :src="imgsrc(`portraits/${investigatorId.replace('c', '')}.jpg`)" />
+          <img v-if="investigatorId" class="portrait" :src="portraitImage(investigatorId)" />
           <div class="content">
             <p v-if="error" class="error">{{ error }}</p>
             <p v-if="submitError" class="error">{{ submitError }}</p>
@@ -940,4 +1014,12 @@ button.skip {
 .breakdowns {
   width: min(1100px, 92vw);
 }
+
+
+
+
+
+
+
+
 </style>

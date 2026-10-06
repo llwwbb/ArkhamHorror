@@ -164,6 +164,15 @@
   }
 }
 
+.blood-icon {
+  &:before {
+    text-transform: none;
+    font-family: "Icons";
+    content: "\E94A";
+  }
+}
+
+
 .seal-a-icon {
   &:before {
     text-transform: none;
@@ -276,6 +285,30 @@
     text-transform: none;
     font-family: "ArkhamSlim";
     content: "\e900";
+  }
+}
+
+.rune-D {
+  &:before {
+    text-transform: none;
+    font-family: "ArkhamSlim";
+    content: "\e903";
+  }
+}
+
+.rune-E {
+  &:before {
+    text-transform: none;
+    font-family: "ArkhamSlim";
+    content: "\e904";
+  }
+}
+
+.rune-F {
+  &:before {
+    text-transform: none;
+    font-family: "ArkhamSlim";
+    content: "\e905";
   }
 }
 

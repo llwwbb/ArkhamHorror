@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { computed, ComputedRef } from 'vue';
+import MissingCardBadge from '@/arkham/components/MissingCardBadge.vue';
 import { Game } from '@/arkham/types/Game';
 import { Card } from '@/arkham/types/Card';
 import * as ArkhamGame from '@/arkham/types/Game';
@@ -93,6 +94,7 @@ const choose = (index: number) => emits('choose', index)
 
 <template>
   <div class="event" :class="{ attached }">
+    <MissingCardBadge :card-code="cardCode" />
     <img
       :src="image"
       :class="{ 'event--can-interact': cardAction !== -1, exhausted, attached }"
@@ -101,7 +103,7 @@ const choose = (index: number) => emits('choose', index)
       :data-customizations="JSON.stringify(event.customizations)"
     />
     <div v-if="hasPool" class="pool">
-      <TokenPool :tokens="event.tokens" />
+      <TokenPool :tokens="event.tokens" :target="{ tag: 'EventTarget', contents: event.id }" />
       <Token
         v-for="(sealedToken, index) in event.sealedChaosTokens"
         :key="index"

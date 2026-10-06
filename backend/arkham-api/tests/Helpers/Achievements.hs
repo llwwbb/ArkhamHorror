@@ -21,14 +21,45 @@ module Helpers.Achievements (
   asReturnToTheCircleUndone,
   asReturnToTheCircleUndoneWith,
   asReturnToTheCircleUndoneScenario,
+  asTheDrownedCity,
+  asTheDrownedCityWith,
+  asTheDrownedCityScenario,
+  asTheDreamEaters,
+  asTheDreamEatersWith,
+  asTheDreamEatersScenario,
+  asTheInnsmouthConspiracy,
+  asTheInnsmouthConspiracyWith,
+  asTheInnsmouthConspiracyScenario,
+  asEdgeOfTheEarth,
+  asEdgeOfTheEarthWith,
+  asEdgeOfTheEarthScenario,
+  asTheScarletKeys,
+  asTheScarletKeysWith,
+  asTheScarletKeysScenario,
+  asTheFeastOfHemlockVale,
+  asTheFeastOfHemlockValeWith,
+  asTheFeastOfHemlockValeScenario,
   didEarn,
+  didEarnBy,
   didEarnDunwich,
   didEarnCarcosa,
   didEarnForgottenAge,
   didEarnCircle,
+  didEarnDrownedCity,
+  didEarnDreamQuest,
+  didEarnWebOfDreams,
+  didEarnInnsmouth,
+  didEarnEdgeOfTheEarth,
+  didEarnScarletKeys,
+  didEarnHemlockVale,
   didProgressDunwich,
   didProgressCarcosa,
   didProgressCircle,
+  didProgressDrownedCity,
+  didProgressInnsmouth,
+  didProgressEdgeOfTheEarth,
+  didProgressScarletKeys,
+  didProgressHemlockVale,
 ) where
 
 import Arkham.Achievement.Types
@@ -114,9 +145,86 @@ asReturnToTheCircleUndone = asReturnToTheCircleUndoneWith Easy
 asReturnToTheCircleUndoneScenario :: CardCode -> TestAppT ()
 asReturnToTheCircleUndoneScenario = asAchievementCampaignScenario "54"
 
+-- The Drowned City's list is printed for the campaign itself, so campaign "11"
+-- is the eligible campaign rather than a Return-to variant.
+
+asTheDrownedCityWith :: Difficulty -> TestAppT ()
+asTheDrownedCityWith = asAchievementCampaign "11"
+
+asTheDrownedCity :: TestAppT ()
+asTheDrownedCity = asTheDrownedCityWith Easy
+
+asTheDrownedCityScenario :: CardCode -> TestAppT ()
+asTheDrownedCityScenario = asAchievementCampaignScenario "11"
+
+-- The Dream-Eaters prints one achievement list per mini-campaign, but both are
+-- earned in campaign "06"; detection is scoped by scenario instead.
+
+asTheDreamEatersWith :: Difficulty -> TestAppT ()
+asTheDreamEatersWith = asAchievementCampaign "06"
+
+asTheDreamEaters :: TestAppT ()
+asTheDreamEaters = asTheDreamEatersWith Easy
+
+asTheDreamEatersScenario :: CardCode -> TestAppT ()
+asTheDreamEatersScenario = asAchievementCampaignScenario "06"
+
+-- The Innsmouth Conspiracy's list is printed for the campaign itself, so
+-- campaign "07" is the eligible campaign rather than a Return-to variant.
+
+asTheInnsmouthConspiracyWith :: Difficulty -> TestAppT ()
+asTheInnsmouthConspiracyWith = asAchievementCampaign "07"
+
+asTheInnsmouthConspiracy :: TestAppT ()
+asTheInnsmouthConspiracy = asTheInnsmouthConspiracyWith Easy
+
+asTheInnsmouthConspiracyScenario :: CardCode -> TestAppT ()
+asTheInnsmouthConspiracyScenario = asAchievementCampaignScenario "07"
+
+-- Edge of the Earth's list is printed for the campaign itself, so campaign "08"
+-- is the eligible campaign rather than a Return-to variant.
+
+asEdgeOfTheEarthWith :: Difficulty -> TestAppT ()
+asEdgeOfTheEarthWith = asAchievementCampaign "08"
+
+asEdgeOfTheEarth :: TestAppT ()
+asEdgeOfTheEarth = asEdgeOfTheEarthWith Easy
+
+asEdgeOfTheEarthScenario :: CardCode -> TestAppT ()
+asEdgeOfTheEarthScenario = asAchievementCampaignScenario "08"
+
+-- The Scarlet Keys' list is printed for the campaign itself, so campaign "09"
+-- is the eligible campaign rather than a Return-to variant.
+
+asTheScarletKeysWith :: Difficulty -> TestAppT ()
+asTheScarletKeysWith = asAchievementCampaign "09"
+
+asTheScarletKeys :: TestAppT ()
+asTheScarletKeys = asTheScarletKeysWith Easy
+
+asTheScarletKeysScenario :: CardCode -> TestAppT ()
+asTheScarletKeysScenario = asAchievementCampaignScenario "09"
+
+-- The Feast of Hemlock Vale's list is printed for the campaign itself, so campaign
+-- "10" is the eligible campaign rather than a Return-to variant.
+
+asTheFeastOfHemlockValeWith :: Difficulty -> TestAppT ()
+asTheFeastOfHemlockValeWith = asAchievementCampaign "10"
+
+asTheFeastOfHemlockVale :: TestAppT ()
+asTheFeastOfHemlockVale = asTheFeastOfHemlockValeWith Easy
+
+asTheFeastOfHemlockValeScenario :: CardCode -> TestAppT ()
+asTheFeastOfHemlockValeScenario = asAchievementCampaignScenario "10"
+
 didEarn :: NightOfTheZealotAchievement -> TestAppT (IORef Bool)
 didEarn achievement =
   createMessageMatcher $ EarnAchievement $ NightOfTheZealotAchievement achievement
+
+-- | Achievements credited to one investigator's player rather than the table.
+didEarnBy :: InvestigatorId -> NightOfTheZealotAchievement -> TestAppT (IORef Bool)
+didEarnBy iid achievement =
+  createMessageMatcher $ EarnAchievementBy iid $ NightOfTheZealotAchievement achievement
 
 didEarnDunwich :: TheDunwichLegacyAchievement -> TestAppT (IORef Bool)
 didEarnDunwich achievement =
@@ -134,6 +242,30 @@ didEarnCircle :: TheCircleUndoneAchievement -> TestAppT (IORef Bool)
 didEarnCircle achievement =
   createMessageMatcher $ EarnAchievement $ TheCircleUndoneAchievement achievement
 
+didEarnDrownedCity :: TheDrownedCityAchievement -> TestAppT (IORef Bool)
+didEarnDrownedCity achievement =
+  createMessageMatcher $ EarnAchievement $ TheDrownedCityAchievement achievement
+
+didEarnDreamQuest :: TheDreamQuestAchievement -> TestAppT (IORef Bool)
+didEarnDreamQuest achievement =
+  createMessageMatcher $ EarnAchievement $ TheDreamQuestAchievement achievement
+
+didEarnWebOfDreams :: TheWebOfDreamsAchievement -> TestAppT (IORef Bool)
+didEarnWebOfDreams achievement =
+  createMessageMatcher $ EarnAchievement $ TheWebOfDreamsAchievement achievement
+
+didEarnInnsmouth :: TheInnsmouthConspiracyAchievement -> TestAppT (IORef Bool)
+didEarnInnsmouth achievement =
+  createMessageMatcher $ EarnAchievement $ TheInnsmouthConspiracyAchievement achievement
+
+didEarnEdgeOfTheEarth :: EdgeOfTheEarthAchievement -> TestAppT (IORef Bool)
+didEarnEdgeOfTheEarth achievement =
+  createMessageMatcher $ EarnAchievement $ EdgeOfTheEarthAchievement achievement
+
+didEarnScarletKeys :: TheScarletKeysAchievement -> TestAppT (IORef Bool)
+didEarnScarletKeys achievement =
+  createMessageMatcher $ EarnAchievement $ TheScarletKeysAchievement achievement
+
 -- Checklist progress reports (cross-playthrough achievements); the items must
 -- match exactly, in 'achievementChecklist'-mapping order.
 
@@ -148,3 +280,27 @@ didProgressCarcosa achievement items =
 didProgressCircle :: TheCircleUndoneAchievement -> [Text] -> TestAppT (IORef Bool)
 didProgressCircle achievement items =
   createMessageMatcher $ AchievementProgress (TheCircleUndoneAchievement achievement) items
+
+didProgressDrownedCity :: TheDrownedCityAchievement -> [Text] -> TestAppT (IORef Bool)
+didProgressDrownedCity achievement items =
+  createMessageMatcher $ AchievementProgress (TheDrownedCityAchievement achievement) items
+
+didProgressInnsmouth :: TheInnsmouthConspiracyAchievement -> [Text] -> TestAppT (IORef Bool)
+didProgressInnsmouth achievement items =
+  createMessageMatcher $ AchievementProgress (TheInnsmouthConspiracyAchievement achievement) items
+
+didProgressEdgeOfTheEarth :: EdgeOfTheEarthAchievement -> [Text] -> TestAppT (IORef Bool)
+didProgressEdgeOfTheEarth achievement items =
+  createMessageMatcher $ AchievementProgress (EdgeOfTheEarthAchievement achievement) items
+
+didEarnHemlockVale :: TheFeastOfHemlockValeAchievement -> TestAppT (IORef Bool)
+didEarnHemlockVale achievement =
+  createMessageMatcher $ EarnAchievement $ TheFeastOfHemlockValeAchievement achievement
+
+didProgressHemlockVale :: TheFeastOfHemlockValeAchievement -> [Text] -> TestAppT (IORef Bool)
+didProgressHemlockVale achievement items =
+  createMessageMatcher $ AchievementProgress (TheFeastOfHemlockValeAchievement achievement) items
+
+didProgressScarletKeys :: TheScarletKeysAchievement -> [Text] -> TestAppT (IORef Bool)
+didProgressScarletKeys achievement items =
+  createMessageMatcher $ AchievementProgress (TheScarletKeysAchievement achievement) items

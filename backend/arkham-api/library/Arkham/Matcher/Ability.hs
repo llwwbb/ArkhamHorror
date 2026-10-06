@@ -22,10 +22,15 @@ data AbilityMatcher
   | AbilityWithIndex Int
   | AbilityOnAsset AssetMatcher
   | AbilityOnEnemy EnemyMatcher
+  | AbilityOnInvestigator InvestigatorMatcher
   | AbilityOnStory StoryMatcher
   | AbilityWindow WindowMatcher
   | AbilityIsAction Action
   | AbilityIsActionAbility
+  | {- | An action ability printed with a bare arrow: no bold designator (no Fight,
+    Investigate, Evade, ...) in front of its cost.
+    -}
+    AbilityWithoutActionDesignator
   | AbilityIsReactionAbility
   | AbilityIsFastAbility
   | AbilityIsForcedAbility

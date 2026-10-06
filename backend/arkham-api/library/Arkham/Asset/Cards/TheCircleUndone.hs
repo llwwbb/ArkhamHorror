@@ -41,12 +41,13 @@ twilightBlade =
 
 baronSamedi :: CardDef
 baronSamedi =
-  (weakness "05019" ("Baron Samedi" <:> "Lord of the Cemetery"))
-    { cdCardTraits = singleton Avatar
-    , cdSlots = [#ally]
-    , cdAlternateCardCodes = ["99003"]
-    , cdUnique = True
-    }
+  signature "05006"
+    $ (weakness "05019" ("Baron Samedi" <:> "Lord of the Cemetery"))
+      { cdCardTraits = singleton Avatar
+      , cdSlots = [#ally]
+      , cdAlternateCardCodes = ["99003"]
+      , cdUnique = True
+      }
 
 aceOfSwords1 :: CardDef
 aceOfSwords1 =
@@ -445,6 +446,7 @@ gavriellaMizrah =
     { cdSkills = [#combat, #wild]
     , cdCardTraits = setFromList [Ally, Veteran]
     , cdUnique = True
+    , cdSlots = [#ally]
     }
 
 jeromeDavids :: CardDef
@@ -453,6 +455,7 @@ jeromeDavids =
     { cdSkills = [#intellect, #wild]
     , cdCardTraits = setFromList [Ally, Assistant]
     , cdUnique = True
+    , cdSlots = [#ally]
     }
 
 pennyWhite :: CardDef
@@ -461,6 +464,7 @@ pennyWhite =
     { cdSkills = [#willpower, #wild]
     , cdCardTraits = setFromList [Ally, Assistant]
     , cdUnique = True
+    , cdSlots = [#ally]
     }
 
 valentinoRivas :: CardDef
@@ -469,6 +473,7 @@ valentinoRivas =
     { cdSkills = [#agility, #wild]
     , cdCardTraits = setFromList [Ally, Socialite]
     , cdUnique = True
+    , cdSlots = [#ally]
     }
 
 mk1Grenades4 :: CardDef
@@ -496,6 +501,7 @@ studious3 =
       { cdCardTraits = singleton Talent
       , cdLevel = Just 3
       , cdAlternateCardCodes = ["12042"]
+      , cdTags = [setupOnlyTag]
       }
 
 anotherDayAnotherDollar3 :: CardDef
@@ -505,6 +511,7 @@ anotherDayAnotherDollar3 =
       { cdCardTraits = singleton Talent
       , cdLevel = Just 3
       , cdAlternateCardCodes = ["12056"]
+      , cdTags = [setupOnlyTag]
       }
 
 dayanaEsperence3 :: CardDef

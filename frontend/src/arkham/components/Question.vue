@@ -1,10 +1,11 @@
 <script lang="ts" setup>
 import { useDbCardStore } from '@/stores/dbCards'
-import { chaosTokenImage } from '@/arkham/types/ChaosToken';
+import { chaosTokenImage, type ChaosToken } from '@/arkham/types/ChaosToken';
 import { useI18n } from 'vue-i18n';
 import { useDebouncedRef } from '@/composable/debouncedRef';
-import { handleEmbeddedI18n } from '@/arkham/i18n';
+import { handleEmbeddedI18n, parseInput } from '@/arkham/i18n';
 import { formatCost } from '@/arkham/cost';
+import { abilityNeedsGhostModal } from '@/arkham/ghostAbility';
 import { choiceRequiresModal, MessageType, CardLabel, ChaosTokenLabel, type Message, type TargetLabel } from '@/arkham/types/Message';
 import { computed, inject, ref, watch, onMounted } from 'vue';
 import { imgsrc, formatContent } from '@/arkham/helpers';
@@ -22,6 +23,10 @@ import ChaosBagChoice from '@/arkham/components/ChaosBagChoice.vue';
 import FormattedEntry from '@/arkham/components/FormattedEntry.vue';
 import QuestionChoices from '@/arkham/components/QuestionChoices.vue';
 import CardImage from '@/arkham/components/CardImage.vue';
+import CardPoolPicker from '@/arkham/components/CardPoolPicker.vue';
+import { cardPoolForLabelKey } from '@/arkham/cardPools';
+import { putBackInAnyOrderPicks } from '@/arkham/putBackInAnyOrder';
+import PutBackInAnyOrder from '@/arkham/components/PutBackInAnyOrder.vue';
 
 export interface Props {
   game: Game
@@ -52,6 +57,8 @@ const inSkillTest = computed(() => props.game.skillTest !== null)
 const choices = computed(() => ArkhamGame.choices(props.game, props.playerId))
 const toChoiceEntry = (c: Message, idx: number): [Message, number] => [c, idx]
 const questionChoices = computed(() => {
+  if (props.game.question[props.playerId]?.tag === QuestionType.CHOOSE_ONE_WIZARD) return []
+
   const withoutDone = choices.value.map(toChoiceEntry).filter(([choice, _]) => {
     const { tag } = choice
     if (tag === MessageType.ABILITY_LABEL) return !abilityLabelHandledElsewhere(choice)
@@ -62,6 +69,7 @@ const questionChoices = computed(() => {
     if (tag === MessageType.INVALID_LABEL) return true
     if (tag === MessageType.SKILL_LABEL) return true
     if (tag === MessageType.SKILL_LABEL_WITH_LABEL) return true
+    if (tag === MessageType.CONNECTION_LABEL) return true
     if (tag === MessageType.COST_LABEL) return true
 
     return false
@@ -79,7 +87,62 @@ const questionChoices = computed(() => {
 const choosePaymentAmounts = inject<(amounts: Record<string, number>) => Promise<void>>('choosePaymentAmounts')
 const chooseAmounts = inject<(amounts: Record<string, number>) => Promise<void>>('chooseAmounts')
 const question = computed(() => props.game.question[props.playerId])
+const wizardQuestion = computed(() =>
+  question.value?.tag === QuestionType.CHOOSE_ONE_WIZARD ? question.value : null
+)
+const wizardSelectedIndex = ref<number | null>(null)
+const wizardFlavorText = computed(() => {
+  if (!wizardQuestion.value) return null
+  if (wizardSelectedIndex.value === null) return wizardQuestion.value.flavorText
+  return wizardQuestion.value.wizardChoices[wizardSelectedIndex.value]?.flavorText ?? null
+})
+const wizardDisplayChoices = computed<[Message, number][]>(() => {
+  if (!wizardQuestion.value) return []
+  const labels = wizardSelectedIndex.value === null
+    ? wizardQuestion.value.wizardChoices.map((choice) => choice.label)
+    : [wizardQuestion.value.confirmLabel, wizardQuestion.value.backLabel]
+  return labels.map((choiceLabel, index) => [
+    { tag: MessageType.LABEL, label: choiceLabel },
+    index,
+  ])
+})
+const chooseWizard = (index: number) => {
+  if (!wizardQuestion.value) return
+  if (wizardSelectedIndex.value === null) {
+    wizardSelectedIndex.value = index
+  } else if (index === 0) {
+    emit('choose', wizardSelectedIndex.value)
+  } else if (index === 1) {
+    wizardSelectedIndex.value = null
+  }
+}
 const focusedChaosTokens = computed(() => props.game.focusedChaosTokens)
+
+// A multi-token reveal opens a separate reaction window for each token. Read the
+// token from that window rather than relying on focused-token order: all revealed
+// tokens can already be focused while an earlier token's window is resolving.
+const scrutinizedChaosTokenId = computed(() => {
+  if (question.value?.tag !== 'ChooseOne' || !question.value.isWindow) return null
+
+  for (const choice of choices.value) {
+    if (choice.tag !== MessageType.ABILITY_LABEL) continue
+
+    for (const window of choice.windows) {
+      if (window.windowType.tag !== 'RevealChaosToken') continue
+      const contents = window.windowType.contents
+      if (!Array.isArray(contents)) continue
+      const token = contents[1]
+      if (!token || typeof token !== 'object') continue
+
+      if ('chaosTokenId' in token && typeof token.chaosTokenId === 'string') {
+        return token.chaosTokenId
+      }
+      if ('id' in token && typeof token.id === 'string') return token.id
+    }
+  }
+
+  return null
+})
 
 type SearchedCardGroup = {
   key: string
@@ -247,11 +310,91 @@ function focusedCardSourceLabel(cardId: string): string | null {
   }
 }
 
+// CardLabel choices already render their cards as the primary, clickable options.
+// Do not repeat those same focused cards in the generic "Cards" summary below.
+// Use counts rather than a Set because multiple copies can share a card code.
+const focusedCardsForGroups = computed(() => {
+  const cardLabelCounts = new Map<string, number>()
+  for (const choice of choices.value) {
+    if (choice.tag !== MessageType.CARD_LABEL) continue
+    cardLabelCounts.set(choice.cardCode, (cardLabelCounts.get(choice.cardCode) ?? 0) + 1)
+  }
+
+  return focusedCards.value.filter((card) => {
+    const cardCode = toCardContents(card).cardCode
+    const remaining = cardLabelCounts.get(cardCode) ?? 0
+    if (remaining === 0) return true
+    cardLabelCounts.set(cardCode, remaining - 1)
+    return false
+  })
+})
+
+const isSummitDeckView = computed(() =>
+  question.value?.tag === QuestionType.QUESTION_LABEL
+    && question.value.label.includes('searchTheSpires.')
+)
+
+// Setup questions that build a set-aside pool from your own deck (Joe Diamond's
+// hunch deck, Underworld Market, Stick to the Plan) get their own panel so the
+// destination -- and how much of it is left -- is obvious.
+const cardPoolPick = computed(() => {
+  const q = question.value
+  if (q?.tag !== QuestionType.QUESTION_LABEL || !q.label.startsWith('$')) return null
+  const { key, params } = parseInput(q.label)
+  const pool = cardPoolForLabelKey(key)
+  if (!pool) return null
+
+  // ChooseN re-asks with the count decremented, so it is its own progress
+  // counter. One-at-a-time picks (ChooseUpToN) carry `remaining` on the label.
+  const remaining = q.question.tag === QuestionType.CHOOSE_N
+    ? q.question.amount
+    : typeof params.remaining === 'number' ? params.remaining : null
+  if (remaining === null) return null
+
+  return { pool, remaining, chosen: pool.chosen(props.game, props.playerId) }
+})
+
+// The cards the pool question is actually offering. Taking them from the
+// choices rather than from every revealed card keeps a deck-wide search (Stick
+// to the Plan) from showing cards that cannot be picked.
+const cardPoolCandidates = computed(() => {
+  const byId = new Map<string, ArkhamCard>()
+  for (const card of [...focusedCards.value, ...searchedCards.value.flatMap((g) => g.cards)]) {
+    byId.set(toCardContents(card).id, card)
+  }
+
+  return choices.value.flatMap((choice) => {
+    if (choice.tag !== MessageType.TARGET_LABEL) return []
+    const { target } = choice
+    if (target.tag !== 'CardIdTarget' || typeof target.contents !== 'string') return []
+    const card = byId.get(target.contents)
+    return card ? [card] : []
+  })
+})
+
+const cardPoolActive = computed(() => cardPoolPick.value !== null && cardPoolCandidates.value.length > 0)
+
+// The put-back panel owns its own state and styles; this only decides whether it
+// is what the modal should be showing.
+const putBackActive = computed(() => putBackInAnyOrderPicks(props.game, props.playerId) !== null)
+
 const focusedCardGroups = computed<SearchedCardGroup[]>(() => {
-  if (focusedCards.value.length === 0) return []
+  if (focusedCardsForGroups.value.length === 0) return []
+
+  // Summit order matters. Keep every revealed card in the exact draw order and
+  // render them as one set instead of splitting the location and encounter-card
+  // orientations into separate visual rows.
+  if (isSummitDeckView.value) {
+    return [{
+      key: 'focused-summit-deck',
+      zone: 'SummitDeck',
+      label: t('cards'),
+      cards: focusedCardsForGroups.value,
+    }]
+  }
 
   const grouped = new Map<string, ArkhamCard[]>()
-  for (const card of focusedCards.value) {
+  for (const card of focusedCardsForGroups.value) {
     const label = focusedCardSourceLabel(toCardContents(card).id) ?? t('choice.cards')
     grouped.set(label, [...(grouped.get(label) ?? []), card])
   }
@@ -264,13 +407,78 @@ const focusedCardGroups = computed<SearchedCardGroup[]>(() => {
   }))
 })
 
-const visibleCardIds = computed(() => new Set([
-  ...(investigator.value?.hand ?? []).map((card) => toCardContents(card).id),
-  ...focusedCards.value.map((card) => toCardContents(card).id),
-  ...searchedCards.value.flatMap((group) => group.cards.map((card) => toCardContents(card).id)),
-  ...(props.game.scenario?.victoryDisplay ?? []).map((card) => toCardContents(card).id),
-  ...Object.values(props.game.assets).flatMap((asset) => asset.cardsUnderneath.map((card) => toCardContents(card).id)),
-]))
+const cardIds = (cards: ArkhamCard[]) => cards.map((card) => toCardContents(card).id)
+
+const cardChoiceHandledElsewhereIds = computed(() => {
+  const scenario = props.game.scenario
+
+  return new Set([
+    ...(investigator.value?.hand ?? []).map((card) => toCardContents(card).id),
+    ...Object.values(props.game.investigators).flatMap((i) => [
+      ...i.discard.map((card) => card.id),
+      ...cardIds(i.cardsUnderneath),
+    ]),
+    ...focusedCards.value.map((card) => toCardContents(card).id),
+    ...searchedCards.value.flatMap((group) => cardIds(group.cards)),
+    ...cardIds(props.game.removedFromPlay),
+    ...Object.values(props.game.assets).flatMap((asset) => cardIds(asset.cardsUnderneath)),
+    ...Object.values(props.game.events).flatMap((event) => cardIds(event.cardsUnderneath)),
+    ...Object.values(props.game.locations).flatMap((location) => cardIds(location.cardsUnderneath)),
+    ...Object.values(props.game.acts).flatMap((act) => cardIds(act.cardsUnderneath)),
+    ...(scenario ? [
+      ...scenario.discard.map((card) => card.id),
+      ...cardIds(scenario.victoryDisplay),
+      ...cardIds(scenario.setAsideCards),
+      ...cardIds(scenario.cardsUnderScenarioReference),
+      ...cardIds(scenario.cardsUnderAgendaDeck),
+      ...cardIds(scenario.cardsUnderActDeck),
+      ...cardIds(scenario.cardsNextToAgendaDeck),
+      ...cardIds(scenario.cardsNextToActDeck),
+      ...scenario.deckDiscards.flatMap(([, cards]) => cardIds(cards)),
+    ] : []),
+    // Committed cards are rendered (and clickable) by CommittedSkills, so a
+    // CardIdTarget on one must not also fall through to a generic Continue button.
+    ...(props.game.skillTest?.committedCards ?? []).map((card) => toCardContents(card).id),
+  ])
+})
+
+// Scarlet keys draw their own ability buttons next to the key art. Collect the
+// keys that are actually on screen, so a key with no anchor still falls through
+// to the generic button list instead of losing its ability entirely.
+const renderedScarletKeyIds = computed(() => {
+  const ids = new Set<string>()
+  const add = (keys?: string[]) => keys?.forEach((id) => ids.add(id))
+
+  Object.values(props.game.investigators).forEach((i) => add(i.scarletKeys))
+  Object.values(props.game.enemies).forEach((e) => add(e.scarletKeys))
+  Object.values(props.game.assets).forEach((a) => add(a.scarletKeys))
+  Object.values(props.game.locations).forEach((l) =>
+    l.scarletKeys?.forEach((id) => {
+      if (props.game.scarletKeys[id]?.placement.tag === 'AttachedToLocation') ids.add(id)
+    })
+  )
+  Object.values(props.game.scarletKeys).forEach((k) => {
+    if (k.placement.tag === 'NextToAct') ids.add(k.id)
+  })
+
+  return ids
+})
+
+// Skills draw their own ability buttons on the skill card, wherever it is shown:
+// a player's play area, an enemy it is attached to, or the committed-cards row
+// of the skill test (matched there by card id).
+const renderedSkillIds = computed(() => {
+  const ids = new Set<string>()
+  Object.values(props.game.investigators).forEach((i) => i.skills.forEach((id) => ids.add(id)))
+  Object.values(props.game.enemies).forEach((e) => e.skills.forEach((id) => ids.add(id)))
+
+  const committed = new Set((props.game.skillTest?.committedCards ?? []).map((c) => toCardContents(c).id))
+  Object.values(props.game.skills).forEach((s) => {
+    if (committed.has(s.cardId)) ids.add(s.id)
+  })
+
+  return ids
+})
 
 function abilityLabelHandledElsewhere(choice: Message) {
   if (choice.tag !== MessageType.ABILITY_LABEL) return false
@@ -295,12 +503,32 @@ function abilitySourceHandledElsewhere(source: any) {
     case 'TreacherySource': return source.contents in props.game.treacheries
     case 'ActSource': return source.contents in props.game.acts
     case 'AgendaSource': return source.contents in props.game.agendas
-    case 'EventSource': return source.contents in props.game.events || visibleCardIds.value.has(source.contents)
+    case 'EventSource': return source.contents in props.game.events || cardChoiceHandledElsewhereIds.value.has(source.contents)
     case 'StorySource': return source.contents in props.game.stories
     case 'InvestigatorSource': return source.contents in props.game.investigators || source.contents in props.game.otherInvestigators
+    case 'ScarletKeySource': return renderedScarletKeyIds.value.has(source.contents)
+    case 'SkillSource': return renderedSkillIds.value.has(source.contents)
     default: return false
   }
 }
+
+// Chaos tokens that already have a clickable representation on the board: everything
+// SealedChaosTokens mounts (investigators, assets, enemies, locations). Token.vue turns
+// those into active tokens for a matching TargetLabel, so the modal needs no button.
+const boardChaosTokenIds = computed(() => {
+  const ids = new Set<string>()
+  const add = (tokens: ChaosToken[] | undefined) => tokens?.forEach((token) => ids.add(token.id))
+
+  Object.values(props.game.investigators).forEach((i) => add(i.sealedChaosTokens))
+  Object.values(props.game.assets).forEach((a) => add(a.sealedChaosTokens))
+  Object.values(props.game.enemies).forEach((e) => add(e.sealedChaosTokens))
+  Object.values(props.game.locations).forEach((l) => {
+    add(l.sealedChaosTokens)
+    add(l.placedChaosTokens)
+  })
+
+  return ids
+})
 
 function targetLabelHandledElsewhere(choice: TargetLabel) {
   const target = choice.target
@@ -324,14 +552,15 @@ function targetLabelHandledElsewhere(choice: TargetLabel) {
       case 'ScarletKeyTarget': return contents in props.game.scarletKeys
       case 'ConcealedCardTarget':
       case 'ConcealedTarget': return contents in props.game.concealed
-      case 'CardIdTarget': return visibleCardIds.value.has(contents)
+      case 'CardIdTarget': return cardChoiceHandledElsewhereIds.value.has(contents)
       case 'ChaosTokenFaceTarget': return props.game.focusedChaosTokens.some((token) => token.face === contents)
       default: return false
     }
   }
 
   if (target.tag === 'ChaosTokenTarget' && typeof contents === 'object' && contents !== null && 'id' in contents) {
-    return props.game.focusedChaosTokens.some((token) => token.id === contents.id)
+    const id = contents.id as string
+    return props.game.focusedChaosTokens.some((token) => token.id === id) || boardChaosTokenIds.value.has(id)
   }
 
   return false
@@ -344,6 +573,12 @@ const showChoices = computed(() => {
     return false
   }
   if (choices.value.some(choiceRequiresModal)) {
+    return true
+  }
+  // An ability whose source card has left play has no card to carry its button, so the
+  // modal (with its ghost card) is the only place it can render -- Caught in the
+  // Crossfire's later initiations resolve after it discards itself. #5743
+  if (choices.value.some((c) => abilityNeedsGhostModal(props.game, c))) {
     return true
   }
   return props.game.focusedChaosTokens.length > 0 || focusedCards.value.length > 0 || searchedCards.value.length > 0 || paymentAmountsLabel.value || amountsLabel.value
@@ -411,14 +646,14 @@ const chooseAmountsChoices = computed<AmountChoice[]>(() => {
 const amountSelections = ref<Record<string, number>>({})
 
 const setInitialAmounts = () => {
-    const labels = question.value?.tag === QuestionType.CHOOSE_AMOUNTS
-      ? question.value.amountChoices.map((choice) => choice.choiceId)
-      : (paymentAmountsChoices.value ?? []).map((choice) => choice.choiceId)
-    amountSelections.value = labels.reduce<Record<string, number>>((previousValue, currentValue) => {
-      previousValue[currentValue] = 0
-      return previousValue
-    }, {})
-  }
+  const amountChoices = chooseAmountsChoices.value.length > 0
+    ? chooseAmountsChoices.value
+    : paymentAmountsChoices.value
+  amountSelections.value = amountChoices.reduce<Record<string, number>>((selections, choice) => {
+    selections[choice.choiceId] = 0
+    return selections
+  }, {})
+}
 
 const doneLabel = computed(() => {
   const doneIndex = choices.value.findIndex((c) => c.tag === MessageType.DONE)
@@ -467,7 +702,7 @@ const traumaIconStyle = (text: string) => {
 
 const hasInnerContent = computed(() => {
   return questionImage.value
-    || (focusedCards.value.length > 0 && choices.value.length > 0)
+    || (focusedCardGroups.value.length > 0 && choices.value.length > 0)
     || (searchedCards.value.length > 0 && choices.value.length > 0)
     || paymentAmountsLabel.value
     || amountsLabel.value
@@ -479,9 +714,16 @@ onMounted(() => {
   void store.initDbCards()
 })
 
+// Polling while decks are being chosen replaces the decoded question object even
+// when the server-side question has not changed. Reset only when the question
+// version or owner changes so an in-progress amount entry is preserved.
 watch(
-  () => props.game.question[props.playerId],
-  setInitialAmounts)
+  [() => props.game.scenarioSteps, () => props.playerId],
+  () => {
+    setInitialAmounts()
+    wizardSelectedIndex.value = null
+  },
+)
 
 const unmetAmountRequirements = computed(() => {
   const q = question.value
@@ -531,6 +773,16 @@ const questionImage = computed(() => {
   }
 
   return null
+})
+
+// The same card as a def, so it can be rendered flippably. A prompt about a
+// double-sided card (Ravenous Brood's two faces) is unanswerable until the player
+// can read the side they are not being shown. CardImage drops its own flip button
+// when the back art 404s, so a single-sided card here is unchanged.
+const questionCard = computed(() => {
+  const q = question.value
+  if (q?.tag !== 'QuestionLabel' || !q.card) return null
+  return flippableCard(q.card)
 })
 
 const cardIdImage = (cardId: string) => {
@@ -632,6 +884,23 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
 
 <template>
   <div class='question-wrapper' data-game-actionable="true">
+    <template v-if="wizardFlavorText">
+      <div class="intro-text">
+        <div class="intro-text-body">
+          <FormattedEntry
+            v-for="(paragraph, index) in wizardFlavorText.body"
+            :key="index"
+            :entry="paragraph"
+          />
+        </div>
+      </div>
+      <QuestionChoices
+        :choices="wizardDisplayChoices"
+        :game="game"
+        :playerId="playerId"
+        @choose="chooseWizard"
+      />
+    </template>
     <ChaosBagChoice v-if="chaosBagChoice" :choice="chaosBagChoice" :game="game" :playerId="playerId" @choose="choose" />
     <div v-if="cardPiles.length > 0" class="cardPiles">
       <div v-for="{pile, index} in cardPiles" :key="index" class="card-pile" @click="choose(index)">
@@ -686,7 +955,7 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
 
     <div class="question-label dropdown" v-if="question && question.tag === 'DropDown'">
       <div class="question-image" v-if="questionImage">
-        <img :src="questionImage" class="card" />
+        <CardImage v-if="questionCard" :card="questionCard" class="card" />
       </div>
 
       <DropDown @choose="choose" :options="question.options" />
@@ -706,7 +975,7 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
 
     <div class="question-label dropdown" v-if="question && question.tag === 'QuestionLabel' && question.question.tag === 'DropDown'">
       <div class="question-image" v-if="questionImage">
-        <img :src="questionImage" class="card" />
+        <CardImage v-if="questionCard" :card="questionCard" class="card" />
       </div>
 
       <DropDown @choose="choose" :options="question.question.options" />
@@ -714,7 +983,7 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
 
     <div class="question-label dropdown" v-if="question && question.tag === 'PayCostQuestion' && question.question.tag === 'DropDown'">
       <div class="question-image" v-if="questionImage">
-        <img :src="questionImage" class="card" />
+        <CardImage v-if="questionCard" :card="questionCard" class="card" />
       </div>
 
       <legend>{{ payCostLabel(question.cost) }}</legend>
@@ -723,20 +992,45 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
 
     <div v-if="!isSkillTest && !inSkillTest && focusedChaosTokens.length > 0" class="tokens">
       <div class="question-image" v-if="questionImage">
-        <img :src="questionImage" class="card" />
+        <CardImage v-if="questionCard" :card="questionCard" class="card" />
       </div>
 
-      <Token v-for="(focusedToken, index) in focusedChaosTokens" :key="index" :token="focusedToken" :playerId="playerId" :game="game" @choose="choose" />
+      <Token
+        v-for="focusedToken in focusedChaosTokens"
+        :key="focusedToken.id"
+        :token="focusedToken"
+        :playerId="playerId"
+        :game="game"
+        :scrutinized="focusedToken.id === scrutinizedChaosTokenId"
+        @choose="choose"
+      />
     </div>
 
-    <div v-if="showChoices" class="choices">
+    <div v-if="showChoices && (hasInnerContent || questionChoices.length > 0)" class="choices">
       <div v-if="hasInnerContent" class="question-label">
         <div class="question-image" v-if="questionImage">
-          <img :src="questionImage" class="card" />
+          <CardImage v-if="questionCard" :card="questionCard" class="card" />
         </div>
 
         <div class='question-content'>
-          <div v-if="focusedCardGroups.length > 0 && choices.length > 0" class="modal">
+          <CardPoolPicker
+            v-if="cardPoolActive && cardPoolPick"
+            :game="game"
+            :playerId="playerId"
+            :cards="cardPoolCandidates"
+            :chosen="cardPoolPick.chosen"
+            :remaining="cardPoolPick.remaining"
+            :titleKey="cardPoolPick.pool.titleKey"
+            :candidatesKey="cardPoolPick.pool.candidatesKey"
+            :accent="cardPoolPick.pool.accent"
+            @choose="$emit('choose', $event)"
+          />
+          <PutBackInAnyOrder
+            v-else-if="putBackActive"
+            :game="game"
+            :playerId="playerId"
+          />
+          <div v-else-if="focusedCardGroups.length > 0 && choices.length > 0" class="modal">
             <div class="modal-contents searched-cards focused-cards">
               <div v-for="group in focusedCardGroups" :key="group.key" class="group">
                 <h2>{{ group.label }}</h2>
@@ -750,6 +1044,7 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
                       :card="card"
                       :game="game"
                       :playerId="playerId"
+                      :revealed="isSummitDeckView"
                       @choose="$emit('choose', $event)"
                     />
                   </div>
@@ -757,7 +1052,7 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
               </div>
             </div>
           </div>
-          <div v-if="searchedCards.length > 0 && choices.length > 0" class="modal">
+          <div v-if="searchedCards.length > 0 && choices.length > 0 && !cardPoolActive && !putBackActive" class="modal">
             <div class="modal-contents searched-cards">
               <div v-for="group in searchedCards" :key="group.key" class="group">
                 <h2>{{ group.label }}</h2>
@@ -789,26 +1084,28 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
                 <legend v-html="paymentAmountsLabel"></legend>
                 <div class="amount-choice-list">
                   <template v-for="amountChoice in paymentAmountsChoices" :key="amountChoice.choiceId">
-                    <div v-if="amountChoice.maxBound !== 0" class="amount-choice">
-                      <label :for="`payment-choice-${amountChoice.choiceId}`">{{ amountChoice.title }}</label>
-                      <span class="amount-input-wrapper">
+                    <div
+                      v-if="amountChoice.maxBound !== 0"
+                      class="amount-choice"
+                      :class="traumaKind(amountChoice.title) ? `amount-choice--${traumaKind(amountChoice.title)}` : null"
+                    >
+                      <label :for="`payment-choice-${amountChoice.choiceId}`">
                         <span
                           v-if="traumaIcon(amountChoice.title)"
-                          class="amount-input-icon"
-                          :class="`amount-input-icon--${traumaKind(amountChoice.title)}`"
+                          class="amount-choice-icon"
                           :style="traumaIconStyle(amountChoice.title)"
                         ></span>
-                        <input
-                          :id="`payment-choice-${amountChoice.choiceId}`"
-                          class="amount-input"
-                          :class="{ 'with-icon': traumaIcon(amountChoice.title) }"
-                          type="number"
-                          :min="amountChoice.minBound"
-                          :max="amountChoice.maxBound"
-                          v-model.number="amountSelections[amountChoice.choiceId]"
-                          onclick="this.select()"
-                        />
-                      </span>
+                        <span>{{ amountChoice.title }}</span>
+                      </label>
+                      <input
+                        :id="`payment-choice-${amountChoice.choiceId}`"
+                        class="amount-input"
+                        type="number"
+                        :min="amountChoice.minBound"
+                        :max="amountChoice.maxBound"
+                        v-model.number="amountSelections[amountChoice.choiceId]"
+                        onclick="this.select()"
+                      />
                     </div>
                   </template>
                 </div>
@@ -841,27 +1138,29 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
                 <legend v-html="amountsLabel"></legend>
                 <div class="amount-choice-list">
                   <template v-for="paymentChoice in chooseAmountsChoices" :key="paymentChoice.choiceId">
-                    <div v-if="paymentChoice.maxBound !== 0" class="amount-choice">
-                      <label :for="`choice-${paymentChoice.choiceId}`" v-html="paymentChoiceLabel(paymentChoice.label)"></label>
-                      <span class="amount-input-wrapper">
+                    <div
+                      v-if="paymentChoice.maxBound !== 0"
+                      class="amount-choice"
+                      :class="traumaKind(paymentChoice.label) ? `amount-choice--${traumaKind(paymentChoice.label)}` : null"
+                    >
+                      <label :for="`choice-${paymentChoice.choiceId}`">
                         <span
                           v-if="traumaIcon(paymentChoice.label)"
-                          class="amount-input-icon"
-                          :class="`amount-input-icon--${traumaKind(paymentChoice.label)}`"
+                          class="amount-choice-icon"
                           :style="traumaIconStyle(paymentChoice.label)"
                         ></span>
-                        <input
-                          :id="`choice-${paymentChoice.choiceId}`"
-                          class="amount-input"
-                          :class="{ 'with-icon': traumaIcon(paymentChoice.label) }"
-                          type="number"
-                          :min="paymentChoice.minBound"
-                          :max="paymentChoice.maxBound"
-                          v-model.number="amountSelections[paymentChoice.choiceId]"
-                          :name="`choice-${paymentChoice.choiceId}`"
-                          onclick="this.select()"
-                        />
-                      </span>
+                        <span v-html="paymentChoiceLabel(paymentChoice.label)"></span>
+                      </label>
+                      <input
+                        :id="`choice-${paymentChoice.choiceId}`"
+                        class="amount-input"
+                        type="number"
+                        :min="paymentChoice.minBound"
+                        :max="paymentChoice.maxBound"
+                        v-model.number="amountSelections[paymentChoice.choiceId]"
+                        :name="`choice-${paymentChoice.choiceId}`"
+                        onclick="this.select()"
+                      />
                     </div>
                   </template>
                 </div>
@@ -889,10 +1188,10 @@ const filteredCards = computed<{ choice: CardLabel; index: number }[]>(() => {
     </div>
     <template v-else-if="question && question.tag === 'QuestionLabel' && question.question.tag !== 'DropDown'">
       <div v-if="questionImage" class="question-image">
-        <img :src="questionImage" class="card" />
+        <CardImage v-if="questionCard" :card="questionCard" class="card" />
       </div>
     </template>
-    <div v-if="doneLabel && doneIsFooter">
+    <div v-if="doneLabel && doneIsFooter" class="done-choice">
       <button class="done" @click="$emit('choose', doneLabel.index)" v-html="label(doneLabel.label)"></button>
     </div>
   </div>
@@ -1026,6 +1325,7 @@ section {
       content: "";
       filter: blur(0.25em);
       z-index: var(--z-index-1);
+      pointer-events: none;
     }
     h1 {
       color: #19214F;
@@ -1340,6 +1640,15 @@ h2 {
   flex-wrap: wrap;
 }
 
+.focused-cards .group-cards {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.focused-cards .searched-card {
+  flex: 0 0 auto;
+}
+
 .question-label:has(.amount-modal),
 .question-content:has(.amount-modal) {
   width: 100%;
@@ -1412,7 +1721,23 @@ h2 {
   max-width: 100%;
 }
 
+/* Two side by side leaves the label about 45px once the number field has taken
+   its 5.5rem, which clips "Physical" down to its first letter. Stack them. */
+@media (max-width: 700px) {
+  .amount-choice {
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+
+  .amount-input {
+    padding: 0.75em 0.65em;
+  }
+}
+
 .amount-choice label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: #f6edf8;
   font-size: 1.05em;
   font-weight: 700;
@@ -1420,34 +1745,46 @@ h2 {
   text-align: left;
 }
 
-.amount-input-wrapper {
-  position: relative;
-  display: block;
-  min-width: 0;
+/* Physical and mental trauma are the same shape of question but not the same
+   decision, so each field carries its own colour rather than an icon tucked
+   inside a shared input. */
+.amount-choice--health {
+  background: rgba(174, 66, 54, 0.18);
+  border-color: rgba(232, 139, 128, 0.38);
 }
 
-.amount-input-icon {
-  position: absolute;
-  top: 50%;
-  left: 0.55em;
-  width: 1.1em;
-  height: 1.1em;
-  transform: translateY(-50%);
-  pointer-events: none;
+.amount-choice--horror {
+  background: rgba(44, 127, 192, 0.18);
+  border-color: rgba(124, 192, 240, 0.38);
+}
+
+.amount-choice--health label {
+  color: #f3c3bd;
+}
+
+.amount-choice--horror label {
+  color: #bcdff7;
+}
+
+.amount-choice--health .amount-input {
+  background: #f4ece9;
+}
+
+.amount-choice--horror .amount-input {
+  background: #e9eef4;
+}
+
+.amount-choice-icon {
+  flex-shrink: 0;
+  width: 1.15em;
+  height: 1.15em;
+  background-color: currentColor;
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
-}
-
-.amount-input-icon--health {
-  background-color: #d44;
-}
-
-.amount-input-icon--horror {
-  background-color: #1f6fbf;
 }
 
 .amount-input {
@@ -1462,10 +1799,6 @@ h2 {
   font-weight: 800;
   text-align: center;
   box-sizing: border-box;
-}
-
-.amount-input.with-icon {
-  padding-left: 2em;
 }
 
 .amount-input::-webkit-inner-spin-button,
@@ -1585,6 +1918,13 @@ h2 {
 .extend-search:hover {
   background: rgba(214, 205, 174, 0.14);
   border-color: rgba(214, 205, 174, 0.7);
+}
+
+/* Keep focus rings inside clipped panels without changing button spacing. */
+.done:focus-visible,
+:deep(.question-choices button:focus-visible),
+:deep(.question-choices a.button:focus-visible) {
+  outline-offset: -4px;
 }
 
 .done {
@@ -1795,6 +2135,7 @@ h2 {
       content: "";
       filter: blur(0.25em);
       z-index: var(--z-index-1);
+      pointer-events: none;
     }
     h1 {
       color: #19214F;
@@ -1866,8 +2207,9 @@ h2 {
   }
   > .question-image {
     justify-content: flex-start;
+    width: calc(var(--card-width) * 4);
     img  {
-      width: calc(var(--card-width) * 4);
+      width: 100%;
       flex-basis: unset;
       flex-shrink: unset;
       height: auto;
@@ -1942,8 +2284,13 @@ h2 {
   gap: 10px;
 }
 
-.question-wrapper:has(.haunted) {
+.question-wrapper:has(.haunted, .token-reveal) {
   gap: 0;
+
+  :deep(button:active:not(:disabled)),
+  :deep(a.button:active) {
+    transform: none !important;
+  }
 
   :deep(.question-choices) {
     gap: 0;
@@ -1955,6 +2302,9 @@ h2 {
     padding: 0;
   }
 
+}
+
+.question-wrapper:has(.haunted) {
   .done,
   :deep(.question-choices button),
   :deep(.question-choices a.button) {
@@ -1990,6 +2340,19 @@ h2 {
   }
 }
 
+/* CardImage sizes itself for a grid of cards; here it is the one card the prompt
+   is about, so let it fill the wrapper the plain <img> used to. */
+.question-image :deep(.card-container) {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.question-image :deep(.card-container img) {
+  width: 100%;
+  height: auto;
+}
+
 .filter {
   padding-bottom: 10px;
   width: 100%;
@@ -1997,4 +2360,5 @@ h2 {
     width: 100%;
   }
 }
+
 </style>

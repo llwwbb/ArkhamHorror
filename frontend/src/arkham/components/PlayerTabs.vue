@@ -9,11 +9,11 @@ import { ArrowPathIcon } from '@heroicons/vue/20/solid';
 import * as ArkhamGame from '@/arkham/types/Game';
 import type { Investigator } from '@/arkham/types/Investigator';
 import type { Question } from '@/arkham/types/Question';
+import { MessageType } from '@/arkham/types/Message';
 import type { TarotCard } from '@/arkham/types/TarotCard';
-import { imgsrc } from '@/arkham/helpers';
+import { imgsrc, isTypingTarget } from '@/arkham/helpers';
 import { gameLocalStorageKey } from '@/arkham/localStorage';
 import { IsMobile } from '@/arkham/isMobile';
-import { useSettings } from '@/stores/settings'
 import { useDbCardStore } from '@/stores/dbCards'
 
 export interface Props {
@@ -46,13 +46,6 @@ const lead = computed(() => `url('${imgsrc(`tokens/lead-investigator.png`)}')`)
 const { isMobile } = IsMobile();
 const store = useDbCardStore()
 
-// AI-investigator seats carry an entry in settings.aiPlayers. The seat badge is
-// only shown when the dev-only "AI Investigators" flag is enabled.
-const settings = useSettings()
-function isAiSeat(investigator: Investigator): boolean {
-  return settings.aiInvestigatorsEnabled && !!props.game.settings.aiPlayers[investigator.playerId]
-}
-
 function tabClass(investigator: Investigator) {
   const pid = investigator.playerId
 
@@ -68,6 +61,11 @@ function tabClass(investigator: Investigator) {
     },
     `tab--${investigatorClass}`,
   ]
+}
+
+function hasActions(investigator: Investigator) {
+  const pid = investigator.playerId
+  return pid !== selectedTab.value && hasChoices(pid)
 }
 
 function hasSwitch(investigator: Investigator) {
@@ -106,7 +104,13 @@ function selectTab(i: string) {
   resetSwitchStack(i, props.playerId)
 }
 
+// The eye button is the only way to act as another seat, so an explicit perspective
+// switch must outrank automatic routing for the current game step -- otherwise a
+// declinable fast window on the destination seat is filtered out of
+// focusQuestionPlayers() and the sole-question rule immediately routes back to the
+// active investigator, stranding that seat's abilities out of reach (#5350).
 function selectTabExtended(i: string) {
+  manualSelectionAtStep = props.game.scenarioSteps
   selectedTab.value = i
   resetSwitchStack(i, i)
   if (solo?.value && props.playerId !== i && switchInvestigator) {
@@ -137,10 +141,6 @@ const ACTIONABLE_SELECTOR = [
   '.resource--can-take',
 ].join(',')
 
-function isAiPlayer(playerId: string) {
-  return playerId in props.game.settings.aiPlayers
-}
-
 function isEnabledAction(element: Element): element is HTMLElement {
   if (!(element instanceof HTMLElement)) return false
   if (element.matches(':disabled,[aria-disabled="true"]')) return false
@@ -160,14 +160,45 @@ function actionLocations() {
       continue
     }
     const playerId = tab.dataset.playerTab
-    if (playerId && !isAiPlayer(playerId)) tabs.add(playerId)
+    if (playerId) tabs.add(playerId)
   }
 
   return { tabs, outsideTab }
 }
 
 function humanQuestionPlayers() {
-  return Object.keys(props.game.question).filter(pid => !isAiPlayer(pid))
+  return Object.keys(props.game.question)
+}
+
+// An out-of-turn fast player window: a PlayerWindowChooseOne carrying that seat's own
+// Skip Triggers button. It is optional by construction and the engine re-offers it at
+// the next player window, so it must not hold the solo perspective on a seat that is
+// not taking a turn -- otherwise ending "Ashcan" Pete's turn strands you on Pete while
+// Rex, the turn player, waits behind a tab (#5284). Reaction windows decode as
+// WindowChooseOne (isPlayerWindow false) and are deliberately NOT covered: those are
+// tied to something that just happened and still deserve focus.
+function isDeclinableFastWindow(playerId: string) {
+  if (!ArkhamGame.activeQuestionIsPlayerWindow(props.game, playerId)) return false
+  return hasSkipTriggersButton(playerId)
+}
+
+// The seat can walk away from its question. runWindow only offers Skip Triggers for a
+// window it built as skippable, and the forced-ability branch never offers one at all,
+// so this separates "may be held back" from "must claim the perspective to advance the
+// game". Unlike isDeclinableFastWindow it does not require a PlayerWindowChooseOne: the
+// skill test's own fast windows decode as WindowChooseOne (#5730).
+function hasSkipTriggersButton(playerId: string) {
+  return ArkhamGame.choices(props.game, playerId)
+    .some(choice => choice.tag === MessageType.SKIP_TRIGGERS_BUTTON)
+}
+
+// Question seats allowed to claim the perspective. If every seat is a declinable fast
+// window there is nothing better to route to, so fall back to the full list rather than
+// leaving the only answerable question unreachable.
+function focusQuestionPlayers() {
+  const players = humanQuestionPlayers()
+  const focusable = players.filter(pid => !isDeclinableFastWindow(pid))
+  return focusable.length > 0 ? focusable : players
 }
 
 function skillTestPlayerId() {
@@ -206,7 +237,7 @@ function frameIsStillNeeded(frame: SwitchFrame, tabs: Set<string>) {
   }
   if (frame.reason === 'tab-action') return tabs.has(frame.tab)
   if (frame.reason === 'sole-question') {
-    const questionPlayers = humanQuestionPlayers()
+    const questionPlayers = focusQuestionPlayers()
     return questionPlayers.length === 1 && questionPlayers[0] === frame.perspective
   }
   if (frame.reason === 'covered-question') return false
@@ -246,6 +277,34 @@ function unwindSwitchStack(tabs: Set<string>) {
     switchStack.value.pop()
   }
   applyFrame(switchStack.value.at(-1)!)
+}
+
+const tabbableInvestigators = computed(() => [...investigators.value, ...inactiveInvestigators.value])
+
+function seatShortcutIndex(event: KeyboardEvent): number | null {
+  const code = /^(?:Digit|Numpad)([1-4])$/.exec(event.code)
+  if (code) return Number(code[1]) - 1
+  if (/^[1-4]$/.test(event.key)) return Number(event.key) - 1
+  return null
+}
+
+function handleSeatShortcut(event: KeyboardEvent) {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
+  if (isTypingTarget(event.target)) return
+
+  const index = seatShortcutIndex(event)
+  if (index === null) return
+
+  const investigator = tabbableInvestigators.value[index]
+  if (!investigator) return
+
+  event.preventDefault()
+  const pid = investigator.playerId
+  if (event.shiftKey && solo?.value && pid !== props.playerId) {
+    selectTabExtended(pid)
+  } else {
+    selectTab(pid)
+  }
 }
 
 let actionObserver: MutationObserver | null = null
@@ -300,8 +359,12 @@ function inspectActions() {
   manualSelectionAtStep = null
 
   const { tabs, outsideTab } = actionLocations()
-  const questionPlayers = humanQuestionPlayers()
+  const questionPlayers = focusQuestionPlayers()
   const soleQuestionPlayer = questionPlayers.length === 1 ? questionPlayers[0] : null
+  const answerableQuestionPlayers = questionPlayers.filter(pid => ArkhamGame.choices(props.game, pid).length > 0)
+  const soleAnswerableQuestionPlayer = questionPlayers.length > 1 && answerableQuestionPlayers.length === 1
+    ? answerableQuestionPlayers[0]
+    : null
   const skillTestPlayer = skillTestPlayerId()
   const activeQuestionPlayer = activeInvestigatorPlayerId()
   const activePlayerCoversOtherQuestions = solo?.value === true
@@ -309,6 +372,19 @@ function inspectActions() {
     && activeQuestionPlayer !== undefined
     && questionPlayers.includes(activeQuestionPlayer)
     && questionPlayers.every(pid => pid === activeQuestionPlayer || playerCanAnswerAllQuestionsFrom(activeQuestionPlayer, pid))
+
+  // Some shared prompts create a question for every investigator but only give
+  // one of them choices. Route to that investigator instead of leaving an
+  // empty version of the prompt in front of the active investigator.
+  if (solo?.value === true && soleAnswerableQuestionPlayer) {
+    automaticSwitchCandidate = null
+    if (selectedTab.value !== soleAnswerableQuestionPlayer || props.playerId !== soleAnswerableQuestionPlayer) {
+      // This decision comes from the settled game question rather than
+      // transient DOM controls, so it does not need the action stability delay.
+      pushAutomaticFrame(soleAnswerableQuestionPlayer, soleAnswerableQuestionPlayer, 'sole-question')
+    }
+    return
+  }
 
   // Keep the active investigator in view when they can answer every question
   // offered to the other investigators. Switching tabs adds no capability and
@@ -323,11 +399,46 @@ function inspectActions() {
     return
   }
 
+  // The only control for the sole question can live in another investigator's
+  // play area: a forced ability, or a target choice such as Correlate All Its
+  // Contents placing a charge on an asset controlled by an investigator at your
+  // location (#5495). The sole-question rule below would otherwise keep the
+  // question owner's own -- empty -- tab in front of them. Keep their
+  // perspective while showing the only tab where the control can be selected.
+  if (solo?.value === true && soleQuestionPlayer && tabs.size === 1 && !tabs.has(soleQuestionPlayer)) {
+    const [actionTab] = tabs
+    if (selectedTab.value !== actionTab || props.playerId !== soleQuestionPlayer) {
+      if (!automaticSwitchIsStable(`action-tab:${actionTab}:${soleQuestionPlayer}`)) return
+      pushAutomaticFrame(actionTab, soleQuestionPlayer, 'sole-question')
+    } else {
+      automaticSwitchCandidate = null
+    }
+    return
+  }
+
   // A sole question owns the tab even if Vue has left stale actionable controls
-  // on another tab. During a skill test, however, another investigator's fast
-  // window does not pull focus away from the test taker unless that
-  // investigator's tab is the sole place with an actionable control.
-  if (solo?.value === true && soleQuestionPlayer && (!skillTestPlayer || soleQuestionPlayer === skillTestPlayer)) {
+  // on another tab. During a skill test, however, another investigator's
+  // declinable window does not pull focus away from the test taker unless that
+  // investigator's tab is the sole place with an actionable control. The test's
+  // own ST1/ST2 windows decode as WindowChooseOne rather than
+  // PlayerWindowChooseOne, so this asks for the Skip Triggers button directly
+  // instead of going through isDeclinableFastWindow, which would never match
+  // here and would hand every bystander's fast window the perspective (#5730).
+  //
+  // Only a *declinable* window may be held back that way. game.skillTest stays
+  // populated after the test resolves, while the consequences of the result are
+  // still resolving -- an Arcane Barrier leave cost that fails can discard the
+  // location, move everyone off it, and hand each investigator in turn a forced
+  // ability, all with the failed test still open. A forced ability carries no
+  // Skip Triggers button, cannot be declined and is the only thing that can
+  // advance the game, so it has to claim the perspective even then; otherwise
+  // the sole answerable question sits behind a tab with no control rendered
+  // anywhere on screen.
+  const skillTestHoldsFocus =
+    !!skillTestPlayer
+    && soleQuestionPlayer !== skillTestPlayer
+    && hasSkipTriggersButton(soleQuestionPlayer as string)
+  if (solo?.value === true && soleQuestionPlayer && !skillTestHoldsFocus) {
     if (selectedTab.value !== soleQuestionPlayer || props.playerId !== soleQuestionPlayer) {
       if (!automaticSwitchIsStable(`sole-question:${soleQuestionPlayer}`)) return
       pushAutomaticFrame(soleQuestionPlayer, soleQuestionPlayer, 'sole-question')
@@ -364,9 +475,11 @@ onMounted(() => {
     })
   }
   scheduleActionInspection()
+  document.addEventListener('keydown', handleSeatShortcut)
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleSeatShortcut)
   actionObserver?.disconnect()
   if (inspectionFrame !== null) cancelAnimationFrame(inspectionFrame)
 })
@@ -387,9 +500,9 @@ watch(
         @click='selectTab(investigator.playerId)'
         :class='tabClass(investigator)'
       >
+        <i v-if="hasActions(investigator)" class="tab-pulse" aria-hidden="true"></i>
         <span v-if="isMobile">{{ getInvestigatorName(investigator.name.title).split(' ')[0] }}</span>
         <span v-else>{{ getInvestigatorName(investigator.name.title) }}</span>
-        <span v-if="isAiSeat(investigator)" class="ai-badge" v-tooltip="'AI controlled'">AI</span>
         <button
           v-if="solo"
           v-tooltip="instructions(investigator)"
@@ -408,8 +521,8 @@ watch(
         class="inactive"
         :class='tabClass(investigator)'
       >
+        <i v-if="hasActions(investigator)" class="tab-pulse" aria-hidden="true"></i>
         <span>{{ investigator.name.title }}</span>
-        <span v-if="isAiSeat(investigator)" class="ai-badge" v-tooltip="'AI controlled'">AI</span>
         <button
           v-if="solo"
           v-tooltip="instructions(investigator)"
@@ -511,9 +624,19 @@ ul.tabs__header > li.tab--selected {
 
 ul.tabs__header > li.tab--has-actions {
   opacity: 0.85;
+}
+
+/* Runs for as long as another seat has something to do -- most of the game in
+   multi-handed solo. Pulsing a layer's opacity stays on the compositor;
+   pulsing box-shadow repainted the tab every frame. */
+.tab-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--select) 70%, transparent),
-    0 0 7px color-mix(in srgb, var(--select) 28%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--select) 88%, transparent),
+    0 0 9px color-mix(in srgb, var(--select) 36%, transparent);
   animation: tab-action-pulse 1.8s ease-in-out infinite alternate;
 }
 
@@ -589,22 +712,9 @@ ul.tabs__header > li.tab--has-actions {
   }
 }
 
-.ai-badge {
-  align-self: center;
-  margin-right: 5px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 0.65em;
-  font-weight: bold;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-  color: #d7e8b0;
-  background: rgba(110, 134, 64, 0.45);
-  border: 1px solid rgba(110, 134, 64, 0.7);
-  text-transform: uppercase;
-}
-
 .fa-icon {
+  color: var(--select);
+  text-shadow: 0 0 10px var(--select);
   animation: glow 1.5s infinite alternate;
 }
 
@@ -633,27 +743,13 @@ ul.tabs__header > li.tab--has-actions {
 }
 
 @keyframes tab-action-pulse {
-  from {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--select) 58%, transparent),
-      0 0 4px color-mix(in srgb, var(--select) 18%, transparent);
-  }
-  to {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--select) 88%, transparent),
-      0 0 9px color-mix(in srgb, var(--select) 36%, transparent);
-  }
+  from { opacity: 0.45; }
+  to { opacity: 1; }
 }
 
 @keyframes glow {
-  from {
-    color: #000; /* Or any other default color */
-    text-shadow: 0 0 0px var(--select);
-  }
-  to {
-    color: var(--select); /* Glowing color */
-    text-shadow: 0 0 10px var(--select);
-  }
+  from { opacity: 0.35; }
+  to { opacity: 1; }
 }
 
 ul.tabs__header > li.inactive {

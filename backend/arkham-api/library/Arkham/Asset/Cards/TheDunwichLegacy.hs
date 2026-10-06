@@ -40,6 +40,9 @@ duke =
     $ (asset "02014" ("Duke" <:> "Loyal Hound") 2 Neutral)
       { cdCardTraits = setFromList [Ally, Creature]
       , cdUnique = True
+      , -- "Cat" and "Dog" are not printed traits; the tag is how the engine knows
+        -- which allies satisfy The Dream-Eaters' "Barkham Horror Enthusiast".
+        cdTags = ["dog"]
       }
 
 blackjack :: CardDef
@@ -172,8 +175,7 @@ jazzMulligan =
 
 professorWarrenRice :: CardDef
 professorWarrenRice =
-  ( storyAsset "02061" ("Professor Warren Rice" <:> "Professor of Languages") 3 ExtracurricularActivity
-  )
+  (storyAsset "02061" ("Professor Warren Rice" <:> "Professor of Languages") 3 ExtracurricularActivity)
     { cdSkills = [#intellect, #wild]
     , cdCardTraits = setFromList [Ally, Miskatonic]
     , cdUnique = True
@@ -221,6 +223,7 @@ adaptable1 =
     $ (asset "02110" "Adaptable" 0 Rogue)
       { cdCardTraits = setFromList [Talent]
       , cdLevel = Just 1
+      , cdTags = [noGameplayEffectTag]
       }
 
 songOfTheDead2 :: CardDef
@@ -333,6 +336,7 @@ relicHunter3 =
       { cdCardTraits = singleton Talent
       , cdLevel = Just 3
       , cdAlternateCardCodes = ["01695", "12096"]
+      , cdTags = [setupOnlyTag]
       }
 
 charisma3 :: CardDef
@@ -342,6 +346,7 @@ charisma3 =
       { cdCardTraits = singleton Talent
       , cdLevel = Just 3
       , cdAlternateCardCodes = ["01694", "12095"]
+      , cdTags = [setupOnlyTag]
       }
 
 helplessPassenger :: CardDef

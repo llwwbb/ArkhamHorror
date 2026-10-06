@@ -8,7 +8,7 @@ import * as Message from '@/arkham/types/Message'
 // 只替换 cardDecoder（真实解码太重），其余导出（cardContentsDecoder 等）保持原样
 vi.mock('@/arkham/types/Card', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  cardDecoder: { decodePromise: (x: any) => Promise.resolve(x) },
+  cardDecoder: (await import('ts.data.json')).succeed(),
 }))
 
 // 捕获 useWebSocket 的回调，模拟服务器推送
@@ -76,7 +76,7 @@ describe('useGameSocket', () => {
     const { socket } = makeSocket()
     await flush()
     pushMessage({ tag: 'GameMessage', contents: 'hello' })
-    expect(socket.gameLog.value).toContain('hello')
+    expect(socket.gameLog.value.at(-1)?.body).toEqual([{ tag: 'LogText', contents: 'hello' }])
   })
 
   it('GameAchievement 通知调用方显示成就', async () => {
@@ -133,9 +133,7 @@ describe('useGameSocket', () => {
     modals.uiLock.value = true
     await nextTick() // 让 watcher 先观察到锁定，否则同 tick 内 true→false 不触发
     const updated = { log: [], question: { p1: {} }, activePlayerId: 'p1' } as any
-    const decodeSpy = vi
-      .spyOn(Arkham.gameDecoder, 'decodePromise')
-      .mockResolvedValue(updated)
+    const decodeSpy = vi.spyOn(Arkham.gameDecoder, 'decodePromise').mockResolvedValue(updated)
     pushMessage({ tag: 'GameUpdate', contents: '{}' })
     await flush()
     expect(decodeSpy).toHaveBeenCalledOnce()
@@ -239,12 +237,16 @@ describe('useGameSocket', () => {
   it('GameUpdate 解码后更新 game 并预加载图片', async () => {
     const { socket } = makeSocket()
     await flush()
-    const updated = { log: ['l1'], question: { p1: {} }, activePlayerId: 'p1' } as any
+    const updated = {
+      log: [{ tag: 'LogRowLegacy', contents: ['l1', null] }],
+      question: { p1: {} },
+      activePlayerId: 'p1',
+    } as any
     const decodeSpy = vi.spyOn(Arkham.gameDecoder, 'decodePromise').mockResolvedValue(updated)
     pushMessage({ tag: 'GameUpdate', contents: '{}' })
     await flush()
     expect(socket.game.value).toBe(updated)
-    expect(socket.gameLog.value).toEqual(['l1'])
+    expect(socket.gameLog.value[0]?.body).toEqual([{ tag: 'LogText', contents: 'l1' }])
     decodeSpy.mockRestore()
   })
 })

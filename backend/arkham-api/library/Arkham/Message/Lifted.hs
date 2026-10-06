@@ -32,18 +32,21 @@ import Arkham.Discover as X (IsInvestigate (..))
 import Arkham.Discover qualified as Msg
 import Arkham.Draw.Types
 import Arkham.Effect.Builder
-import Arkham.Effect.Types (EffectBuilder (effectBuilderEffectId), Field (..))
+import Arkham.Effect.Types (
+  EffectBuilder (effectBuilderEffectId, effectBuilderSkillTest, effectBuilderWindow),
+  Field (..),
+ )
 import Arkham.Effect.Window
 import Arkham.EffectMetadata (EffectMetadata)
 import Arkham.Enemy.Creation
 import Arkham.Enemy.Helpers qualified as Msg
-import Arkham.Enemy.Types (Field (..))
+import Arkham.Enemy.Types (Enemy, Field (..))
 import Arkham.Evade
 import Arkham.Evade qualified as Evade
 import Arkham.Exhaust qualified as Exhaust
 import Arkham.Fight
 import Arkham.Fight qualified as Fight
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers.Act
 import Arkham.Helpers.Agenda
 import Arkham.Helpers.Campaign qualified as Msg
@@ -106,7 +109,6 @@ import Arkham.Source
 import Arkham.Spawn
 import Arkham.Target
 import Arkham.Token
-import Arkham.Tracing
 import Arkham.Trait (Trait)
 import Arkham.Window (Window (..))
 import Arkham.Window qualified as Window
@@ -147,6 +149,35 @@ gainXp iid (toSource -> source) from xp = do
     let report = XpBreakdown [InvestigatorGainXp iid $ XpDetail XpFromCardEffect ("$" <> from) xp]
     push $ ReportXp report
     push $ GainXP iid source xp
+
+{- | Report a non-XP campaign counter (Yig's Fury, ...) into the current step's
+breakdown so the campaign log can show where it came from. @tally@ is the
+i18n key naming the counter, @from@ the i18n key or title naming the source.
+The plain forms are scenario-wide; the @...For@ forms attribute the counter to
+a single investigator.
+-}
+reportTally :: ReverseQueue m => Text -> Text -> Int -> m ()
+reportTally = tallyReport TallyGained Nothing
+
+reportTallyFor :: ReverseQueue m => InvestigatorId -> Text -> Text -> Int -> m ()
+reportTallyFor iid = tallyReport TallyGained (Just iid)
+
+reportTallyLost :: ReverseQueue m => Text -> Text -> Int -> m ()
+reportTallyLost = tallyReport TallyLost Nothing
+
+reportTallyLostFor :: ReverseQueue m => InvestigatorId -> Text -> Text -> Int -> m ()
+reportTallyLostFor iid = tallyReport TallyLost (Just iid)
+
+tallyReport
+  :: ReverseQueue m
+  => (Text -> Maybe InvestigatorId -> XpDetail -> XpEntry)
+  -> Maybe InvestigatorId
+  -> Text
+  -> Text
+  -> Int
+  -> m ()
+tallyReport entry mOwner tally from n =
+  push $ ReportXp $ XpBreakdown [entry tally mOwner $ XpDetail XpFromCardEffect from n]
 
 allGainXpEdit'
   :: (ReverseQueue m, Sourceable source)
@@ -606,6 +637,9 @@ spawnEnemyAt_ card location = do
 addChaosToken :: ReverseQueue m => ChaosTokenFace -> m ()
 addChaosToken = push . AddChaosToken
 
+addChaosTokenForGame :: ReverseQueue m => ChaosTokenFace -> m ()
+addChaosTokenForGame = push . AddChaosTokenForGame
+
 removeChaosToken :: ReverseQueue m => ChaosTokenFace -> m ()
 removeChaosToken = push . RemoveChaosToken
 
@@ -640,6 +674,7 @@ spendClues
   => investigator
   -> Int
   -> m ()
+spendClues _investigator 0 = pure ()
 spendClues investigator n = push $ InvestigatorSpendClues (asId investigator) n
 
 spendCluesAsAGroup
@@ -647,7 +682,16 @@ spendCluesAsAGroup
   => [InvestigatorId]
   -> Int
   -> m ()
+spendCluesAsAGroup _investigators 0 = pure ()
 spendCluesAsAGroup investigators n = push $ SpendClues n investigators
+
+spendCluesAsAGroupMatch
+  :: ReverseQueue m
+  => Int
+  -> InvestigatorMatcher
+  -> m ()
+spendCluesAsAGroupMatch 0 = const (pure ())
+spendCluesAsAGroupMatch n = select >=> (`spendCluesAsAGroup` n)
 
 gainClues
   :: (ReverseQueue m, Sourceable source, AsId investigator, IdOf investigator ~ InvestigatorId)
@@ -682,6 +726,7 @@ removeAllClues source target = push $ RemoveAllClues (toSource source) (toTarget
 
 placeTokens
   :: (ReverseQueue m, Sourceable source, Targetable target) => source -> target -> Token -> Int -> m ()
+placeTokens _source _lid _token 0 = pure ()
 placeTokens source lid token n = push $ PlaceTokens (toSource source) (toTarget lid) token n
 
 placeTokensOn
@@ -780,7 +825,7 @@ drawAnotherChaosToken iid = do
     Just _ -> push $ DrawAnotherChaosToken iid
     Nothing -> push $ RequestAnotherChaosToken iid GameSource
 
-eachInvestigator :: (HasGame m, Tracing m) => (InvestigatorId -> m ()) -> m ()
+eachInvestigator :: HasGame m => (InvestigatorId -> m ()) -> m ()
 eachInvestigator f = do
   inResolution <- getInResolution
   investigators <- if inResolution then allInvestigators else getInvestigators
@@ -796,7 +841,7 @@ forInvestigator' :: ReverseQueue m => InvestigatorId -> QueueT Message m () -> m
 forInvestigator' iid = capture >=> traverse_ (forInvestigator iid)
 
 selectEachDiscardable
-  :: (HasCardCode a, HasGame m, Tracing m)
+  :: (HasCardCode a, HasGame m)
   => a -> (forall target. Targetable target => target -> m ()) -> m ()
 selectEachDiscardable (toCardCode -> cardCode) f = do
   selectEach (AssetIs cardCode <> DiscardableAsset) f
@@ -1025,44 +1070,18 @@ chooseAmountsLabeled iid title label total choiceMap target = do
   player <- getPlayer iid
   Msg.pushM $ Msg.chooseAmountsLabeled player title label total choiceMap target
 
+chooseAmountI18n
+  :: (Targetable target, ReverseQueue m)
+  => InvestigatorId
+  -> Text
+  -> Text
+  -> Int
+  -> Int
+  -> target
+  -> m ()
+chooseAmountI18n iid label choiceLabel minVal maxVal target = withI18n $ chooseAmount iid label choiceLabel minVal maxVal target
+
 chooseAmount
-  :: (Targetable target, ReverseQueue m)
-  => InvestigatorId
-  -> Text
-  -> Text
-  -> Int
-  -> Int
-  -> target
-  -> m ()
-chooseAmount iid label choiceLabel minVal maxVal target = do
-  unless (maxVal == 0) do
-    player <- getPlayer iid
-    Msg.pushM
-      $ Msg.chooseAmounts player label (MaxAmountTarget maxVal) [(choiceLabel, (minVal, maxVal))] target
-
--- Don't use this yet
-chooseAmountLabeled
-  :: (Targetable target, ReverseQueue m)
-  => InvestigatorId
-  -> Text
-  -> Text
-  -> Text
-  -> Int
-  -> Int
-  -> target
-  -> m ()
-chooseAmountLabeled iid title label choiceLabel minVal maxVal target = do
-  player <- getPlayer iid
-  Msg.pushM
-    $ Msg.chooseAmountsLabeled
-      player
-      title
-      label
-      (MaxAmountTarget maxVal)
-      [(choiceLabel, (minVal, maxVal))]
-      target
-
-chooseAmount'
   :: (Targetable target, ReverseQueue m, HasI18n)
   => InvestigatorId
   -> Text
@@ -1071,7 +1090,7 @@ chooseAmount'
   -> Int
   -> target
   -> m ()
-chooseAmount' iid label choiceLabel minVal maxVal target = do
+chooseAmount iid label choiceLabel minVal maxVal target = do
   player <- getPlayer iid
   Msg.pushM
     $ Msg.chooseAmounts
@@ -1082,7 +1101,7 @@ chooseAmount' iid label choiceLabel minVal maxVal target = do
       target
 
 -- Don't use this yet
-chooseAmountLabeled'
+chooseAmountLabeled
   :: (Targetable target, ReverseQueue m, HasI18n)
   => InvestigatorId
   -> Text
@@ -1092,7 +1111,7 @@ chooseAmountLabeled'
   -> Int
   -> target
   -> m ()
-chooseAmountLabeled' iid title label choiceLabel minVal maxVal target = do
+chooseAmountLabeled iid title label choiceLabel minVal maxVal target = do
   player <- getPlayer iid
   Msg.pushM
     $ Msg.chooseAmountsLabeled
@@ -1114,6 +1133,33 @@ chooseInvestigatorAmounts iid label maxAmount iids target = do
     (TotalAmountTarget maxAmount)
     (map (\x -> (toTitle x, (0, maxAmount))) xs)
     target
+
+{- | Like 'chooseAmounts', but keys each choice by the asset's own id so the
+answer maps back to a specific asset even when two copies share a name.
+-}
+chooseAssetAmounts
+  :: (ReverseQueue m, Targetable target)
+  => InvestigatorId -> Text -> Int -> [AssetId] -> target -> m ()
+chooseAssetAmounts iid label maxAmount assets target = do
+  player <- getPlayer iid
+  choices <- for assets \aid -> do
+    name <- field Field.AssetName aid
+    pure $ AmountChoice (unAssetId aid) (toTitle name) 0 maxAmount
+  push $ Ask player $ ChooseAmounts label (TotalAmountTarget maxAmount) choices (toTarget target)
+
+{- | Like 'chooseAssetAmounts', but for enemies, distributing *up to* @maxAmount@.
+Keyed by enemy id so the answer maps back to a specific enemy even when two
+copies share a name.
+-}
+chooseEnemyAmounts
+  :: (ReverseQueue m, Targetable target)
+  => InvestigatorId -> Text -> Int -> [EnemyId] -> target -> m ()
+chooseEnemyAmounts iid label maxAmount enemies target = do
+  player <- getPlayer iid
+  choices <- for enemies \eid -> do
+    name <- field EnemyName eid
+    pure $ AmountChoice (unEnemyId eid) (toTitle name) 0 maxAmount
+  push $ Ask player $ ChooseAmounts label (MaxAmountTarget maxAmount) choices (toTarget target)
 
 withInvestigatorAmounts
   :: ReverseQueue m => [(NamedUUID, Int)] -> (InvestigatorId -> Int -> m ()) -> m ()
@@ -1168,6 +1214,26 @@ createCardEffect
   -> target
   -> m ()
 createCardEffect def mMeta source target = push =<< Msg.createCardEffect def mMeta source target
+
+-- A card effect that lives exactly as long as one skill test. The skill test
+-- window lets Effect.Runner disable it at ST.8 (SkillTestEnded, *after* the
+-- "skill test ended" window) rather than at SkillTestEnds, which fires before
+-- that window and so before a repeat can be declared, and re-point it when the
+-- test is repeated. The re-point is gated on the effect's source matching the
+-- test's source, so only what is inherent to the test carries over.
+createSkillTestCardEffect
+  :: (ReverseQueue m, Sourceable source, Targetable target)
+  => SkillTestId
+  -> CardDef
+  -> Maybe (EffectMetadata Message)
+  -> source
+  -> target
+  -> m ()
+createSkillTestCardEffect sid def mMeta source target = do
+  builder <- Msg.makeEffectBuilder def.cardCode mMeta source target
+  push
+    $ Msg.CreateEffect
+      builder {effectBuilderSkillTest = Just sid, effectBuilderWindow = Just (EffectSkillTestWindow sid)}
 
 createCardEffectCapture
   :: (ReverseQueue m, Sourceable source, Targetable target)
@@ -1805,6 +1871,24 @@ drawCardsEdit
   -> m ()
 drawCardsEdit = drawCardsIfCanWith
 
+{- | "Draw the bottom card of your deck": an ordinary draw taken off the bottom
+of the deck. It does not search and does not shuffle.
+-}
+drawCardsFromBottom
+  :: (ReverseQueue m, Sourceable source, AsId investigator, IdOf investigator ~ InvestigatorId)
+  => investigator
+  -> source
+  -> Int
+  -> m ()
+drawCardsFromBottom iid source n = drawCardsEdit iid source n drawFromBottom
+
+drawCardFromBottom
+  :: (ReverseQueue m, Sourceable source, AsId investigator, IdOf investigator ~ InvestigatorId)
+  => investigator
+  -> source
+  -> m ()
+drawCardFromBottom iid source = drawCardsFromBottom iid source 1
+
 forcedDrawCards
   :: (ReverseQueue m, Sourceable source, AsId investigator, IdOf investigator ~ InvestigatorId)
   => investigator
@@ -2225,29 +2309,40 @@ oncePerAbility attrs n f = do
 
 insertAfterMatching
   :: (HasCallStack, MonadTrans t, HasQueue Message m) => [Message] -> (Message -> Bool) -> t m ()
-insertAfterMatching msgs p = lift $ withQueue_ \queue ->
-  let (before, rest) = break p queue
+insertAfterMatching msgs p = do
+  inserted <- insertAfterMatchingMaybe msgs p
+  unless inserted $ error $ "no matching message:\n" <> prettyCallStack callStack
+
+{- | Like 'insertAfterMatching' but reports whether an anchor was found instead of
+erroring, so callers can fall back to another anchor.
+-}
+insertAfterMatchingMaybe
+  :: (MonadTrans t, HasQueue Message m) => [Message] -> (Message -> Bool) -> t m Bool
+insertAfterMatchingMaybe msgs p = lift $ withQueue \queue ->
+  let (before, rest) = break p' queue
    in case rest of
-        (x : xs) -> before <> (x : msgs <> xs)
-        _ -> go [] queue
+        (x : xs) -> (before <> (x : msgs <> xs), True)
+        _ -> maybe (queue, False) (,True) (go [] queue)
  where
-  go _acc [] = error $ "no matching message:\n" <> prettyCallStack callStack
-  go acc (x : xs) = case x of
+  -- see 'QueueWrapper': the anchor may be wrapped in Priority/Retain
+  p' = matchesQueued p
+  go _acc [] = Nothing
+  go acc (x : xs) = case stripQueueWrappers x of
     MoveWithSkillTest inner ->
       case inner of
         Run innerMsgs
           | not (null afterInner)
           , (y : ys) <- afterInner ->
-              reverse acc <> (MoveWithSkillTest (Run (beforeInner <> (y : msgs <> ys))) : xs)
+              Just $ reverse acc <> (MoveWithSkillTest (Run (beforeInner <> (y : msgs <> ys))) : xs)
          where
-          (beforeInner, afterInner) = break p innerMsgs
+          (beforeInner, afterInner) = break p' innerMsgs
         _ -> go (x : acc) xs
     Run innerMsgs
       | not (null afterInner)
       , (y : ys) <- afterInner ->
-          reverse acc <> (Run (beforeInner <> (y : msgs <> ys)) : xs)
+          Just $ reverse acc <> (Run (beforeInner <> (y : msgs <> ys)) : xs)
      where
-      (beforeInner, afterInner) = break p innerMsgs
+      (beforeInner, afterInner) = break p' innerMsgs
     _ -> go (x : acc) xs
 
 afterMove
@@ -2378,11 +2473,18 @@ afterSkillTest
      , HasQueue Message (t m)
      , HasGame (t m)
      , ToId investigator InvestigatorId
-     , HasCallStack
      )
   => investigator -> Text -> QueueT Message (t m) a -> t m ()
 afterSkillTest investigator lbl body = do
   msgs <- capture body
+  let
+    option = [AfterSkillTestOption (asId investigator) lbl msgs]
+    -- the anchor may not exist, for instance a skill test begun with `attrs.ability n`
+    -- as its source never queues a `ResolvedAbility`, so fall back to the end of the
+    -- skill test itself
+    insertAfterOr p = do
+      inserted <- insertAfterMatchingMaybe option p
+      unless inserted $ lift $ insertAfterMatchingOrNow option (== EndSkillTestWindow)
   Msg.getSkillTestSource >>= \case
     Just (AbilitySource s n) -> do
       let
@@ -2391,7 +2493,7 @@ afterSkillTest investigator lbl body = do
           MoveWithSkillTest msg -> isEndOfAbility msg
           ResolvedAbility ab -> ab.source == s && ab.index == n
           _ -> False
-      insertAfterMatching [AfterSkillTestOption (asId investigator) lbl msgs] isEndOfAbility
+      insertAfterOr isEndOfAbility
     Just (EventSource e) -> do
       let
         isEndOfEvent = \case
@@ -2400,8 +2502,8 @@ afterSkillTest investigator lbl body = do
           Run msgs' -> any isEndOfEvent msgs'
           FinishedEvent e' -> e == e'
           _ -> False
-      insertAfterMatching [AfterSkillTestOption (asId investigator) lbl msgs] isEndOfEvent
-    _ -> insertAfterMatching [AfterSkillTestOption (asId investigator) lbl msgs] (== EndSkillTestWindow)
+      insertAfterOr isEndOfEvent
+    _ -> insertAfterOr (== EndSkillTestWindow)
 
 afterSkillTestQuiet
   :: (MonadTrans t, HasQueue Message m, HasQueue Message (t m), HasCallStack)
@@ -2461,6 +2563,19 @@ placeUnderneath
   -> cards
   -> m ()
 placeUnderneath (toTarget -> target) cards = push $ Msg.PlaceUnderneath target $ map toCard (toList cards)
+
+removeFromUnderneath
+  :: ( ReverseQueue m
+     , Targetable target
+     , Element cards ~ card
+     , MonoFoldable cards
+     , IsCard card
+     )
+  => target
+  -> cards
+  -> m ()
+removeFromUnderneath (toTarget -> target) cards =
+  push $ Msg.RemoveFromUnderneath target $ map toCard (toList cards)
 
 gainActions
   :: (ReverseQueue m, Sourceable source, AsId investigator, IdOf investigator ~ InvestigatorId)
@@ -2530,6 +2645,7 @@ uiEffect s t m = Msg.pushM $ Msg.uiEffect s t m
 
 healDamage
   :: (ReverseQueue m, Sourceable source, Targetable target) => target -> source -> Int -> m ()
+healDamage _target _source 0 = pure ()
 healDamage target source n = push $ Msg.HealDamage (toTarget target) (toSource source) n
 
 healDamageDelayed
@@ -2547,6 +2663,7 @@ healDamageIfCan target source n = whenM (canHaveDamageHealed source (asId target
 
 healHorror
   :: (ReverseQueue m, Sourceable source, Targetable target) => target -> source -> Int -> m ()
+healHorror _target _source 0 = pure ()
 healHorror target source n = push $ Msg.HealHorror (toTarget target) (toSource source) n
 
 healHorrorDelayed
@@ -2737,8 +2854,8 @@ quietCancelCardDraw card = do
     Do (InvestigatorDrewEncounterCard _ c) -> c.id == card.id
     Do (InvestigatorDrewEncounterCardFrom _ c _) -> c.id == card.id
     InvestigatorDrewEncounterCard _ c -> c.id == card.id
-    Do (InvestigatorDrewPlayerCardFrom _ c _) -> c.id == card.id
-    InvestigatorDrewPlayerCardFrom _ c _ -> c.id == card.id
+    Do (InvestigatorDrewPlayerCardFrom _ c _ _) -> c.id == card.id
+    InvestigatorDrewPlayerCardFrom _ c _ _ -> c.id == card.id
     DrewTreachery _ _ c -> c.id == card.id
     DrewPlayerEnemy _ c -> c.id == card.id
     Revelation _ (CardIdSource cid) -> cid == card.id
@@ -2757,6 +2874,18 @@ cancelAttack source details = when details.canBeCanceled do
 
 changeAttackDetails :: (ReverseQueue m, AsId a, IdOf a ~ EnemyId) => a -> EnemyAttackDetails -> m ()
 changeAttackDetails eid details = push $ ChangeEnemyAttackDetails (asId eid) details
+
+{- | Patch the attack in flight. Callers hold the copy of 'EnemyAttackDetails'
+frozen into the window they triggered from, which predates anything @Do
+(EnemyAttack)@ or another card in the same window has since written; this reads
+the live record off the enemy so those edits survive. Falls back to the frozen
+copy for a coerced enemy id with no entity behind it ('EnemyLocation').
+-}
+updateAttackDetails
+  :: ReverseQueue m => EnemyAttackDetails -> (EnemyAttackDetails -> EnemyAttackDetails) -> m ()
+updateAttackDetails details f = do
+  live <- fromMaybe details <$> fieldMayJoin EnemyAttacking details.enemy
+  push $ ChangeEnemyAttackDetails details.enemy (f live)
 
 cancelAssetLeavePlay
   :: (MonadTrans t, HasQueue Message m, AsId asset, IdOf asset ~ AssetId)
@@ -2885,7 +3014,7 @@ chaosTokenEffect
 chaosTokenEffect (toSource -> source) token modifier =
   Msg.pushM $ Msg.chaosTokenEffect source token modifier
 
-whenNotAtMax :: (HasGame m, Tracing m) => CardDef -> Int -> (Int -> m ()) -> m ()
+whenNotAtMax :: HasGame m => CardDef -> Int -> (Int -> m ()) -> m ()
 whenNotAtMax def n f = do
   mEffect <-
     selectOne $ EffectWithCardCode "maxef" <> EffectWithTarget (CardCodeTarget $ toCardCode def)
@@ -3211,7 +3340,7 @@ lookAtTopOfDeck
 lookAtTopOfDeck iid target = push $ LookAtTopOfDeck iid (toTarget target) 1
 
 temporaryModifier
-  :: (Targetable target, Sourceable source, HasQueue Message m, MonadRandom m, HasGame m, Tracing m)
+  :: (Targetable target, Sourceable source, HasQueue Message m, MonadRandom m, HasGame m)
   => target
   -> source
   -> ModifierType
@@ -3220,7 +3349,7 @@ temporaryModifier
 temporaryModifier target source modType = temporaryModifiers target source [modType]
 
 temporaryModifiers
-  :: (Targetable target, Sourceable source, HasQueue Message m, MonadRandom m, HasGame m, Tracing m)
+  :: (Targetable target, Sourceable source, HasQueue Message m, MonadRandom m, HasGame m)
   => target
   -> source
   -> [ModifierType]
@@ -3240,7 +3369,6 @@ temporaryModifiersMany
      , HasQueue Message m
      , MonadRandom m
      , HasGame m
-     , Tracing m
      )
   => source
   -> [(target, [ModifierType])]
@@ -3311,8 +3439,13 @@ spendActions = loseActions
 
 requestChaosTokens :: (ReverseQueue m, Sourceable source) => InvestigatorId -> source -> Int -> m ()
 requestChaosTokens iid source n = do
-  push $ RequestChaosTokens (toSource source) (Just iid) (Reveal n) SetAside
+  requestChaosTokens_ iid source n
   resetChaosTokens source
+
+requestChaosTokens_
+  :: (ReverseQueue m, Sourceable source) => InvestigatorId -> source -> Int -> m ()
+requestChaosTokens_ iid source n = do
+  push $ RequestChaosTokens (toSource source) (Just iid) (Reveal n) SetAside
 
 resetChaosTokens :: (ReverseQueue m, Sourceable source) => source -> m ()
 resetChaosTokens source = push $ ResetChaosTokens (toSource source)
@@ -3349,6 +3482,12 @@ cancelMovement source investigator = do
 
 sendMessage :: (ReverseQueue m, Targetable target) => target -> Message -> m ()
 sendMessage target msg = push $ SendMessage (toTarget target) msg
+
+-- | An enemy resolves the enemy phase again: its hunter keyword, then its attack.
+resolveEnemyPhaseOf :: (ReverseQueue m, Targetable target) => target -> m ()
+resolveEnemyPhaseOf enemy = do
+  sendMessage enemy HuntersMove
+  sendMessage enemy (Do EnemiesAttack)
 
 sendMessage' :: (ReverseQueue m, Targetable target) => target -> QueueT Message m () -> m ()
 sendMessage' target body = do
@@ -3405,6 +3544,11 @@ advanceCurrentAgenda _source = do
   agendaId <- getCurrentAgenda
   push $ AdvanceAgendaBy agendaId AgendaAdvancedWithOther
 
+advanceCurrentAgendaByDoom :: ReverseQueue m => source -> m ()
+advanceCurrentAgendaByDoom _source = do
+  agendaId <- getCurrentAgenda
+  push $ AdvanceAgendaBy agendaId AgendaAdvancedWithDoom
+
 advanceCurrentAct :: (ReverseQueue m, Sourceable source) => source -> m ()
 advanceCurrentAct source = do
   actId <- getCurrentAct
@@ -3422,6 +3566,14 @@ updateLocation
   -> a
   -> m ()
 updateLocation lid fld a = push $ UpdateLocation lid $ Update fld a
+
+updateEnemy
+  :: (ReverseQueue m, Ord a, Show a, Typeable a, ToJSON a, FromJSON a)
+  => EnemyId
+  -> Field Enemy a
+  -> a
+  -> m ()
+updateEnemy lid fld a = push $ UpdateEnemy lid $ Update fld a
 
 setActions
   :: (ToId investigator InvestigatorId, Sourceable source, ReverseQueue m)
@@ -3465,7 +3617,7 @@ priority body = do
 simultaneously :: ReverseQueue m => QueueT Message m () -> m ()
 simultaneously body = do
   msgs <- capture body
-  push $ Simultaneously msgs
+  push $ Run [Simultaneously msgs]
 
 flipCluesToDoom :: (ReverseQueue m, Targetable target) => target -> Int -> m ()
 flipCluesToDoom target n = push $ FlipClues (toTarget target) n

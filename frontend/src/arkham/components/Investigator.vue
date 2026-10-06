@@ -7,20 +7,20 @@ import Draggable from '@/components/Draggable.vue';
 import CardView from '@/arkham/components/Card.vue';
 import Modifiers from '@/arkham/components/Modifiers.vue';
 import PendingDamageTokens from '@/arkham/components/PendingDamageTokens.vue';
-import AiTargetMenu from '@/arkham/components/AiTargetMenu.vue';
 import { useDebug } from '@/arkham/debug'
-import { useAi } from '@/arkham/ai'
 import { ForwardIcon, PaperClipIcon } from '@heroicons/vue/20/solid'
 import type { Game } from '@/arkham/types/Game'
 import { imgsrc } from '@/arkham/helpers'
-import { cardArt, cardImage, portraitImage, sourceCardCode } from '@/arkham/cardImages'
+import { cardArt, cardImage, customInvestigatorUsesCardPortrait, portraitImage, sourceCardCode } from '@/arkham/cardImages'
 import * as Arkham from '@/arkham/types/Investigator'
 import type { AbilityLabel, AbilityMessage, Message } from '@/arkham/types/Message'
 import { MessageType } from '@/arkham/types/Message'
 import { cardId, toCardContents } from '@/arkham/types/Card'
-import Token from '@/arkham/components/Token.vue';
+import SealedChaosTokens from '@/arkham/components/SealedChaosTokens.vue';
+import { investigatorTarget, cardDropHandlers } from '@/arkham/debugCardDrop';
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
 import { useMenu } from '@/composable/menu';
+import { useEscape } from '@/composable/escape';
 import { useI18n } from 'vue-i18n';
 import useEmitter from '@/composable/useEmitter';
 import useHighlighter from '@/composable/useHighlighter';
@@ -45,20 +45,23 @@ const highlighter = useHighlighter()
 const isHighlighted = computed(() => highlighter.highlighted.value === props.investigator.id)
 const isAttackTarget = computed(() => props.game.enemyAttackTargets.some((e) => e.target.contents === props.investigator.id))
 const debug = useDebug()
+
+/* One handler reading shiftKey rather than a @click.exact / @click.shift pair: two
+ * competing listeners only agree while the event's modifier state is exactly what
+ * each guard expects, and shift was landing on the .exact one. Matches how
+ * SkillTest.vue and Draw.vue already read the modifier. */
+function debugGainActions(event: MouseEvent) {
+  debug.send(props.game.id, {
+    tag: 'GainActions',
+    contents: [id.value, { tag: 'TestSource', contents: [] }, event.shiftKey ? 5 : 1],
+  })
+}
+// Debug: a chaos token dragged from the bag seals here; a token from the debug
+// token panel is placed here.
+const cardDrop = cardDropHandlers(props.game.id, () => investigatorTarget(props.investigator.id))
 const choose = (idx: number) => emit('choose', idx)
 
-const ai = useAi()
-const aiMenuOpen = ref(false)
-const frame = ref<HTMLElement | null>(null)
-const aiTarget = computed(() => ({ tag: 'InvestigatorTarget', contents: id.value }))
-
-// In "AI targeting mode" a click opens the directive menu instead of selecting
-// the investigator; normal play is untouched when targeting is off.
 function clicked() {
-  if (ai.targeting) {
-    aiMenuOpen.value = true
-    return
-  }
   emit('choose', investigatorAction.value)
 }
 
@@ -79,7 +82,7 @@ watch(() => props.playerId, () => {
         id: `viewBonded-${props.investigator.playerId}`,
         icon: PaperClipIcon,
         content: t('gameBar.viewBonded'),
-        shortcut: "b",
+        binding: "viewBonded",
         nested: 'view',
         action: () => toggleShowBonded()
       })
@@ -212,6 +215,18 @@ const investigatorPortraitImage = computed(() => {
   return portraitImage(props.investigator.cardCode, suffix)
 })
 
+const investigatorPortraitUsesCardArt = computed(() => {
+  if (props.investigator.form.tag !== 'RegularForm') return false
+  const suffix = props.investigator.endedTurn ? 'b' : ''
+  return customInvestigatorUsesCardPortrait(props.investigator.cardCode, suffix)
+})
+
+const investigatorCardPortraitStyle = computed(() => ({
+  // A CSS crop cannot flip like an image element. Keep the recognisable face;
+  // the ended-turn class supplies the visual back-side cue instead.
+  backgroundImage: `url(${JSON.stringify(portraitImage(props.investigator.cardCode))})`,
+}))
+
 const miniCardDevoured = computed(() => {
   const devouredMiniCards = props.game.scenario?.meta?.devouredMiniCards
   return Array.isArray(devouredMiniCards) && devouredMiniCards.includes(id.value)
@@ -237,7 +252,6 @@ const portraitClasses = computed(() => ({
   ethereal: ethereal.value,
   dragging: dragging.value,
   captured: captured.value,
-  'ai-target-hover': ai.targeting,
 }))
 
 const emitter = useEmitter()
@@ -391,6 +405,7 @@ const agility = computed(() => skills.value.agility)
 
 const dragging = ref(false)
 const showModifiers = ref(false)
+useEscape(() => { showModifiers.value = false }, showModifiers)
 function startDrag(event: DragEvent) {
   dragging.value = true
   if (event.dataTransfer) {
@@ -443,7 +458,18 @@ const spadeInjury = computed(() => {
 </script>
 
 <template>
-  <div v-if="portrait" class="portrait-container" ref="frame">
+  <div v-if="portrait" class="portrait-container" ref="frame" :data-id="investigator.id" v-bind="cardDrop">
+    <span
+      v-if="isMobile && isTakingImmediateAction"
+      class="no-free-abilities"
+      v-tooltip="{ content: $t('investigator.freeAbilitiesUnavailable'), html: true }"
+    >
+      <span class="fast-icon"></span>
+      <svg class="no-sign" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="5" y1="5" x2="19" y2="19" />
+      </svg>
+    </span>
     <div
       v-if="miniCardDevoured"
       class="portrait portrait--replacement-marker portrait--devoured-mini-card"
@@ -461,6 +487,19 @@ const spadeInjury = computed(() => {
       {{ replacementMiniCardInitials }}
       <img class="portrait--blob-overlay" :src="imgsrc('extra/the-blob-that-ate-everything/blob-overlay.png')" alt="" aria-hidden="true" />
     </div>
+    <div
+      v-else-if="investigatorPortraitUsesCardArt"
+      class="portrait portrait--card-art"
+      :class="[portraitClasses, { 'portrait--ended-turn': investigator.endedTurn }]"
+      :style="investigatorCardPortraitStyle"
+      :draggable="debug.active"
+      @click="clicked"
+      @dragstart="startDrag($event)"
+      @dragstop="endDrag"
+      @drop="onDrop($event)"
+      @dragover.prevent="dragover($event)"
+      @dragenter.prevent
+    ></div>
     <img
       v-else
       :src="investigatorPortraitImage"
@@ -475,7 +514,7 @@ const spadeInjury = computed(() => {
       @dragenter.prevent
     />
   </div>
-  <div v-else class="player-container">
+  <div v-else class="player-container" v-bind="cardDrop">
     <div class="player-area">
       <div class="player-card">
         <div class="stats">
@@ -484,9 +523,9 @@ const spadeInjury = computed(() => {
           <div class="combat combat-icon">{{combat}}</div>
           <div class="agility agility-icon">{{agility}}</div>
         </div>
-        <div class="investigator-image" ref="frame">
+        <div class="investigator-image" :data-id="investigator.id">
           <img
-            :class="{ 'investigator--can-interact': investigatorAction !== -1, 'ability-target': isHighlighted || isAttackTarget, 'ai-target-hover': ai.targeting }"
+            :class="{ 'investigator--can-interact': investigatorAction !== -1, 'ability-target': isHighlighted || isAttackTarget }"
             class="card card--sideways"
             :src="image"
             @click="clicked"
@@ -501,7 +540,14 @@ const spadeInjury = computed(() => {
             :playerId="investigator.playerId"
             class="investigator-pending-tokens"
           />
-          <Token v-for="sealedToken in investigator.sealedChaosTokens" :key="sealedToken.id" :token="sealedToken" :playerId="playerId" :game="game" @choose="choose" class="sealed" />
+          <div v-if="investigator.sealedChaosTokens.length > 0" class="sealed">
+            <SealedChaosTokens
+              :tokens="investigator.sealedChaosTokens"
+              :game="game"
+              :playerId="playerId"
+              @choose="choose"
+            />
+          </div>
         </div>
       </div>
       <div>
@@ -532,10 +578,7 @@ const spadeInjury = computed(() => {
               </span>
             </span>
             <template v-if="debug.active">
-              <button
-                @click.exact="debug.send(game.id, {tag: 'GainActions', contents: [id, {tag: 'TestSource', contents: []}, 1]})"
-                @click.shift="debug.send(game.id, {tag: 'GainActions', contents: [id, {tag: 'TestSource', contents: []}, 5]})"
-              >+</button>
+              <button v-tooltip="$t('debug.enemy.shiftFive')" @click="debugGainActions">+</button>
             </template>
             <AbilityButton
               v-for="ability in abilities"
@@ -618,14 +661,6 @@ const spadeInjury = computed(() => {
       <button class="close button" @click="toggleShowBonded">{{$t('close')}}</button>
     </Draggable>
   </div>
-  <AiTargetMenu
-    v-model="aiMenuOpen"
-    :frame="frame"
-    kind="investigator"
-    :target="aiTarget"
-    :seat="ai.selectedSeat"
-    :game-id="game.id"
-  />
 </template>
 
 <style scoped>
@@ -812,6 +847,21 @@ i.action {
 .portrait {
   border-radius: 3px;
   width: calc(var(--card-width) * 0.6);
+}
+
+/* A portrait-less custom investigator uses its landscape card without
+ * distorting it: keep the mini's portrait proportions and crop from the left. */
+.portrait--card-art {
+  aspect-ratio: 121 / 186;
+  background-position: 15% bottom;
+  background-repeat: no-repeat;
+  /* Oversize and bottom-align the card so the mini cuts off the title area at
+   * the top rather than squeezing the whole landscape face into view. */
+  background-size: auto 125%;
+}
+
+.portrait--ended-turn {
+  filter: grayscale(1);
 }
 
 .portrait--replacement-marker {
@@ -1156,20 +1206,7 @@ img.card.ability-target {
   box-shadow: 0 0 0 2px var(--highlight), 0 0 6px 1px var(--highlight), var(--card-shadow);
 }
 
-/* Dev-only "AI targeting mode": class is only bound while targeting is on, so
-   normal play is untouched. Green border + pale green wash on hover. Applies to
-   both the full investigator card and the small portrait. */
-.ai-target-hover {
-  cursor: pointer;
-  transition: box-shadow 120ms ease, filter 120ms ease;
-}
 
-.ai-target-hover:hover {
-  border: 2px solid var(--ai-target);
-  border-radius: 3px;
-  box-shadow: 0 0 0 2px var(--ai-target), 0 0 12px 3px rgba(74, 222, 128, 0.55);
-  filter: brightness(1.05) sepia(0.35) hue-rotate(55deg) saturate(1.3);
-}
 
 .card-row-cards {
   display: flex;
@@ -1194,10 +1231,16 @@ img.card.ability-target {
 }
 
 .sealed {
+  --sealed-token-image-width: 30px;
   position: absolute;
-  width: calc(var(--card-width) / 2);
-  left: 0;
+  left: 4px;
   top: calc(var(--card-width) / 2);
+}
+
+/* The fanned-open group reaches past the card, so lift the image above the
+   buttons and cards that follow it. */
+.investigator-image:has(.sealed-chaos-tokens--expanded) {
+  z-index: var(--z-index-30000);
 }
 
 .captured {

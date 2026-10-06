@@ -50,7 +50,7 @@ import Arkham.Evade qualified as Evade
 import Arkham.Exhaust qualified as Exhaust
 import Arkham.Fight
 import Arkham.Fight qualified as Fight
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers
 import Arkham.Helpers.Act
 import Arkham.Helpers.Agenda
@@ -111,7 +111,6 @@ import Arkham.Source
 import Arkham.Spawn
 import Arkham.Target
 import Arkham.Token
-import Arkham.Tracing
 import Arkham.Trait (Trait)
 import Arkham.Window (Window (..), WindowType, defaultWindows)
 import Arkham.Window qualified as Window
@@ -276,6 +275,28 @@ removeLocation (asId -> lid) = do
         maybe (pushAll $ resolve (RemoveLocation lid)) (\_ -> addToVictory_ lid)
           =<< field LocationVictory lid
       else pushAll $ resolve (RemoveLocation lid)
+
+{- | 'removeLocation' without its victory-display diversion. A Victory X location that is being
+shuffled back into a deck has not been overcome, so it must not score.
+-}
+removeLocationWithoutVictory
+  :: (ReverseQueue m, AsId location, IdOf location ~ LocationId) => location -> m ()
+removeLocationWithoutVictory (asId -> lid) =
+  whenM (matches lid $ IncludeEmptySpace $ not_ LocationBeingRemoved)
+    $ pushAll (resolve (RemoveLocation lid))
+
+{- | Announce that a location has left play, and queue the deletion of the
+location entity *behind* the announcement.
+
+Everything standing on the location discards itself in response to
+@RemovedLocation@ (see the @RemovedLocation@ cases in the Enemy, Event, Asset,
+Treachery and Investigator runners). Those pushes prepend, so they land in front
+of the @Do@ queued here and the location entity survives until they are done.
+Pushing the @Do@ from @runGameMessage@ instead would resolve it first, because
+that fans last -- see #5426.
+-}
+removedLocation :: (ReverseQueue m, AsId location, IdOf location ~ LocationId) => location -> m ()
+removedLocation (asId -> lid) = pushAll [RemovedLocation lid, Do (RemovedLocation lid)]
 
 setLocationLabel :: (ToId location LocationId, ReverseQueue m) => location -> Text -> m ()
 setLocationLabel location lbl = push $ SetLocationLabel (asId location) lbl

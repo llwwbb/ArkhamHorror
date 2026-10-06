@@ -50,6 +50,7 @@ data instance Field Act :: Type -> Type where
   ActDeckId :: Field Act Int
   ActAbilities :: Field Act [Ability]
   ActCard :: Field Act Card
+  ActCardsUnderneath :: Field Act [Card]
   ActUsedWheelOfFortuneX :: Field Act Bool
   ActKeys :: Field Act (Set ArkhamKey)
 
@@ -82,6 +83,7 @@ instance FromJSON (SomeField Act) where
     "ActDeckId" -> pure $ SomeField ActDeckId
     "ActAbilities" -> pure $ SomeField ActAbilities
     "ActCard" -> pure $ SomeField ActCard
+    "ActCardsUnderneath" -> pure $ SomeField ActCardsUnderneath
     "ActUsedWheelOfFortuneX" -> pure $ SomeField ActUsedWheelOfFortuneX
     "ActKeys" -> pure $ SomeField ActKeys
     _ -> fail "unknown field"
@@ -206,13 +208,14 @@ instance FromJSON ActAttrs where
     actCardId <- v .: "cardId"
     actSequence <- v .: "sequence"
     actAdvanceCost <- v .:? "advanceCost"
-    actTokens <- v .:? "tokens" >>= \case
-      Just tokens -> pure tokens
-      -- Fallback for games serialized before acts tracked a token map: lift the
-      -- old standalone clue count into the tokens map.
-      Nothing -> do
-        clues <- v .:? "clues" .!= 0
-        pure $ if clues > 0 then singletonMap Clue clues else mempty
+    actTokens <-
+      v .:? "tokens" >>= \case
+        Just tokens -> pure tokens
+        -- Fallback for games serialized before acts tracked a token map: lift the
+        -- old standalone clue count into the tokens map.
+        Nothing -> do
+          clues <- v .:? "clues" .!= 0
+          pure $ if clues > 0 then singletonMap Clue clues else mempty
     actDeckId <- v .: "deckId"
     actBreaches <- v .:? "breaches"
     actUsedWheelOfFortuneX <- v .: "usedWheelOfFortuneX"
@@ -294,6 +297,9 @@ instance Entity Act where
   toId = toId . toAttrs
   toAttrs (Act a) = toAttrs a
   overAttrs f (Act a) = Act $ overAttrs f a
+
+instance HasCardCode Act where
+  toCardCode = toCardCode . toAttrs
 
 instance Targetable Act where
   toTarget = toTarget . toAttrs

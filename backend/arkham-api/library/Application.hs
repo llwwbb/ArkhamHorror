@@ -7,9 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Application (
-  getApplicationDev,
   appMain,
-  develMain,
   makeFoundation,
   makeLogWare,
   getAppSettings,
@@ -23,16 +21,22 @@ module Application (
   db,
 ) where
 
-import Api.Arkham.Helpers (roomHeartbeat)
+import Api.Arkham.Helpers (
+  markPubSubAlive,
+  pubSubHealthChannel,
+  pubSubSupervisor,
+  roomHeartbeat,
+ )
 import Arkham.Metrics qualified as Metrics
 import Config
 import Control.Concurrent.MVar (newMVar)
 import Control.Monad.Logger (liftLoc, runLoggingT)
 import Data.Bugsnag.Settings qualified as Bugsnag
-import Data.CaseInsensitive (mk)
+import Data.CaseInsensitive (foldCase, mk)
 import Data.Default.Class (def)
 import Data.List (lookup)
 import Data.Text qualified as T
+import Data.Time.Clock (getCurrentTime)
 import Data.X509.CertificateStore (readCertificateStore)
 import Database.Persist.Postgresql (
   SqlBackend,
@@ -41,11 +45,11 @@ import Database.Persist.Postgresql (
   pgPoolSize,
  )
 import Database.Redis (
+  ConnectAddr (..),
   ConnectInfo (..),
   checkedConnect,
   newPubSubController,
   parseConnectInfo,
-  pubSubForever,
  )
 import Import hiding (newMVar, sendResponse)
 import Language.Haskell.TH.Syntax (qLocation)
@@ -74,16 +78,21 @@ import Network.Wai.Middleware.RequestLogger (
   mkRequestLogger,
   outputFormat,
  )
-import OpenTelemetry.Trace
 import System.Log.FastLogger (defaultBufSize, newStdoutLoggerSet, toLogStr)
 import Text.Regex.Posix ((=~))
 
 -- Import all relevant handler modules here.
 -- Don't forget to add new modules to your cabal file!
 
+import Api.Handler.ApiKeys
 import Api.Handler.Arkham.Achievements
+import Api.Handler.Arkham.Admin.GameStats
 import Api.Handler.Arkham.Admin.Metrics
 import Api.Handler.Arkham.Cards
+import Api.Handler.Arkham.CustomCards
+import Api.Handler.Arkham.CardSetSubmissions
+import Api.Handler.Arkham.CustomCardSets
+import Api.Handler.Arkham.PublishedCardSets
 import Api.Handler.Arkham.Decks
 import Api.Handler.Arkham.Events
 import Api.Push.Worker (pushNotificationWorker)
@@ -96,6 +105,7 @@ import Api.Handler.Arkham.Old
 import Api.Handler.Arkham.PendingGames
 import Api.Handler.Arkham.Replay
 import Api.Handler.Arkham.Undo
+import Api.Handler.ThirdEdition
 import Base.Api.Handler.Account
 import Base.Api.Handler.Authentication
 import Base.Api.Handler.CurrentUser
@@ -106,6 +116,7 @@ import Base.Api.Handler.Registration
 import Base.Api.Handler.Settings
 import Control.Concurrent (forkIO)
 import Handler.Health
+import ThirdEdition.Store qualified as ThirdEdition
 
 -- This line actually creates our YesodDispatch instance. It is the second half
 -- of the call to mkYesodData which occurs in Foundation.hs. Please see the
@@ -127,25 +138,30 @@ makeFoundation appSettings = do
 
   appGameRooms <- newMVar mempty
   appEventRooms <- newMVar mempty
+  appThirdEditionRooms <- newMVar mempty
+  appPubSubHealth <- newTVarIO =<< getCurrentTime
 
   appMessageBroker <- case appRedisConnectionInfo appSettings of
     Nothing -> pure WebSocketBroker
     Just url -> do
       conn <- checkedConnect =<< fromConnectionUrl url
-      ctrl <- newPubSubController [] []
-      _ <- forkIO $ pubSubForever conn ctrl (pure ())
+      -- The health channel is an INITIAL subscription so 'pubSubForever'
+      -- restores it on every reconnect and the controller is never left with
+      -- zero channels. Per-game channels are added and removed on demand by
+      -- 'getRoomIn' / 'releaseRoomIfEmpty'.
+      ctrl <-
+        newPubSubController
+          [(pubSubHealthChannel, const $ markPubSubAlive appPubSubHealth)]
+          []
+      -- Supervised, not bare: 'pubSubForever' exits on connection loss and
+      -- must be restarted to resubscribe, and it cannot see a half-open
+      -- socket at all. See 'pubSubSupervisor'.
+      _ <- forkIO $ pubSubSupervisor appPubSubHealth conn ctrl
       pure $ RedisBroker conn ctrl
 
-  -- OpenTelemetry is disabled in production: we build a tracer provider with
-  -- no span processors so all spans are silently dropped and no OTLP exporter
-  -- is started. Outside production we still initialize the real global
-  -- tracer provider so local/dev traces work.
-  isProduction <- (== Just "production") <$> lookupEnv "NODE_ENV"
-  provider <-
-    if isProduction
-      then createTracerProvider [] emptyTracerProviderOptions
-      else initializeGlobalTracerProvider
-  let appTracer = makeTracer provider $(detectInstrumentationLibrary) tracerOptions
+  appThirdEditionStore <- case appMessageBroker of
+    RedisBroker conn _ -> ThirdEdition.newRedisStore conn
+    WebSocketBroker -> ThirdEdition.newMemoryStore
 
   -- We need a log function to create a connection pool. We need a connection
   -- pool to create our foundation. And we need our foundation to get a
@@ -190,7 +206,22 @@ makeApplication foundation =
 makeMiddleware :: App -> IO Middleware
 makeMiddleware foundation = do
   logWare <- makeLogWare foundation
-  pure $ gzip def . logWare . handleOptions . addCORSHeaders
+  pure $ gzip def . skipWebSocketLogging logWare . handleOptions . addCORSHeaders
+
+{- | Don't run the access logger for websocket upgrades. 'mkRequestLogger' logs
+once @sendResponse@ returns, which for a hijacked connection is when the
+socket *closes*, and a raw response has no HTTP status so every game socket
+shows up as a bogus @500@. Neither is useful, and the game stream is chatty
+enough to bury real requests.
+-}
+skipWebSocketLogging :: Middleware -> Middleware
+skipWebSocketLogging logWare app req sendResponse
+  | isWebSocketUpgrade = app req sendResponse
+  | otherwise = logWare app req sendResponse
+ where
+  isWebSocketUpgrade =
+    maybe False ((== "websocket") . foldCase)
+      $ lookup "Upgrade" (requestHeaders req)
 
 corsResponseHeaders :: ByteString -> [(ByteString, ByteString)]
 corsResponseHeaders origin =
@@ -259,21 +290,8 @@ warpSettings foundation =
       )
       defaultSettings
 
--- | For yesod devel, return the Warp settings and WAI Application.
-getApplicationDev :: IO (Settings, Application)
-getApplicationDev = do
-  settings <- getAppSettings
-  foundation <- makeFoundation settings
-  wsettings <- getDevSettings $ warpSettings foundation
-  app <- makeApplication foundation
-  pure (wsettings, app)
-
 getAppSettings :: IO AppSettings
 getAppSettings = loadYamlSettings ["config/settings.yml"] [] useEnv
-
--- | main function for use by yesod devel
-develMain :: IO ()
-develMain = develMainHelper getApplicationDev
 
 -- | The @main@ function for an executable running this site.
 appMain :: IO ()
@@ -329,6 +347,15 @@ handler h = getAppSettings >>= makeFoundation >>= flip unsafeHandler h
 db :: ReaderT SqlBackend Handler a -> IO a
 db = handler . runDB
 
+{- | hedis 0.16 replaced ConnectInfo's connectHost/connectPort pair with a
+single connectAddr. Only the host/port form can carry TLS, but keep this
+total by falling back to the socket path.
+-}
+connectAddrHostName :: ConnectAddr -> String
+connectAddrHostName = \case
+  ConnectAddrHostPort host _ -> host
+  ConnectAddrUnixSocket path -> path
+
 -- parse a text url into a redis connection
 fromConnectionUrl :: (MonadFail m, MonadIO m) => Text -> m ConnectInfo
 fromConnectionUrl info = do
@@ -341,7 +368,7 @@ fromConnectionUrl info = do
             $ x
               { connectTLSParams =
                   Just
-                    $ (defaultParamsClient (connectHost x) "")
+                    $ (defaultParamsClient (connectAddrHostName $ connectAddr x) "")
                       { clientSupported = def {supportedCiphers = ciphersuite_strong}
                       , clientShared = def {sharedCAStore = certStore}
                       }

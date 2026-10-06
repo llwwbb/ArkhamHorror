@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import * as Arkham from '@/arkham/types/Game'
-import { LogContents, LogKey, formatKey, logContentsDecoder } from '@/arkham/types/Log'
+import { LogContents, LogKey, formatKey, homebrewScopeFromCampaignId, logContentsDecoder, logKeyTitle } from '@/arkham/types/Log'
 import { toCapitalizedWords, formatContent } from '@/arkham/helpers'
 import { cardArt } from '@/arkham/cardImages'
 import { computed, ref, onMounted, onUnmounted, watch, type Component } from 'vue'
@@ -15,14 +15,17 @@ import KeysStatus from '@/arkham/components/TheScarletKeys/KeysStatus.vue'
 import WorldMap from '@/arkham/components/TheScarletKeys/WorldMap.vue'
 import Supplies from '@/arkham/components/Supplies.vue'
 import XpBreakdown from '@/arkham/components/XpBreakdown.vue'
-import type { XpBreakdownStep } from '@/arkham/types/Xp'
+import { type XpBreakdown as XpBreakdownType, type XpBreakdownStep, xpBreakdownDecoder } from '@/arkham/types/Xp'
+import { type TokenFace, tokenFaceDecoder } from '@/arkham/types/ChaosToken'
+import { type ChaosBagChange, type RecordCountChange, chaosBagChangeDecoder, recordCountChangeDecoder } from '@/arkham/types/Campaign'
+import * as JsonDecoder from 'ts.data.json'
 import InvestigatorRow from '@/arkham/components/InvestigatorRow.vue'
 import CampaignLogSection from '@/arkham/components/CampaignLogSection.vue'
 import CampaignLogSpecialRules from '@/arkham/components/CampaignLogSpecialRules.vue'
 import CampaignLogRecordedSets from '@/arkham/components/CampaignLogRecordedSets.vue'
 import CampaignLogInvestigatorSection from '@/arkham/components/CampaignLogInvestigatorSection.vue'
 import CampaignLogPartners from '@/arkham/components/CampaignLogPartners.vue'
-import { achievementCatalog } from '@/arkham/achievements'
+import { achievementCatalog, activeAchievementPart, type AchievementPart } from '@/arkham/achievements'
 import CampaignLogChaosBag from '@/arkham/components/CampaignLogChaosBag.vue'
 import CampaignLogUltimatumsAndBoons from '@/arkham/components/CampaignLogUltimatumsAndBoons.vue'
 import CampaignLogAchievements from '@/arkham/components/CampaignLogAchievements.vue'
@@ -107,6 +110,9 @@ const campaignDefinition = computed<CampaignDefinition | null>(() => {
   return (campaignJSON as CampaignDefinition[]).find((c) => c.id === campaignId) ?? null
 })
 
+// Scope for homebrew keys recorded before their campaign added a scope prefix.
+const homebrewScope = computed(() => homebrewScopeFromCampaignId(props.game.campaign?.id))
+
 const additionalLogSections = computed(() => campaignDefinition.value?.additional ?? [])
 const additionalTabId = (index: number): `additional:${number}` => `additional:${index}`
 const isAdditionalTab = (tab: LogTab): tab is `additional:${number}` => tab.startsWith('additional:')
@@ -147,13 +153,53 @@ const otherModeTitle = computed(() => {
   return title === 'The Dream-Quest' ? 'The Web of Dreams' : 'The Dream-Quest'
 })
 
+// The mini-campaign being played, when only one half is in play (null = show all).
+const activeCampaignPart = computed<AchievementPart | null>(() =>
+  activeAchievementPart(props.game.campaign?.meta?.campaignMode)
+)
+
+// The whole inactive campaign rides along in the meta for the Dream Eaters A/B split
+const otherCampaignAttrs = computed(() => props.game.campaign?.meta?.otherCampaignAttrs ?? null)
+
 // decode the counterpart log if present (Dream Eaters A/B split)
 const otherLog = ref<LogContents | null>(null)
-if (props.game.campaign?.meta?.otherCampaignAttrs?.log) {
+if (otherCampaignAttrs.value?.log) {
   logContentsDecoder
-    .decodePromise(props.game.campaign.meta.otherCampaignAttrs.log)
+    .decodePromise(otherCampaignAttrs.value.log)
     .then(res => { otherLog.value = res })
     .catch(() => { otherLog.value = null })
+}
+
+const otherXpBreakdown = ref<XpBreakdownType | null>(null)
+if (otherCampaignAttrs.value?.xpBreakdown) {
+  xpBreakdownDecoder
+    .decodePromise(otherCampaignAttrs.value.xpBreakdown)
+    .then(res => { otherXpBreakdown.value = res })
+    .catch(() => { otherXpBreakdown.value = null })
+}
+
+const otherChaosBag = ref<TokenFace[] | null>(null)
+if (otherCampaignAttrs.value?.chaosBag) {
+  JsonDecoder.array(tokenFaceDecoder, 'TokenFace[]')
+    .decodePromise(otherCampaignAttrs.value.chaosBag)
+    .then(res => { otherChaosBag.value = res })
+    .catch(() => { otherChaosBag.value = null })
+}
+
+const otherChaosBagHistory = ref<ChaosBagChange[] | null>(null)
+if (otherCampaignAttrs.value?.chaosBagHistory) {
+  JsonDecoder.array(chaosBagChangeDecoder, 'ChaosBagChange[]')
+    .decodePromise(otherCampaignAttrs.value.chaosBagHistory)
+    .then(res => { otherChaosBagHistory.value = res })
+    .catch(() => { otherChaosBagHistory.value = null })
+}
+
+const otherRecordCountHistory = ref<RecordCountChange[] | null>(null)
+if (otherCampaignAttrs.value?.recordCountHistory) {
+  JsonDecoder.array(recordCountChangeDecoder, 'RecordCountChange[]')
+    .decodePromise(otherCampaignAttrs.value.recordCountHistory)
+    .then(res => { otherRecordCountHistory.value = res })
+    .catch(() => { otherRecordCountHistory.value = null })
 }
 
 // A mapping of title → LogContents. When there is no split, we expose just the main one.
@@ -181,11 +227,11 @@ watch(logTitles, (titles) => {
 const selectedLog = computed<LogContents>(() => logMap.value[selectedTitle.value] ?? mainLog.value)
 
 // --- Investigators shown depend on which half is selected -----------------------
-const investigators = computed(() => {
-  const mainTitle = dreamModeTitle.value ?? logTitles.value[0]
-  const showingMain = selectedTitle.value === mainTitle
-  return showingMain ? Object.values(props.game.investigators) : Object.values(props.game.otherInvestigators)
-})
+const showingMain = computed(() => selectedTitle.value === (dreamModeTitle.value ?? logTitles.value[0]))
+
+const investigators = computed(() =>
+  showingMain.value ? Object.values(props.game.investigators) : Object.values(props.game.otherInvestigators)
+)
 
 // --- Remembered (scenario-only) -------------------------------------------------
 const remembered = computed(() => {
@@ -282,10 +328,14 @@ watch(additionalLogSections, (sections) => {
 
 const allGameInvestigators = computed(() => ({
   ...props.game.investigators,
+  ...props.game.otherInvestigators,
   ...props.game.killedInvestigators,
 }))
 
 const breakdowns = computed<XpBreakdownStep[]>(() => {
+  if (!showingMain.value) {
+    return otherXpBreakdown.value ?? []
+  }
   if (props.game.campaign?.xpBreakdown) {
     return props.game.campaign.xpBreakdown
   }
@@ -346,7 +396,7 @@ const recorded = computed(() => {
     .filter((c) => !isSection(c))
     .filter((c) => !(c.tag === 'TheDrownedCityKey' && TDC_ARTIFACT_KEYS.has(String((c as any).contents))))
     .filter((c) => !(c.tag === 'TheDrownedCityKey' && TDC_TASK_KEYS.has(String((c as any).contents))))
-    .map(formatKey)
+    .map((k: LogKey) => formatKey(k, homebrewScope.value))
 })
 
 type SectionModel = {
@@ -512,7 +562,17 @@ const recordedCounts = computed(() =>
 )
 
 const partners = computed(() => (selectedLog.value as any).partners ?? {})
-const chaosBag = computed(() => props.game.campaign?.chaosBag ?? [])
+const chaosBag = computed(() =>
+  showingMain.value ? (props.game.campaign?.chaosBag ?? []) : (otherChaosBag.value ?? [])
+)
+
+const chaosBagHistory = computed<ChaosBagChange[]>(() =>
+  showingMain.value ? (props.game.campaign?.chaosBagHistory ?? []) : (otherChaosBagHistory.value ?? [])
+)
+
+const recordCountHistory = computed<RecordCountChange[]>(() =>
+  showingMain.value ? (props.game.campaign?.recordCountHistory ?? []) : (otherRecordCountHistory.value ?? [])
+)
 const hasSupplies = computed(() => Object.values(investigators.value).some(i => i.supplies.length > 0))
 
 // --- Investigator log sections --------------------------------------------------
@@ -529,7 +589,7 @@ const investigatorRecorded = (log: LogContents) =>
   (log.recorded ?? [])
     .filter(r => !['Teachings1', 'Teachings2', 'Teachings3'].includes(r.tag))
     .filter(r => !isSection(r))
-    .map(formatKey)
+    .map((k: LogKey) => formatKey(k, homebrewScope.value))
 
 const investigatorRecordedCounts = (log: LogContents) =>
   (log.recordedCounts ?? []).filter(([k]) => !isSection(k))
@@ -578,6 +638,9 @@ async function loadMissingCards() {
     for (const [key, setValues] of Object.entries(sets ?? {})) {
       if (NON_CARD_KEYS.has(key)) continue
       for (const val of (setValues as any[]) ?? []) {
+        // An entry that says it is not a card code is not one to go looking for.
+        const recordType = (val as any)?.recordType
+        if (recordType && recordType !== 'RecordableCardCode') continue
         const code = (val as any).contents
         if (code && typeof code === 'string' && !findCard(code)) missing.add(code)
       }
@@ -602,11 +665,37 @@ onMounted(loadMissingCards)
 watch([recordedSets, selectedTitle, investigators], loadMissingCards)
 
 // --- Display helpers ------------------------------------------------------------
+
+/* A log key path as a title. A custom card's homebrew key has no locale entry, so
+ * a bare `t` would print the path. */
+const logTitle = (path: string) => logKeyTitle(path, t)
+
 const isSeal = (key: string): boolean =>
   ['edgeOfTheEarth.key.sealsRecovered', 'edgeOfTheEarth.key.sealsPlaced'].includes(key)
 
+/* A constructor name as words, the way the engine's own `displayTrait` writes one
+ * -- a space where a lower case letter meets an upper, capitals left alone. The
+ * prompt that recorded the trait was labelled with `displayTrait`, so the log has
+ * to agree with it: "Elder Thing", not "Elder thing". */
+const splitCamelCase = (name: string): string => name.replace(/([a-z])([A-Z])/g, '$1 $2')
+
+/* What kind of thing an entry holds, which the entry itself says. Absent on the
+ * older shape, where every entry under a set key was a card code. */
+const recordableType = (value: any): string | undefined => value?.recordType
+
 const displayRecordValue = (key: string, value: any): string => {
   const contents: string | undefined = value.contents || value.recordVal?.contents
+
+  /* A `SomeRecorded` names its own recordable type, so an entry that is not a card
+   * code says so and must not be looked up as one -- that is what put "unknown" on
+   * screen for every trait a custom card recorded. Checked before the per-key
+   * branches below so it cannot be reached by a key nobody has hardcoded. */
+  const recordType = recordableType(value)
+  if (recordType && recordType !== 'RecordableCardCode') {
+    if (contents === undefined || contents === null) return ''
+    // A trait, a memento, a memory: all written as their constructor name.
+    return typeof contents === 'string' ? splitCamelCase(contents) : String(contents)
+  }
 
   if (key === 'theCircleUndone.key.mementosDiscovered') return contents ? toCapitalizedWords(contents) : ''
 
@@ -761,6 +850,24 @@ onUnmounted(() => {
           <h1>{{ game.name }}</h1>
         </div>
 
+        <div v-if="logTitles.length > 1" class="options campaign-side-options">
+          <div
+            v-for="title in logTitles"
+            :key="title"
+            class="log-title-option"
+            :class="{ checked: title === selectedTitle }"
+          >
+            <input
+              name="log"
+              type="radio"
+              v-model="selectedTitle"
+              :value="title"
+              :id="`log${title}`"
+            />
+            <label :for="`log${title}`">{{ title }}</label>
+          </div>
+        </div>
+
         <nav class="log-tabs">
           <button
             type="button"
@@ -828,6 +935,7 @@ onUnmounted(() => {
           :achievements="achievements"
           :user-achievements="userAchievements"
           :campaign-id="game.campaign?.id"
+          :part="activeCampaignPart"
         />
 
         <template v-for="(section, index) in additionalLogSections" :key="section.title">
@@ -858,24 +966,6 @@ onUnmounted(() => {
         />
 
         <div class="log-categories">
-          <div v-if="logTitles.length > 1" class="options">
-            <div
-              v-for="title in logTitles"
-              :key="title"
-              class="log-title-option"
-              :class="{ checked: title === selectedTitle }"
-            >
-              <input
-                name="log"
-                type="radio"
-                v-model="selectedTitle"
-                :value="title"
-                :id="`log${title}`"
-              />
-              <label :for="`log${title}`">{{ title }}</label>
-            </div>
-          </div>
-
           <div v-if="hasSupplies" class="supplies-container">
             <h2>{{ t('theForgottenAge.supplies.title') }}</h2>
             <div class="supplies-content">
@@ -912,7 +1002,9 @@ onUnmounted(() => {
 
           <CampaignLogChaosBag
             v-if="chaosBag.length > 0"
+            :game="game"
             :chaosBag="chaosBag"
+            :history="chaosBagHistory"
           />
 
           <CampaignLogUltimatumsAndBoons
@@ -925,7 +1017,7 @@ onUnmounted(() => {
           <CampaignLogSection
             v-if="recorded.length > 0"
             :title="t('campaignLog.campaignNotes')"
-            :items="recorded.map(r => t(r))"
+            :items="recorded.map(logTitle)"
           />
 
           <!-- Campaign sections -->
@@ -944,7 +1036,7 @@ onUnmounted(() => {
             <CampaignLogSection
               v-else
               :title="t(section.titleKey)"
-              :items="section.records.map(r => t(r))"
+              :items="section.records.map(logTitle)"
             />
           </template>
 
@@ -963,9 +1055,12 @@ onUnmounted(() => {
 
           <!-- Campaign recorded sets + counts -->
           <CampaignLogRecordedSets
+            :game="game"
             :entries="(Object.entries(recordedSets) as [string, any[]][]).filter(([k]) => !k.toLowerCase().includes('discoveredglyph'))"
             :counts="recordedCounts"
+            :countHistory="recordCountHistory"
             :displayRecordValue="displayRecordValue"
+            :homebrewScope="homebrewScope"
           />
 
           <CampaignLogPartners
@@ -1089,6 +1184,8 @@ onUnmounted(() => {
   background: transparent;
   border: 0;
   border-bottom: 2px solid transparent;
+  /* The global button radius would curl the active underline up at both ends. */
+  border-radius: 0;
   margin-bottom: -1px;
   padding: 10px 18px;
   font-family: teutonic, sans-serif;
@@ -1193,6 +1290,11 @@ h1 {
 .options {
   display: flex;
   gap: 8px;
+}
+
+/* sits above the tab nav — it switches which campaign every tab describes */
+.campaign-side-options {
+  margin-bottom: 16px;
 }
 
 .log-title-option {

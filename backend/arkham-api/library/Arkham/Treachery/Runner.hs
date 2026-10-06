@@ -15,10 +15,10 @@ import Arkham.Helpers.Message as X hiding (
   InvestigatorDamage,
   InvestigatorEliminated,
   RevealChaosToken,
+  addToVictory,
   is,
   toDiscard,
   toDiscardBy,
-  addToVictory,
  )
 import Arkham.Helpers.Query as X
 import Arkham.Helpers.SkillTest as X
@@ -62,7 +62,11 @@ instance RunMessage TreacheryAttrs where
   runMessage msg a@TreacheryAttrs {..} = runQueueT $ case msg of
     Msg.SealedChaosToken token _ (isTarget a -> True) -> do
       pure $ a & sealedChaosTokensL %~ (token :)
-    Msg.UnsealChaosToken token -> pure $ a & sealedChaosTokensL %~ filter (/= token)
+    Msg.UnsealChaosToken token -> do
+      when (token `elem` treacherySealedChaosTokens) do
+        checkWhen $ Window.ChaosTokenReleased (toTarget a) token
+        checkAfter $ Window.ChaosTokenReleased (toTarget a) token
+      pure $ a & sealedChaosTokensL %~ filter (/= token)
     Msg.RemoveAllChaosTokens face -> do
       pure $ a & sealedChaosTokensL %~ filter ((/= face) . chaosTokenFace)
     Msg.InvestigatorEliminated iid -> do
@@ -167,6 +171,11 @@ instance RunMessage TreacheryAttrs where
       case a.attached of
         Just target | isTarget target (sourceToTarget source) -> toDiscard GameSource (toTarget a)
         _ -> pure ()
+      pure a
+    -- A treachery attached directly to a location leaves play with it. One
+    -- attached to an enemy or an asset goes when that host does instead, #5426.
+    RemovedLocation lid | isDirectlyAtLocation lid a.placement -> do
+      toDiscard GameSource (toTarget a)
       pure a
     Exhaust ea | a `isTarget` ea.target -> do
       pure $ a & exhaustedL .~ True

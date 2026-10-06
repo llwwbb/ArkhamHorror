@@ -12,10 +12,10 @@ import Arkham.Location.Grid
 import Arkham.Location.Types (Field (..))
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
-import Arkham.Placement (Placement (..))
 import Arkham.Modifier
+import Arkham.Placement (Placement (..))
 import Arkham.Projection
-import Arkham.Scenarios.WrittenInRock.Helpers
+import Arkham.Scenarios.TheFeastOfHemlockVale.WrittenInRock.Helpers
 import Arkham.Token
 import Arkham.Window qualified as Window
 
@@ -55,8 +55,8 @@ instance RunMessage MineCartReliableButBroken where
       pure a
     UseCardAbility iid (isSource attrs -> True) 2 ws _ -> do
       chooseOneM iid $ scenarioI18n do
-        labeled' "mineCart.cancelMove" $ cancelWindowBatch ws
-        labeled' "mineCart.moveAgain" $ do_ (ScenarioSpecific "moveMineCart" Null)
+        labeled "mineCart.cancelMove" $ cancelWindowBatch ws
+        labeled "mineCart.moveAgain" $ scenarioSpecific_ "moveMineCart"
       pure a
     ScenarioSpecific "moveMineCart" _ -> do
       batched \_ -> do
@@ -67,6 +67,10 @@ instance RunMessage MineCartReliableButBroken where
         checkWhen $ Window.ScenarioEvent "mineCartMoved" Nothing Null
         do_ msg
       pure a
+    -- The inner step of the batched move above. Nothing else may push this
+    -- directly: doing so skips the VehicleWouldEnter (Cave In) and
+    -- "mineCartMoved" (ability 2, Wild Ride) checks. Every other "move the Mine
+    -- Cart" effect pushes ScenarioSpecific "moveMineCart" instead.
     Do (ScenarioSpecific "moveMineCart" _) -> do
       let dir = toResultDefault East attrs.meta
       withLocationOf attrs \loc -> do
@@ -111,16 +115,16 @@ faceMineCart attrs newLoc = do
 
   lead <- getLead
   chooseOrRunOneM lead $ scenarioI18n do
-    questionLabeled' "mineCart.facing"
+    questionLabeled "mineCart.facing"
     when (North `elem` turns)
-      $ labeled' "mineCart.faceNorth" do
+      $ labeled "mineCart.faceNorth" do
         when (dir /= North) $ scenarioSpecific "rotate" North
     when (East `elem` turns)
-      $ labeled' "mineCart.faceEast" do
+      $ labeled "mineCart.faceEast" do
         when (dir /= East) $ scenarioSpecific "rotate" East
     when (South `elem` turns)
-      $ labeled' "mineCart.faceSouth" do
+      $ labeled "mineCart.faceSouth" do
         when (dir /= South) $ scenarioSpecific "rotate" South
     when (West `elem` turns)
-      $ labeled' "mineCart.faceWest" do
+      $ labeled "mineCart.faceWest" do
         when (dir /= West) $ scenarioSpecific "rotate" West

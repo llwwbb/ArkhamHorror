@@ -48,22 +48,25 @@ import Arkham.Campaigns.TheForgottenAge.Supply
 import Arkham.Campaigns.TheScarletKeys.Concealed.Types
 import Arkham.Campaigns.TheScarletKeys.Key.Id
 import Arkham.Card
+import Arkham.Card.CardOption
 import Arkham.Card.Settings
 import Arkham.ChaosBag.RevealStrategy
 import Arkham.ChaosBagStepState
 import Arkham.ChaosToken.Types
 import Arkham.Choose
 import Arkham.ClassSymbol
+import Arkham.Classes.HasQueue (QueueWrapper (..))
 import Arkham.Cost
+import Arkham.Custom.Overlay (DeckOverlay)
 import Arkham.Customization
 import Arkham.DamageEffect
+import Arkham.Debug.CardDestination
 import Arkham.Deck
 import Arkham.DeckBuilding.Adjustment
 import Arkham.Decklist.Type
 import Arkham.Difficulty
 import Arkham.Direction
 import Arkham.Discard
-import Arkham.Epic.Types (SharedKey)
 import Arkham.Discover
 import Arkham.Draw.Types
 import {-# SOURCE #-} Arkham.Effect.Types
@@ -72,10 +75,8 @@ import Arkham.EffectMetadata
 import Arkham.EncounterCard.Source
 import Arkham.Enemy.Creation
 import {-# SOURCE #-} Arkham.Enemy.Types
+import Arkham.Epic.Types (SharedKey)
 import Arkham.Evade.Types
-import Arkham.Ai.Focus (Focus)
-import Arkham.Ai.Orphans ()
-import Arkham.Ai.State (AiPlayerState)
 import Arkham.Exception
 import Arkham.Exhaust
 import Arkham.Field
@@ -92,6 +93,7 @@ import Arkham.Key
 import Arkham.Layout
 import Arkham.Location.FloodLevel
 import Arkham.Location.Grid
+import Arkham.Location.Group (GroupMembership)
 import {-# SOURCE #-} Arkham.Location.Types
 import Arkham.Matcher hiding (
   AssetDefeated,
@@ -112,9 +114,9 @@ import Arkham.Resolution
 import Arkham.Scenario.Deck
 import Arkham.Scenario.Options
 import Arkham.ScenarioLogKey
-import Arkham.Scenarios.BeforeTheBlackThrone.Cosmos.Types
+import Arkham.Scenarios.TheCircleUndone.BeforeTheBlackThrone.Cosmos.Types
 import Arkham.Search
-import {-# SOURCE #-} Arkham.SkillTest.Base
+import Arkham.SkillTest.Base
 import Arkham.SkillTest.Type
 import Arkham.SkillTestResult qualified as SkillTest
 import Arkham.SkillType
@@ -124,6 +126,7 @@ import Arkham.Spawn
 import Arkham.Target
 import Arkham.Tarot
 import Arkham.Token qualified as Token
+import Arkham.TokenBag (CustomChaosBag)
 import Arkham.Trait
 import Arkham.Window (Window, WindowType)
 import Arkham.Xp
@@ -135,6 +138,7 @@ import Data.Aeson.Types
 import Data.UUID (fromWords64, nil)
 import Data.UUID qualified as UUID
 import GHC.OverloadedLabels
+import GHC.Records
 
 messageType :: Message -> Maybe MessageType
 messageType (PerformEnemyAttack _) = Just AttackMessage
@@ -167,7 +171,51 @@ messageType (MovedWithSkillTest _ msg) = messageType msg
 messageType (Do msg) = messageType msg
 messageType (When msg) = messageType msg
 messageType (After msg) = messageType msg
+messageType (Retain msg) = messageType msg
 messageType _ = Nothing
+
+{- | 'Priority' and 'Retain' say /when/ and /how/ a message is delivered; they
+never change what it means, so every queue predicate should see through them.
+
+Deliberately narrow. Every other wrapper /is/ meaningful: ~40 queue predicates
+treat @Do x@ and @x@ as different messages (see
+'Arkham.Enemy.Helpers.cancelEnemyDefeat', 'cancelEndTurn',
+'Arkham.Helpers.Window.replaceWindow'), and unwrapping 'MoveWithSkillTest' is
+load-bearing in 'handleSkillTestNesting'. Widening this silently rewrites the
+semantics of ~150 call sites.
+-}
+instance QueueWrapper Message where
+  stripQueueWrappers (Priority msg) = stripQueueWrappers msg
+  stripQueueWrappers (Retain msg) = stripQueueWrappers msg
+  stripQueueWrappers msg = msg
+
+  queueGroup (Simultaneously msgs) = Just (msgs, Simultaneously)
+  queueGroup (Run msgs) = Just (msgs, Run)
+  queueGroup _ = Nothing
+
+{- | Rewrite a queued message through every transport it can be travelling in,
+including the ones no 'QueueWrapper' primitive sees.
+
+A @When@ window's responder always runs with the effect the window stands in front of
+already wrapped in 'MoveWithSkillTest': @handleDoUseAbility@ wraps it in place, and
+@releaseInitiationEffects@ hands a materialised initiation's held effects back wrapped.
+That wrapper is deliberately not stripped and is not a 'queueGroup', so a cancel or
+reduction written as a flat scan silently no-ops (Sylvester Blake's "cancel that damage"
+let a fight's 2 damage through). Every in-flight rewrite of a pending effect goes
+through here.
+-}
+rewriteQueuedM :: Applicative f => (Message -> f [Message]) -> Message -> f [Message]
+rewriteQueuedM f = go
+ where
+  go = \case
+    Priority inner -> map Priority <$> go inner
+    Retain inner -> map Retain <$> go inner
+    MoveWithSkillTest inner -> map MoveWithSkillTest <$> go inner
+    MovedWithSkillTest sid inner -> map (MovedWithSkillTest sid) <$> go inner
+    Simultaneously inner -> (\xs -> [Simultaneously (concat xs)]) <$> traverse go inner
+    Run inner -> (\xs -> [Run (concat xs)]) <$> traverse go inner
+    other -> f other
+
 resolve :: Message -> [Message]
 resolve msg = [When msg, msg, After msg]
 
@@ -434,6 +482,34 @@ data ShuffleIn = ShuffleIn | DoNotShuffleIn
   deriving stock (Show, Ord, Eq, Generic, Data)
   deriving anyclass (ToJSON, FromJSON)
 
+data AddChaosTokenDetails = AddChaosTokenDetails
+  { addChaosTokenFace :: ChaosTokenFace
+  , addChaosTokenToCampaign :: Bool
+  {- ^ Tokens added to the campaign stay in 'campaignChaosBag' for the rest of
+  the campaign; the rest are gone when the scenario ends.
+  -}
+  }
+  deriving stock (Show, Ord, Eq, Generic, Data)
+  deriving anyclass (ToJSON, FromJSON)
+
+instance HasField "face" AddChaosTokenDetails ChaosTokenFace where
+  getField = addChaosTokenFace
+
+instance HasField "toCampaign" AddChaosTokenDetails Bool where
+  getField = addChaosTokenToCampaign
+
+{- | Add a token to the chaos bag for the remainder of the campaign. Matches an
+add of either lifetime, so anything that cares must match 'AddChaosTokenWith'.
+-}
+pattern AddChaosToken :: ChaosTokenFace -> Message
+pattern AddChaosToken face <- AddChaosTokenWith (AddChaosTokenDetails face _)
+  where
+    AddChaosToken face = AddChaosTokenWith (AddChaosTokenDetails face True)
+
+-- | Add a token for this game only, leaving the campaign's bag alone.
+pattern AddChaosTokenForGame :: ChaosTokenFace -> Message
+pattern AddChaosTokenForGame face = AddChaosTokenWith (AddChaosTokenDetails face False)
+
 data InitDeckAttrs = InitDeckAttrs
   { initDeckInvestigator :: InvestigatorId
   , initDeckUrl :: Maybe Text
@@ -473,6 +549,13 @@ data TokenLoss = AllLost | AllLostBut Int | Lose Int
 
 data Message
   = UseAbility InvestigatorId Ability [Window]
+  | {- | The rest of a materialised forced-initiation queue: one entry per initiation,
+    with the windows that initiation covers and the pending effect messages it holds
+    back (a When window's Damaged/CheckDefeated wait for their own initiation to
+    resolve). Carried as data and rebuilt into an ask one round at a time: nesting
+    pre-built follow-up asks instead encodes every permutation of the set, #5743.
+    -}
+    ResolveWindowInitiations InvestigatorId [Window] [(Ability, [Window], [Message])]
   | ResolvedAbility Ability -- INTERNAL, See Arbiter of Fates
   | SkillTestMessage SkillTestMessage
   | ChaosBagMessage ChaosBagMessage
@@ -481,30 +564,49 @@ data Message
   | ClearAbilityUse AbilityRef
   | UpdateGlobalSetting InvestigatorId SetGlobalSetting
   | UpdateCardSetting InvestigatorId CardCode SetCardSetting
+  | -- | Set one option a card declares in @cdOptions@ for this investigator
+    SetCardOption InvestigatorId CardCode Text OptionValue
+  | {- | Silence a card for this investigator: stop offering its non-forced
+    window triggers. Set from the hidden-cards stack.
+    -}
+    SetCardSilenced InvestigatorId CardCode Bool
   | SetAsIfRuling AsIfRuling
   | SetUltimatumsAndBoonsEnabled Bool
   | -- | Ultimatum of The Scream: ban this ally for the rest of the campaign
     RecordScreamedAlly CardCode
-  | -- | Above-the-table achievement earned; persisted per human player and
-    -- toasted by the API layer (the engine only announces it).
+  | {- | Above-the-table achievement earned; persisted per human player and
+    toasted by the API layer (the engine only announces it).
+    -}
     EarnAchievement Achievement
-  | -- | Checklist items completed toward a cross-playthrough achievement
-    -- (see 'achievementChecklist'); the API layer merges them into the
-    -- per-user progress row and awards the earn when the list is complete.
+  | {- | Like 'EarnAchievement', but credited to a single investigator's player
+    rather than the whole table -- for achievements whose text is about one
+    investigator ("Seal 3 {blood} tokens on your investigator...").
+    -}
+    EarnAchievementBy InvestigatorId Achievement
+  | {- | Checklist items completed toward a cross-playthrough achievement
+    (see 'achievementChecklist'); the API layer merges them into the
+    per-user progress row and awards the earn when the list is complete.
+    -}
     AchievementProgress Achievement [Text]
-  | -- AI seat configuration (mutates Settings.settingsAiPlayers)
-    RegisterAiPlayer PlayerId AiPlayerState
-  | SetAiFocusOverride PlayerId (Maybe Focus)
-  | AddAiPriority PlayerId Target
-  | RemoveAiPriority PlayerId Target
-  | SetAiEnabled PlayerId Bool
-  | SetAiResponseDelay PlayerId Int
+  | {- | Like 'AchievementProgress', but credited to a single investigator's
+    player -- for checklists whose items are about who was played.
+    -}
+    AchievementProgressBy InvestigatorId Achievement [Text]
   | SetLocationOffset LocationId Double Double
   | ResetLocationOffsets
   | SetAsIfAtIgnored InvestigatorId Bool
   | SetGameRunWindows Bool
   | SetGameState GameState
   | SetGlobal Target Aeson.Key Value
+  | {- | Add to a numeric global. The arithmetic happens when the message is
+    processed, not when it is pushed, so the bump survives a 'Simultaneously'
+    block (each branch runs with a cleared queue, but shares game state).
+    -}
+    IncrementGlobal Target Aeson.Key Int
+  | {- | Insert into a list global, most-recent first, nubbing. Same
+    processing-time rationale as 'IncrementGlobal'.
+    -}
+    InsertGlobal Target Aeson.Key Value
   | MoveWithSkillTest Message
   | MovedWithSkillTest SkillTestId Message
   | ClearInvestigators
@@ -592,7 +694,7 @@ data Message
   | -- Victory
     AddToVictory (Maybe InvestigatorId) Target
   | -- Tokens
-    AddChaosToken ChaosTokenFace
+    AddChaosTokenWith AddChaosTokenDetails
   | -- Asset Uses
     AddUses Source AssetId UseType Int
   | -- Asks
@@ -600,21 +702,24 @@ data Message
   | Ask PlayerId (Question Message)
   | WindowAsk [Window] PlayerId (Question Message)
   | AskMap (Map PlayerId (Question Message))
-  | -- | Open a multi-seat barrier: park every seat in the map on its own question
-    -- and hold the @[Message]@ continuation in game state (never in the queue) until
-    -- the join policy is satisfied. Each seat then runs a self-contained sub-flow
-    -- that ends in 'SeatResolved'. With no seats the continuation runs immediately.
-    -- See "Arkham.SimultaneousAsk" and @docs/multi-seat-barrier.md@.
+  | {- | Open a multi-seat barrier: park every seat in the map on its own question
+    and hold the @[Message]@ continuation in game state (never in the queue) until
+    the join policy is satisfied. Each seat then runs a self-contained sub-flow
+    that ends in 'SeatResolved'. With no seats the continuation runs immediately.
+    See "Arkham.SimultaneousAsk" and @docs/multi-seat-barrier.md@.
+    -}
     BeginSimultaneousAsk BatchId JoinPolicy (Map PlayerId (Question Message)) [Message]
-  | -- | One seat's sub-flow has finished. Drops that seat's slot, re-parks the seats
-    -- still waiting, and runs the deferred work + continuation once the join
-    -- condition holds.
+  | {- | One seat's sub-flow has finished. Drops that seat's slot, re-parks the seats
+    still waiting, and runs the deferred work + continuation once the join
+    condition holds.
+    -}
     SeatResolved BatchId PlayerId
-  | -- | Run @msgs@ once this seat's barrier releases, rather than inside its sub-flow.
-    -- For the interactive parts of deck setup, which cannot park inside a sub-flow
-    -- without letting another seat's answer drain this seat's tail (see
-    -- "Arkham.SimultaneousAsk"). With no barrier open for the seat this falls back to
-    -- the pre-barrier behaviour: after a queued 'DoneChoosingDecks', else right now.
+  | {- | Run @msgs@ once this seat's barrier releases, rather than inside its sub-flow.
+    For the interactive parts of deck setup, which cannot park inside a sub-flow
+    without letting another seat's answer drain this seat's tail (see
+    "Arkham.SimultaneousAsk"). With no barrier open for the seat this falls back to
+    the pre-barrier behaviour: after a queued 'DoneChoosingDecks', else right now.
+    -}
     DeferPastSimultaneousAsk PlayerId [Message]
   | After Message
   | EvadeMessage EvadeMessage
@@ -649,6 +754,21 @@ data Message
   | BeginRound
   | BeginTrade InvestigatorId Source Target [InvestigatorId]
   | BeginTurn InvestigatorId
+  | {- | Something a player typed into the log's chat box.
+
+    Carried as a message rather than written straight to the log so it travels
+    the normal action path: it is persisted with a step, broadcast to the room,
+    and undoable like anything else. It also gives the rules a seam -- Carcosa's
+    HASTUR recorder reads it (@Arkham.UltimatumsAndBoons@) -- which a log write
+    outside the engine could never have.
+
+    The middle field is who said it, by account name. Filled in by the API from
+    the authenticated user (@putApiV1ArkhamGameRawR@), never by the client, so
+    nobody can sign a line with somebody else's name; the engine has no concept
+    of a user account, which is why it arrives this way rather than being looked
+    up. 'Nothing' falls back to the investigator.
+    -}
+    ChatMessage InvestigatorId (Maybe Text) Text
   | Blanked Message
   | HandleOption CampaignOption
   | RemoveOption CampaignOption
@@ -659,9 +779,11 @@ data Message
   | CancelDamage InvestigatorId Int
   | CancelAssetDamage AssetId Source Int
   | CheckAttackOfOpportunity InvestigatorId Bool (Maybe EnemyMatcher)
-  | AssignDamage Target
+  | -- The source rides along only so the log can say what hurt you; nothing in
+    -- the engine branches on it.
+    AssignDamage Target Source
   | CancelAssignedDamage Target Int Int
-  | AssignedDamage Target Int Int
+  | AssignedDamage Target Source Int Int
   | AssignedHealing Target
   | CheckHandSize InvestigatorId
   | CheckWindows [Window]
@@ -674,6 +796,8 @@ data Message
   | EngageMessage EngageMessage
   | SpawnMessage SpawnMessage
   | HuntMessage HuntMessage
+  | -- | Enemy phase 3.2b: each predator enemy damages weaker prey at its location
+    PredatorsAttack
   | ClueMessage ClueMessage
   | DoomMessage DoomMessage
   | TokenMessage TokenMessage
@@ -698,6 +822,7 @@ data Message
     PayForAbility Ability [Window]
   | CreatedCost ActiveCostId
   | CancelCost ActiveCostId
+  | CancelCostPayment ActiveCostId
   | SetCost ActiveCostId Cost
   | SetActiveCostChosenAction ActiveCostId Action
   | PaySealCost InvestigatorId CardId Cost
@@ -829,9 +954,26 @@ data Message
   | InitDeck InitDeckAttrs -- used to initialize the deck for the campaign
   | LoadSideDeck InvestigatorId [PlayerCard] -- used to initialize the side deck for the campaign
   | LoadDecklist PlayerId ArkhamDBDecklist
+  | -- Between-scenarios roster changes. LeaveCampaign is the ask's message: the
+    -- campaign decides whether this investigator has anything worth keeping and
+    -- resolves it as one of the two below.
+    LeaveCampaign InvestigatorId
+  | -- Set the investigator aside whole (see gameRetiredInvestigators) so
+    -- UnretireInvestigator can restore their xp and trauma.
+    RetireInvestigator InvestigatorId
+  | -- Drop an investigator who never played, campaign decks and all, so nothing
+    -- remembers them and their investigator is free to be chosen again.
+    RemoveInvestigatorFromCampaign InvestigatorId
+  | UnretireInvestigator InvestigatorId
+  | JoinCampaign PlayerId
   | ReplaceInvestigator InvestigatorId ArkhamDBDecklist
   | UpgradeDeck InvestigatorId (Maybe Text) (Deck PlayerCard) -- used to upgrade deck during campaign
   | UpgradeDecklist InvestigatorId ArkhamDBDecklist
+  | {- | Lay custom cards over an investigator's campaign deck between scenarios.
+    Not an upgrade: nothing is purchased, so no trauma is charged and no xp
+    is initialised for what it adds.
+    -}
+    ApplyDeckOverlay InvestigatorId DeckOverlay
   | FinishedUpgradingDecks
   | Flip InvestigatorId Source Target
   | Flipped Source Card
@@ -855,6 +997,11 @@ data Message
   | -- Maybe Target is handler for success
     Investigate Investigate
   | UpdateEventMeta EventId Value
+  | UpdateEventTarget EventId (Maybe Target)
+  | {- | A target the player picked while an event was resolving. Recorded as
+    that event's target (first choice wins) so "targets an X" matchers work.
+    -}
+    ChoseTarget Target
   | LoadDeck InvestigatorId (Deck PlayerCard) -- used to reset the deck of the investigator
   | LookAtRevealed InvestigatorId Source Target
   | LookAtTopOfDeck InvestigatorId Target Int
@@ -905,6 +1052,7 @@ data Message
   | RemoveEnemyLocation LocationId
   | PlaceUnderneath Target [Card]
   | PlacedUnderneath Target Card
+  | RemoveFromUnderneath Target [Card]
   | PlaceNextTo Target [Card]
   | PlacedLocation Name CardCode LocationId
   | PlacedLocationDirection LocationId Direction LocationId
@@ -925,9 +1073,10 @@ data Message
   | PutOnBottomOfDeck InvestigatorId DeckSignifier Target
   | Record CampaignLogKey
   | RecordForInvestigator InvestigatorId CampaignLogKey
-  | -- | Adjust a per-investigator tally in that investigator's own campaign log
-    -- (e.g. Dark Matter "Memories"). Negative values cross off tallies; the
-    -- count never drops below zero.
+  | {- | Adjust a per-investigator tally in that investigator's own campaign log
+    (e.g. Dark Matter "Memories"). Negative values cross off tallies; the
+    count never drops below zero.
+    -}
     IncrementRecordCountForInvestigator InvestigatorId CampaignLogKey Int
   | RecordCount CampaignLogKey Int
   | IncrementRecordCount CampaignLogKey Int
@@ -996,6 +1145,8 @@ data Message
   | SetLayout [GridTemplateRow]
   | SetDecksLayout [GridTemplateRow]
   | SetLocationLabel LocationId Text
+  | -- | Put a location in a group's box, at a fixed index inside it.
+    SetLocationGroup LocationId GroupMembership
   | SetActiveInvestigator InvestigatorId
   | SetActivePlayer PlayerId
   | Setup
@@ -1062,8 +1213,22 @@ data Message
   | Would BatchId [Message]
   | CancelBatch BatchId
   | IgnoreBatch BatchId
+  | {- | Narration only: a card charged an additional cost, and this says which
+    card and how much.
+
+    Pushed where the surcharge is computed, because the condition that produced
+    it does not survive the action being recorded -- Frozen in Fear's
+    @FirstOneOfPerformed@ is false the moment the move it charged for goes into
+    @InvestigatorActionsPerformed@, so nothing downstream can work out who
+    charged what. Nothing in the engine reads this; it exists so the log can
+    say "+1 action from Frozen in Fear" instead of leaving the player to
+    wonder where their action went. -}
+    AdditionalCostPaid InvestigatorId Source Cost
   | WhenWillEnterLocation InvestigatorId LocationId
-  | EnterLocation InvestigatorId LocationId
+  | -- | Carries the 'Movement' that caused it, when there was one, so the log
+    -- can tell a move the investigator chose from one a card forced on them.
+    -- 'Nothing' for the synthesised entries: vehicles and @PlaceInvestigator@.
+    EnterLocation InvestigatorId LocationId (Maybe Movement)
   | Will Message
   | -- must be called on instance directly
     SetOriginalCardCode CardCode
@@ -1082,6 +1247,8 @@ data Message
   | BecomeHomunculus InvestigatorId
   | BecomeShatteredSelf InvestigatorId
   | SetScenarioMeta Value
+  | SetCustomChaosBag Text CustomChaosBag
+  | RemoveCustomChaosBag Text
   | ScenarioSpecific Text Value
   | CampaignSpecific Text Value
   | SetCampaignMeta Value
@@ -1162,16 +1329,56 @@ data Message
   | -- UI
     ClearUI
   | Priority Message
+  | {- | Wraps the 'Ask' / 'AskMap' publishing a question whose seats must survive
+    another seat's answer. Every accepted answer pushes 'ClearUI', which wipes
+    the whole published question map, and 'Entity.Answer' only re-parks the
+    seats it knows are durable. A multi-seat ask that is neither rebuilt by the
+    queue nor barriered has to say so, or its other seats are silently dropped
+    along with their baked messages (#4787).
+    -}
+    Retain Message
   | Simultaneously [Message]
+  | {- | Run these custom-card steps later, for the card the target names.
+
+    The step language is otherwise read the moment a card's messages are pushed,
+    which is too early for anything that has to look at the board again: an "in
+    any order" prompt has to re-check what is still possible after each choice.
+    This carries the bindings and the steps through the queue, so they are read
+    when they run rather than when they were written. The two values are the
+    step environment and the steps, both as the author wrote them.
+    -}
+    RunCustomSteps Target Value Value
   | -- Debug
     ClearQueue
   | SetCardOwner CardId InvestigatorId
   | DebugAddToHand InvestigatorId CardId
+  | DebugAddToEncounterDeck DeckSignifier CardId
+  | -- Debug: move a card to another zone from wherever it currently sits. Always
+    -- obtains the card first, so it leaves the victory display, set-aside pile or
+    -- deck it came from rather than being duplicated into the destination.
+    DebugMoveCard CardId DebugCardDestination
+  | {- | Debug: seal a token from the chaos bag onto a card. Named by id rather
+    than by value so the sealed copy keeps the real token's face, and so a token
+    that is no longer in the bag is a no-op instead of a fabricated seal.
+    -}
+    DebugSealChaosToken ChaosTokenId Target
   | DebugCustomize InvestigatorId CardId
   | DebugIncreaseCustomization InvestigatorId CardCode Customization [CustomizationChoice]
   | SetScenarioDifficulty Difficulty
   | SetCampaignStep CampaignStep
   | CreateCard CardId CardCode
+  | -- Debug: register a runtime-authored card (see "Arkham.Card.CustomCard") on
+    -- the game, so its def resolves for every player and survives a reload.
+    DebugRegisterCustomCard CustomCard
+  | DebugRemoveCustomCard CardCode
+  | -- Debug: resolve an already-created card the way drawing it would --
+    -- spawn an enemy, reveal a treachery, put a location on the board, deal a
+    -- player card to a hand. Dispatches on the card's type.
+    DebugPlaceCard InvestigatorId CardId
+  | -- Debug: earn a card for the rest of the campaign -- into the deck now, and
+    -- into the campaign's story cards so it comes back in later scenarios.
+    -- Player cards only; nothing else survives deck loading.
+    DebugAddToCampaignDeck InvestigatorId CardId
   | -- Epic Multiplayer: mutate a shared counter on the owning event. These are
     -- captured (not dispatched to a game entity) by the run loop when the game
     -- belongs to an event; otherwise they are inert no-ops. See "Arkham.Epic".
@@ -1351,6 +1558,9 @@ pattern RecalculateSkillTestResultsCanChangeAutomatic :: Bool -> Message
 pattern RecalculateSkillTestResultsCanChangeAutomatic b =
   SkillTestMessage (RecalculateSkillTestResultsCanChangeAutomatic_ b)
 
+pattern ResolveHauntedAbilities :: InvestigatorId -> LocationId -> Message
+pattern ResolveHauntedAbilities iid lid = SkillTestMessage (ResolveHauntedAbilities_ iid lid)
+
 pattern SkillTestApplyResults :: Message
 pattern SkillTestApplyResults = SkillTestMessage SkillTestApplyResults_
 
@@ -1483,6 +1693,9 @@ pattern ForceChaosTokenDraw f = ChaosBagMessage (ForceChaosTokenDraw_ f)
 pattern ForceChaosTokenDrawToken :: ChaosToken -> Message
 pattern ForceChaosTokenDrawToken t = ChaosBagMessage (ForceChaosTokenDrawToken_ t)
 
+pattern DebugSetForcedChaosTokenDraws :: [ChaosTokenFace] -> Message
+pattern DebugSetForcedChaosTokenDraws fs = ChaosBagMessage (DebugSetForcedChaosTokenDraws_ fs)
+
 pattern SetChaosTokens :: [ChaosTokenFace] -> Message
 pattern SetChaosTokens fs = ChaosBagMessage (SetChaosTokens_ fs)
 
@@ -1559,6 +1772,13 @@ pattern InvestigatorDefeated src iid = InvestigatorMessage (InvestigatorDefeated
 pattern InvestigatorIsDefeated :: Source -> InvestigatorId -> Message
 pattern InvestigatorIsDefeated src iid = InvestigatorMessage (InvestigatorIsDefeated_ src iid)
 
+{- | Clear an investigator's defeated state without undoing the defeat itself:
+they keep the trauma they suffered, but resume playing. Circus Ex Mortis' Blood
+on the Line revives investigators frozen beneath it when the act advances.
+-}
+pattern InvestigatorNoLongerDefeated :: InvestigatorId -> Message
+pattern InvestigatorNoLongerDefeated iid = InvestigatorMessage (InvestigatorNoLongerDefeated_ iid)
+
 pattern InvestigatorDirectDamage :: InvestigatorId -> Source -> Int -> Int -> Message
 pattern InvestigatorDirectDamage iid src d h = InvestigatorMessage (InvestigatorDirectDamage_ iid src d h)
 
@@ -1590,9 +1810,9 @@ pattern InvestigatorDrewEncounterCardFrom iid c mds =
   InvestigatorMessage (InvestigatorDrewEncounterCardFrom_ iid c mds)
 
 pattern InvestigatorDrewPlayerCardFrom
-  :: InvestigatorId -> PlayerCard -> Maybe DeckSignifier -> Message
-pattern InvestigatorDrewPlayerCardFrom iid c mds =
-  InvestigatorMessage (InvestigatorDrewPlayerCardFrom_ iid c mds)
+  :: InvestigatorId -> PlayerCard -> Maybe DeckSignifier -> Maybe Source -> Message
+pattern InvestigatorDrewPlayerCardFrom iid c mds msrc =
+  InvestigatorMessage (InvestigatorDrewPlayerCardFrom_ iid c mds msrc)
 
 pattern InvestigatorEliminated :: InvestigatorId -> Message
 pattern InvestigatorEliminated iid = InvestigatorMessage (InvestigatorEliminated_ iid)
@@ -1698,6 +1918,10 @@ pattern RemoveLocation lid = Remove (LocationTarget lid)
 -- Bidirectional pattern synonyms preserving the public API for EnemyAttackMessage.
 pattern EnemiesAttack :: Message
 pattern EnemiesAttack = EnemyAttackMessage EnemiesAttack_
+
+-- | Enemy phase, after 3.3: relentless enemies ready and attack again.
+pattern RelentlessEnemiesAttack :: Message
+pattern RelentlessEnemiesAttack = EnemyAttackMessage RelentlessEnemiesAttack_
 
 pattern EnemyWillAttack :: EnemyAttackDetails -> Message
 pattern EnemyWillAttack d = EnemyAttackMessage (EnemyWillAttack_ d)
@@ -2012,10 +2236,25 @@ mconcat
                 Right (a, b) -> pure $ StartScenario a b
                 Left a -> pure $ StartScenario a Nothing
             "AssignedDamage" -> do
+              -- Three shapes across the archive: the current one, the one before
+              -- the source was added, and a bare target from before the amounts
+              -- were. A save that predates the source gets GameSource, which is
+              -- only ever read by the log.
+              contents <-
+                (Left <$> o .: "contents")
+                  <|> (Right . Left <$> o .: "contents")
+                  <|> (Right . Right <$> o .: "contents")
+              case contents of
+                Right (Right (a, b, c, d)) -> pure $ AssignedDamage a b c d
+                Right (Left (a, b, c)) -> pure $ AssignedDamage a GameSource b c
+                Left a -> pure $ AssignedDamage a GameSource 0 0
+            "AssignDamage" -> do
+              -- Likewise: a save written before the source was threaded through
+              -- carries the bare target.
               contents <- (Left <$> o .: "contents") <|> (Right <$> o .: "contents")
               case contents of
-                Right (a, b, c) -> pure $ AssignedDamage a b c
-                Left a -> pure $ AssignedDamage a 0 0
+                Right (a, b) -> pure $ AssignDamage a b
+                Left a -> pure $ AssignDamage a GameSource
             "RemoveCampaignCard" -> RemoveCampaignCardFromDeck "00000" <$> o .: "contents"
             "ResolvedMovement" -> do
               contents <- (Left <$> o .: "contents") <|> (Right <$> o .: "contents")
@@ -2269,7 +2508,7 @@ mconcat
               pure $ DealAssetDamageWithCheck a b c d e
             "InvestigatorDrewPlayerCard" -> do
               (a, b) <- o .: "contents"
-              pure $ InvestigatorDrewPlayerCardFrom a b Nothing
+              pure $ InvestigatorDrewPlayerCardFrom a b Nothing Nothing
             "ReportXp" -> do
               ReportXp <$> (o .: "contents" <|> (snd @ScenarioId <$> o .: "contents"))
             "ReadStoryWithPlacement" -> do
@@ -2323,6 +2562,8 @@ mconcat
               pure $ case contents of
                 Right (a, b, c, d, s) -> FindEncounterCard a b c d s
                 Left (a, b, c, d) -> FindEncounterCard a b c d LeadChooses
+            -- Legacy: saves written before the details object stored the bare face
+            "AddChaosToken" -> AddChaosToken <$> o .: "contents"
             -- Legacy: pre-Message-refactor saves tagged entity-specific removals
             -- with these names; they are now pattern synonyms over `Remove Target`.
             "RemoveAsset" -> Remove . AssetTarget <$> o .: "contents"
@@ -2664,10 +2905,11 @@ uiToRun = \case
   TooltipLabel _ _ msgs -> Run msgs
   CardLabel _ _ msgs -> Run msgs
   ChaosTokenLabel _ msgs -> Run msgs
-  PortraitLabel _ msgs -> Run msgs
+  PortraitLabel iid msgs -> Run (ChoseTarget (InvestigatorTarget iid) : msgs)
   KeyLabel _ msgs -> Run msgs
-  TargetLabel _ msgs -> Run msgs
+  TargetLabel t msgs -> Run (ChoseTarget t : msgs)
   GridLabel _ msgs -> Run msgs
+  ConnectionLabel _ msgs -> Run msgs
   TarotLabel _ msgs -> Run msgs
   SkillLabel _ msgs -> Run msgs
   SkillLabelWithLabel _ _ msgs -> Run msgs
@@ -2735,6 +2977,23 @@ chooseOrRunOneAtATimeWithLabel :: Text -> PlayerId -> [UI Message] -> Message
 chooseOrRunOneAtATimeWithLabel _ _ [] = throw $ InvalidState "No messages for chooseOneAtATime"
 chooseOrRunOneAtATimeWithLabel _ _ [x] = uiToRun x
 chooseOrRunOneAtATimeWithLabel lbl pid msgs = Ask pid (QuestionLabel lbl Nothing $ ChooseOneAtATime msgs)
+
+{- | 'chooseOrRunOneAtATimeWithLabel' plus a single "resolve everything still
+listed, in the order shown" choice rendered with @autoLbl@.
+
+Use this instead of recursing inside a 'chooseOneM'/'targets' continuation to build
+the same shortcut: the choice list here is built once and stays flat, whereas the
+recursive form materializes the whole permutation tree into one message.
+
+The auto choice is only offered while more than one option exists — one option runs
+outright, and 'Entity.Answer' drops back to a plain 'ChooseOneAtATime' once the
+re-ask is down to its last one.
+-}
+chooseOrRunOneAtATimeWithAutoLabel :: Text -> Text -> PlayerId -> [UI Message] -> Message
+chooseOrRunOneAtATimeWithAutoLabel _ _ _ [] = throw $ InvalidState "No messages for chooseOneAtATime"
+chooseOrRunOneAtATimeWithAutoLabel _ _ _ [x] = uiToRun x
+chooseOrRunOneAtATimeWithAutoLabel lbl autoLbl pid msgs =
+  Ask pid (QuestionLabel lbl Nothing $ ChooseOneAtATimeWithAuto autoLbl msgs)
 
 chooseSome :: PlayerId -> Text -> [UI Message] -> Message
 chooseSome _ _ [] = throw $ InvalidState "No messages for chooseSome"
@@ -2810,37 +3069,35 @@ deck setup -- the tail that used to sit in the queue behind the ask, after
 continuation, so the state flip is likewise driven by the barrier releasing rather
 than by the queue draining to the right position.
 -}
-chooseDecks :: BatchId -> [PlayerId] -> [Message] -> Message
-chooseDecks batchId pids = chooseDecksWithAi batchId pids []
 
-{- | Like 'chooseDecks' but for AI-assisted games. Each AI seat in @aiSeats@ is
-loaded from its bundled decklist in-place and is NOT prompted; only the
-remaining (human) seats receive a 'ChooseDeck' question.
+{- | Open deck selection for a single seat joining a campaign already in progress.
 
-The ordering invariants this preserves:
-
-  * The @LoadDecklist@s run /after/ 'ChoosingDecks' (which wipes investigators)
-    and /before/ the barrier opens, so the loaded AI investigators survive the
-    wipe and are present the instant the game parks on the human deck prompt.
-  * Only human seats enter the barrier, so it never waits on an AI seat. When
-    every seat is AI the barrier has no seats, its join condition holds on
-    creation, and @continuation@ runs immediately.
-
-With @aiSeats == []@ this is exactly @chooseDecks@, so non-AI games are unaffected.
+Unlike 'chooseDecks' this must not emit 'ChoosingDecks': that clears every
+investigator, which is right for setup and would wipe the table mid-campaign.
+@used@ is the investigators already played this campaign, which the new player
+may not choose.
 -}
-chooseDecksWithAi :: BatchId -> [PlayerId] -> [(PlayerId, ArkhamDBDecklist)] -> [Message] -> Message
-chooseDecksWithAi batchId pids aiSeats continuation =
+chooseJoinDeck :: BatchId -> PlayerId -> [InvestigatorId] -> [Message] -> Message
+chooseJoinDeck batchId pid used continuation =
   Run
-    $ [SetGameState (IsChooseDecks pids), ChoosingDecks]
-    <> [LoadDecklist pid decklist | (pid, decklist) <- aiSeats]
-    <> [ BeginSimultaneousAsk
-           batchId
-           JoinAll
-           (mapFromList (map (,ChooseDeck) humanPids))
-           (DoneChoosingDecks : continuation)
-       ]
- where
-  aiPids = map fst aiSeats
-  humanPids = filter (`notElem` aiPids) pids
+    [ SetGameState (IsChooseDecks [pid])
+    , BeginSimultaneousAsk
+        batchId
+        JoinAll
+        (singletonMap pid (ChooseJoinDeck used))
+        (DoneChoosingDecks : continuation)
+    ]
+
+chooseDecks :: BatchId -> [PlayerId] -> [Message] -> Message
+chooseDecks batchId pids continuation =
+  Run
+    [ SetGameState (IsChooseDecks pids)
+    , ChoosingDecks
+    , BeginSimultaneousAsk
+        batchId
+        JoinAll
+        (mapFromList (map (,ChooseDeck) pids))
+        (DoneChoosingDecks : continuation)
+    ]
 
 --

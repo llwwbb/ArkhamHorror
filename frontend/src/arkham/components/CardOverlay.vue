@@ -10,11 +10,12 @@ import {
   onUnmounted,
   type VNodeRef,
 } from 'vue'
-import { cardImg, imgsrc, isLocalized } from '@/arkham/helpers'
+import { cardImg, formatContent, imgsrc, isLocalized } from '@/arkham/helpers'
 import { getCardImage } from '@/arkham/cardImageLookup'
 import CardCrossedOffOverlay from '@/arkham/components/CardCrossedOffOverlay.vue'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
 import { homebrewTokenMap } from '@/arkham/homebrewAssets'
+import { originalArt } from '@/arkham/artVariants'
 import { BugAntIcon } from '@heroicons/vue/20/solid'
 import { useDebug } from '@/arkham/debug'
 import { fetchCard, fetchPlayability, type PlayabilityResponse } from '@/arkham/api'
@@ -183,13 +184,15 @@ const lastPointer = ref<{ clientX: number; clientY: number } | null>(null)
 
 const clearTimer = (t: number | null) => (t !== null ? (clearTimeout(t), null) : null)
 
-const withinRect = (x: number, y: number, rect: DOMRect): boolean =>
-  rect.width > 0
-    && rect.height > 0
-    && x >= rect.left
-    && x <= rect.right
-    && y >= rect.top
-    && y <= rect.bottom
+// A card image is natively draggable, so a click-and-drag on one starts an HTML5
+// drag even where nothing accepts the drop. `dragend` is not guaranteed to come
+// back: it never fires if a game update unmounts the source card mid-drag, or if
+// the drop lands outside the window. Treat `dragActive` as evidence rather than
+// state -- the browser suppresses mouse events for the whole native drag, so any
+// buttonless one proves the drag is over.
+const endDragIfIdle = (e: MouseEvent) => {
+  if (dragActive && e.buttons === 0) dragActive = false
+}
 
 const targetFromEvent = (e: Event): HTMLElement | null => {
   const raw = e.target as HTMLElement | null
@@ -213,8 +216,33 @@ const targetFromEvent = (e: Event): HTMLElement | null => {
   return candidates.find((el) => {
     if (el.classList.contains('dragging') || el.classList.contains('no-overlay')) return false
     const rect = el.getBoundingClientRect()
-    return withinRect(clientX, clientY, rect)
+    return rect.width > 0
+      && rect.height > 0
+      && clientX >= rect.left
+      && clientX <= rect.right
+      && clientY >= rect.top
+      && clientY <= rect.bottom
+      && !clippedAt(el, clientX, clientY)
   }) ?? null
+}
+
+/* Whether an ancestor's clipping means nothing is drawn there.
+
+This scan works on layout rects, and `overflow: hidden` does not change those:
+a card strip clipped to one row still lays out the rows beneath it, and those
+cards keep full-size rects behind whatever is painted below the strip. Without
+this, pointing at the page under a clipped strip found a card nobody can see
+and opened its overlay. Hit testing gets this right on its own -- the fallback
+exists for transformed cards, whose ancestors do not clip, so they are
+unaffected. */
+const clippedAt = (el: HTMLElement, x: number, y: number): boolean => {
+  for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(parent)
+    if (overflowX === 'visible' && overflowY === 'visible') continue
+    const rect = parent.getBoundingClientRect()
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return true
+  }
+  return false
 }
 
 const queueHover = (el: HTMLElement) => {
@@ -227,6 +255,7 @@ const queueHover = (el: HTMLElement) => {
 }
 
 const onMouseOver = (e: MouseEvent) => {
+  endDragIfIdle(e)
   if (currentPointerType === 'touch' || dragActive) return
   lastPointer.value = { clientX: e.clientX, clientY: e.clientY }
   const el = targetFromEvent(e)
@@ -247,6 +276,7 @@ const onMouseLeave = () => {
 
 const onPointerDown = (e: PointerEvent) => {
   currentPointerType = e.pointerType
+  dragActive = false
   if (e.pointerType === 'touch') {
     const el = targetFromEvent(e)
     if (!el) return
@@ -256,6 +286,7 @@ const onPointerDown = (e: PointerEvent) => {
 }
 
 const onPointerMove = (e: PointerEvent) => {
+  endDragIfIdle(e)
   currentPointerType = e.pointerType
   lastPointer.value = { clientX: e.clientX, clientY: e.clientY }
   if (e.pointerType === 'touch') {
@@ -266,7 +297,11 @@ const onPointerMove = (e: PointerEvent) => {
   }
 }
 
-const onPointerUp = () => {
+const onPointerUp = (e: PointerEvent) => {
+  // A control layered on top of a card can change which face that card shows (the
+  // act/agenda stack popover's flip button). Clicking it must leave the overlay up,
+  // otherwise every click after the first dismisses it.
+  if ((e.target as HTMLElement | null)?.closest?.('[data-keep-card-overlay]')) return
   if (canDisablePress) {
     canDisablePress = false
   } else {
@@ -276,6 +311,7 @@ const onPointerUp = () => {
 }
 
 const clearOverlay = () => {
+  canDisablePress = false
   hoverTimer = clearTimer(hoverTimer)
   pressTimer = clearTimer(pressTimer)
   playabilityTimer = clearTimer(playabilityTimer)
@@ -331,20 +367,57 @@ onUnmounted(() => {
  * Image lookup & orientation
  * ========================================================================== */
 
-const card = computed<string | null>(() => (hoveredElement.value ? getCardImage(hoveredElement.value) : null))
-const currentLanguage = computed<string>(() => {
-  const storeLanguage = store.lang
-  const language = localStorage.getItem('language') || 'en'
-  return storeLanguage === language ? storeLanguage : language
+// The image and class/dataset readers below pull straight off the DOM, which is
+// not a reactive source: a card that changes face under a stationary cursor (the
+// act/agenda stack popover's flip button) left the overlay on the old image. Bump a
+// counter whenever the hovered element's own attributes change and depend on it.
+const hoveredVersion = ref(0)
+let hoveredObserver: MutationObserver | null = null
+watch(hoveredElement, (el) => {
+  hoveredObserver?.disconnect()
+  hoveredObserver = null
+  hoveredVersion.value++
+  if (!el) return
+  hoveredObserver = new MutationObserver(() => { hoveredVersion.value++ })
+  hoveredObserver.observe(el, {
+    attributes: true,
+    attributeFilter: ['src', 'style', 'class', 'data-image', 'data-image-id', 'data-card-code', 'data-errata', 'data-sideways'],
+  })
 })
+onUnmounted(() => { hoveredObserver?.disconnect(); hoveredObserver = null })
+
+const card = computed<string | null>(() => {
+  void hoveredVersion.value
+  return hoveredElement.value ? getCardImage(hoveredElement.value) : null
+})
+const currentLanguage = computed(() => {
+  const language = localStorage.getItem('language') || 'en'
+  return store.lang === language ? store.lang : language
+})
+
 const overlayCardCode = computed<string | null>(() => {
+  void hoveredVersion.value
   const el = hoveredElement.value
   if (!el) return null
   const direct = normalizedCardCode(el.dataset.cardCode ?? el.dataset.imageId)?.replace(/b$/, '')
-  if (direct) return direct
-  return cardDefinitionCodeFromImage(card.value)
+  // Homebrew definitions are not served by the single-card endpoint.
+  if (direct) return direct.startsWith(':') ? null : direct
+
+  const image = card.value
+  // A homebrew image path ends in /cards/<local code>, which otherwise looks
+  // like an official card code to the fallback matcher below.
+  if (!image || image.includes('/homebrew/')) return null
+
+  return cardDefinitionCodeFromImage(image)
 })
-const cardErrata = computed<string | null>(() => overlayCardDef.value?.errata ?? null)
+/* Card-def errata covers a whole card, but some errata only applies to one face —
+ * and the overlay resolves both faces to the same card def. A `data-errata`
+ * attribute lets whichever component knows which side is showing supply the text
+ * for just that side; it wins over the card def's own errata. */
+const cardErrata = computed<string | null>(() => {
+  void hoveredVersion.value
+  return hoveredElement.value?.dataset.errata ?? overlayCardDef.value?.errata ?? null
+})
 
 watch(overlayCardCode, async (code) => {
   overlayCardDef.value = null
@@ -362,10 +435,17 @@ watch(overlayCardCode, async (code) => {
   }
 })
 
-const upsideDown = computed<boolean>(() => hoveredElement.value?.classList.contains('Reversed') ?? false)
-const reversed = computed<boolean>(() => hoveredElement.value?.classList.contains('reversed') ?? false)
+const upsideDown = computed<boolean>(() => {
+  void hoveredVersion.value
+  return hoveredElement.value?.classList.contains('Reversed') ?? false
+})
+const reversed = computed<boolean>(() => {
+  void hoveredVersion.value
+  return hoveredElement.value?.classList.contains('reversed') ?? false
+})
 
 const sideways = computed<boolean>(() => {
+  void hoveredVersion.value
   const el = hoveredElement.value
   if (!el) return false
 
@@ -383,6 +463,19 @@ const sideways = computed<boolean>(() => {
   // fall back to natural aspect for dataset image
   const url = el.dataset.image ?? (el.dataset.imageId ? cardImg(el.dataset.imageId) : null)
   if (url) {
+    /* An <img> already showing that same picture knows its own shape now; the
+       cache below only answers on a later tick, because it re-loads the URL
+       through a fresh Image(). That tick is visible: the overlay opened
+       portrait and snapped to landscape on the first hover of every
+       investigator. Guarded on the src matching, since a card showing one face
+       can have the overlay resolve to the other. */
+    if (
+      el instanceof HTMLImageElement
+      && el.naturalWidth > 0
+      && el.getAttribute('src') === url
+    ) {
+      return el.naturalWidth > el.naturalHeight
+    }
     const ar = imgARCache.get(url)
     if (ar != null) return ar > 1
   }
@@ -576,13 +669,26 @@ const additionalCard = computed<string | null>(() => {
   return imgsrc(`cards/${cardCode.value}b.avif`)
 })
 
+// A later taboo can mutate a card without touching its customizable sheet -- Taboo 24
+// only changed Power Word's test difficulty, which lives on the front. Point those
+// variants at the sheet from the taboo that last changed it.
+const customizationSheetVariants: Record<string, string> = {
+  '09081_Mutated24': '_Mutated21',
+}
+
+const customizationSheetVariant = computed<string>(() => {
+  const variant = customizationVariant.value
+  if (!variant || !cardCode.value) return variant
+  return customizationSheetVariants[`${cardCode.value}${variant}`] ?? variant
+})
+
 const customizationsCard = computed<string | null>(() => {
   if (!cardCode.value) return null
   if (!allCustomizations.has(cardCode.value)) return null
   // Chained sheets (Runic Axe) ship as .avif; base and mutated sheets as .jpg.
   const chained = hoveredElement.value?.dataset?.chained
   if (chained) return imgsrc(`customizations/${cardCode.value}_${chained}.avif`)
-  return imgsrc(`customizations/${cardCode.value}${customizationVariant.value}.jpg`)
+  return imgsrc(`customizations/${cardCode.value}${customizationSheetVariant.value}.jpg`)
 })
 
 /* =============================================================================
@@ -915,6 +1021,7 @@ const TOKEN_MAP: Record<string, string> = {
   '[bless]': '<span class="bless-icon"></span>',
   '[curse]': '<span class="curse-icon"></span>',
   '[frost]': '<span class="frost-icon"></span>',
+  '[blood]': '<span class="blood-icon"></span>',
   '[per_investigator]': '<span class="per-player"></span>',
   '[seal_a]': '<span class="seal-a-icon"></span>',
   '[seal_b]': '<span class="seal-b-icon"></span>',
@@ -984,21 +1091,8 @@ const getCardFlavor = (dbCard: ArkhamDBCard, needBack: boolean, force: boolean =
 const getCardCustomizationText = (dbCard: ArkhamDBCard, force: boolean = false): string | null =>
   (!card.value || (!force && isLocalized(card.value))) ? null : replaceText(dbCard.customization_text || '')
 
-watchEffect(() => {
-  dbCardName.value = dbCardTypeName.value = dbCardFactionName.value = dbCardFactionCode.value = dbCardTraits.value = dbCardText.value = dbCardCustomizationText.value = dbCardFlavor.value = ''
-  const src = card.value
-  if (!src) return
-  const parts = cardImagePartsFromImage(src)
-  if (!parts) return
-  const { code } = parts
-  const tabooSuffix = parts.suffix
-  const language = currentLanguage.value
-
-  const dbCard = store.getDbCard(code)
-  if (!dbCard) return
-  const needBack = dbCard.code !== code
-  const force = language !== 'en'
-
+const applyDbCard = (dbCard: ArkhamDBCard, needBack: boolean, tabooSuffix: string | undefined) => {
+  const force = currentLanguage.value !== 'en'
   const name = getCardName(dbCard, needBack, force)
   const type = getCardTypeName(dbCard, force)
   const faction = getCardFactionName(dbCard, force)
@@ -1016,6 +1110,51 @@ watchEffect(() => {
   dbCardText.value = text ?? ''
   dbCardFlavor.value = flavor ?? ''
   dbCardCustomizationText.value = cust ?? ''
+}
+
+/* We reached `front` through the `<code>b` alias, so the hovered face is a back, and a
+ * single-sided record carries no back_* fields describing it. Ask the engine whether
+ * that face is a card in its own right: each Masked Carnevale-Goer is the back of a
+ * different Carnevale enemy, so describing it with the front would give away which
+ * enemy is hiding there -- look up the record filed under the face's own name instead.
+ * When the engine has no def for the face it is only the front's back art (Atlach-Nacha's
+ * spinner face, Hank Samson's transformed face), and the front does describe it. */
+const resolveHiddenFace = async (src: string, code: string, front: ArkhamDBCard, tabooSuffix: string | undefined) => {
+  let faceDef: CardDef | null
+  if (cardDefCache.has(code)) {
+    faceDef = cardDefCache.get(code) ?? null
+  } else {
+    try {
+      faceDef = await fetchCard(code)
+    } catch {
+      faceDef = null
+    }
+    cardDefCache.set(code, faceDef)
+  }
+
+  if (card.value !== src) return
+  if (!faceDef) return applyDbCard(front, false, tabooSuffix)
+
+  const face = store.getDbCardByRealName(faceDef.name.title)
+  if (face) applyDbCard(face, false, tabooSuffix)
+}
+
+watchEffect(() => {
+  dbCardName.value = dbCardTypeName.value = dbCardFactionName.value = dbCardFactionCode.value = dbCardTraits.value = dbCardText.value = dbCardCustomizationText.value = dbCardFlavor.value = ''
+  const src = card.value
+  if (!src) return
+  const parts = cardImagePartsFromImage(src)
+  if (!parts) return
+  const { code } = parts
+  const tabooSuffix = parts.suffix
+  void currentLanguage.value
+
+  const dbCard = store.getDbCard(code)
+  if (!dbCard) return
+  const needBack = dbCard.code !== code
+  if (needBack && !dbCard.double_sided) return void resolveHiddenFace(src, code, dbCard, tabooSuffix)
+
+  applyDbCard(dbCard, needBack, tabooSuffix)
 })
 </script>
 
@@ -1189,7 +1328,7 @@ watchEffect(() => {
       </svg>
 
       <CardCrossedOffOverlay v-if="crossedOff" :entries="crossedOff" />
-      <p v-if="cardErrata" class="card-errata">Errata: {{ cardErrata }}</p>
+      <p v-if="cardErrata" class="card-errata" v-html="`Errata: ${formatContent(cardErrata)}`"></p>
     </div>
 
     <div
@@ -1231,9 +1370,17 @@ watchEffect(() => {
       <KeyToken v-for="k in spentKeys" :key="keyToId(k)" :keyToken="k" @choose="() => {}"/>
     </div>
 
-    <div class="card-data" v-if="dbCardCustomizationText">
-      <p v-if="dbCardName"><b>{{ dbCardName }}</b></p>
-      <p v-if="dbCardCustomizationText" v-html="dbCardCustomizationText" style="font-size: 0.85em;"></p>
+    <div
+      class="card-data card-data-customization"
+      v-if="dbCardCustomizationText"
+      :class="{ [`faction-${dbCardFactionCode || 'neutral'}`]: true }"
+    >
+      <div class="card-data-header">
+        <p v-if="dbCardName"><b>{{ dbCardName }}</b></p>
+      </div>
+      <div class="card-data-body">
+        <p v-html="dbCardCustomizationText"></p>
+      </div>
     </div>
 
     <div v-if="playabilityData && debug.active" class="playability-panel">
@@ -1391,7 +1538,7 @@ watchEffect(() => {
   font-family: serif;
   flex: 1;
   padding: 15px;
-  background-color: rgba(212, 212, 212, 0.85);
+  background-color: rgba(212, 212, 212, 0.96);
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
 }
@@ -1424,6 +1571,18 @@ watchEffect(() => {
 .card-data-body .card-flavor {
   font-size: 0.85em;
   font-style: italic;
+}
+
+/* Customization sheets run longer than card text, and the overlay is
+   pointer-events: none, so a scrollbar would be unusable -- grow instead. */
+.card-data-customization {
+  align-self: flex-start;
+  height: auto;
+  aspect-ratio: auto;
+}
+
+.card-data-customization .card-data-body {
+  font-size: 0.8em;
 }
 
 .card-overlay {

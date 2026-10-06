@@ -2,6 +2,7 @@ module Arkham.Asset.Cards (module Arkham.Asset.Cards, module X) where
 
 import Arkham.Asset.Cards.AndrePatel as X
 import Arkham.Asset.Cards.CarolynFern2 as X
+import Arkham.Asset.Cards.ChildrenOfBlood as X
 import Arkham.Asset.Cards.Core2026 as X
 import Arkham.Asset.Cards.EdgeOfTheEarth as X
 import Arkham.Asset.Cards.MarieLambeau2 as X
@@ -31,7 +32,8 @@ import Arkham.Prelude
 
 allPlayerAssetCards :: Map CardCode CardDef
 allPlayerAssetCards =
-  mapFromList
+  (Homebrew.playerAssetsMap <>)
+    $ mapFromList
     $ concatMap
       toCardCodePairs
       [ abbessAllegriaDiBiase
@@ -197,11 +199,14 @@ allPlayerAssetCards =
       , chainsaw4
       , charisma3
       , charlesRossEsq
+      , charlieKaneKnowsAGuy
       , charonsObol1
       , chemistrySet
       , cherishedKeepsake
       , cherishedKeepsake1
       , chicagoTypewriter4
+      , chosenOfZburamoarteCompelledToFeed
+      , chosenOfZburamoarteFightingTheHunger
       , chuckFergus2
       , chuckFergus5
       , claireWilson
@@ -263,6 +268,7 @@ allPlayerAssetCards =
       , delilahORourke3
       , deloresGadling
       , dendromorphosis
+      , detectiveReynoldsInOverHisHead
       , detectivesColt1911s
       , detectiveSherman3
       , deVermisMysteriis2
@@ -383,6 +389,7 @@ allPlayerAssetCards =
       , falseCovenant2
       , familiarSpirit
       , familyInheritance
+      , fangOfZburamoarte
       , farsight4
       , favorOfTheMoon1
       , favorOfTheSun1
@@ -418,6 +425,7 @@ allPlayerAssetCards =
       , forbiddenTomeSecretsRevealed3
       , forcedLearning
       , forensicKit
+      , forgedPermit
       , fortyFiveAutomatic
       , fortyFiveAutomatic2
       , fortyFiveThompson
@@ -824,6 +832,7 @@ allPlayerAssetCards =
       , safeguard
       , safeguard2
       , samuelBlakeObsessiveProducer
+      , sanguineSong
       , sarahVanShaw
       , sawedOffShotgun5
       , scavenging
@@ -1079,11 +1088,16 @@ allPlayerAssetCards =
       , --- The Drowned City
         rubyStandish
       , andyVanNortwick
+      , johnRaymondLegrasse
       , --- Mi-Go Incursion
         universalSolvent
       , petOozeling
       , miGoWeapon
       , ltWilsonStewart
+      , --- Mi-Go Incursion II
+        gMen
+      , corrosiveCloud
+      , alienInstruments
       ]
 
 -- with encounter backs
@@ -1176,7 +1190,11 @@ allEncounterAssetCards =
         universityChemist
       , meteoriteSample
       , theMilitarysPlan
-      , mysteriousPhoto
+      , --- Mi-Go Incursion II
+        armoredCar
+      , brainCase
+      , --- Red Tide Rising
+        mysteriousPhoto
       , mysteriousPhotoBack
       , --- Relics of the Past
         jadeCrocodile
@@ -1214,7 +1232,6 @@ allEncounterAssetCards =
       , skyRelic
       , obsidianClaw
       , obsidianClawPower
-      , johnRaymondLegrasse
       , horrorInClay
       ]
 

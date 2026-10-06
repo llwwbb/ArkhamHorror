@@ -1,26 +1,20 @@
 module Arkham.Homebrew.DarkMatter.Enemies.StalkingByakhee (stalkingByakhee) where
 
 import Arkham.Ability
-import Arkham.Homebrew.DarkMatter.CardDefs.Enemies qualified as Cards
 import Arkham.Enemy.Import.Lifted hiding (EnemyAttacks)
-import Arkham.Helpers.Modifiers (ModifierType (..), modifySelf)
-import Arkham.Keyword qualified as Keyword
+import Arkham.Homebrew.DarkMatter.CardDefs.Enemies qualified as Cards
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
 import Arkham.Message.Lifted.Move
 
 newtype StalkingByakhee = StalkingByakhee EnemyAttrs
-  deriving anyclass IsEnemy
+  deriving anyclass (IsEnemy, HasModifiersFor)
   deriving newtype (Show, Eq, ToJSON, FromJSON, Entity)
 
 stalkingByakhee :: EnemyCard StalkingByakhee
 stalkingByakhee =
   enemy StalkingByakhee Cards.stalkingByakhee
     & setSpawnAt (LocationWithTitle "Entrance Tunnel")
-
-instance HasModifiersFor StalkingByakhee where
-  getModifiersFor (StalkingByakhee a) =
-    modifySelf a [AddKeyword Keyword.Hunter, AddKeyword Keyword.Alert]
 
 instance HasAbilities StalkingByakhee where
   getAbilities (StalkingByakhee a) =

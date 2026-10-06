@@ -56,8 +56,8 @@ import Helpers.Message as X hiding (playEvent)
 import Test.Hspec as X
 
 import Arkham.ActiveCost
-import Arkham.Agenda.Cards qualified as Cards
-import Arkham.Agenda.Cards.WhatsGoingOn
+import Arkham.Agenda.CardDefs.NightOfTheZealot.TheGathering qualified as Cards
+import Arkham.Agenda.Cards.NightOfTheZealot.TheGathering.WhatsGoingOn
 import Arkham.Agenda.Sequence
 import Arkham.Agenda.Types
 import Arkham.Asset.Cards qualified as Cards
@@ -67,11 +67,11 @@ import Arkham.CampaignLogKey
 import Arkham.Classes.HasGame
 import Arkham.Debug
 import Arkham.Difficulty
-import Arkham.Enemy.Cards qualified as Cards
+import Arkham.Enemy.CardDefs.NightOfTheZealot.Rats qualified as Cards
 import Arkham.Enemy.Types
 import Arkham.Entities qualified as Entities
-import Arkham.Event.Types
 import Arkham.Epic.Types (HasMaybeEpic (..))
+import Arkham.Event.Types
 import Arkham.Game qualified as Game
 import Arkham.Game.Settings
 import Arkham.Game.State
@@ -80,7 +80,8 @@ import Arkham.Helpers.Modifiers
 import Arkham.Investigator.Cards qualified as Investigators
 import Arkham.Investigator.Types hiding (settingsL)
 import Arkham.Keyword qualified as Keyword
-import Arkham.Location.Cards qualified as Cards
+import Arkham.Location.CardDefs.NightOfTheZealot.TheGathering qualified as Cards
+import Arkham.Location.CardDefs.NightOfTheZealot.TheMidnightMasks qualified as Cards
 import Arkham.Location.Types
 import Arkham.LocationSymbol
 import Arkham.Matcher hiding (DuringTurn, FastPlayerWindow)
@@ -89,14 +90,12 @@ import Arkham.Phase
 import Arkham.Projection
 import Arkham.Queue
 import Arkham.Random
-import Arkham.Scenario.Scenarios.TheGathering (TheGathering (..))
+import Arkham.Scenario.Scenarios.NightOfTheZealot.TheGathering (TheGathering (..))
 import Arkham.Scenario.Types
 import Arkham.SkillTest.Type
 import Arkham.Timing qualified as Timing
 import Arkham.Token
-import Arkham.Tracing
 import Arkham.Trait (Trait (Elite))
-import Control.Concurrent.Async (async)
 import Control.Monad.Catch (MonadCatch, MonadMask, MonadThrow)
 import Control.Monad.State
 import Data.IntMap.Strict qualified as IntMap
@@ -104,18 +103,15 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
 import GHC.OverloadedLabels
 import GHC.TypeLits
-import OpenTelemetry.Attributes qualified as A
-import OpenTelemetry.Processor.Span (ShutdownResult (..), SpanProcessor (..))
-import OpenTelemetry.Trace qualified as Trace
-import OpenTelemetry.Trace.Core hiding (Event, inSpan')
-import OpenTelemetry.Trace.Monad (MonadTracer (..), inSpan')
 import System.Random (StdGen, mkStdGen)
 
 runMessages :: TestAppT ()
 runMessages = do
   logger <- gets testLogger
   env <- get
-  runReaderT (Game.runMessages "TEST" logger) env
+  -- No narration in the harness: specs assert on game state, and a spec that
+  -- wants to check the log should opt in by passing observeNarration itself.
+  runReaderT (Game.runMessages "TEST" Game.noRunObservers {Game.observeMessage = logger}) env
 
 pushAndRun :: Message -> TestAppT ()
 pushAndRun msg = push msg >> runMessages
@@ -154,13 +150,13 @@ ref `refShouldBe` y = do
   liftIO $ result `shouldBe` y
 
 nonFast :: Window
-nonFast = Window Timing.When NonFast Nothing
+nonFast = Window Timing.When NonFast Nothing Nothing
 
 fastPlayerWindow :: Window
-fastPlayerWindow = Window Timing.When FastPlayerWindow Nothing
+fastPlayerWindow = Window Timing.When FastPlayerWindow Nothing Nothing
 
 duringTurn :: InvestigatorId -> Window
-duringTurn iid = Window Timing.When (DuringTurn iid) Nothing
+duringTurn iid = Window Timing.When (DuringTurn iid) Nothing Nothing
 
 data TestApp = TestApp
   { game :: IORef Game
@@ -169,7 +165,6 @@ data TestApp = TestApp
   , testLogger :: Maybe (Message -> IO ())
   , testGameLogger :: ClientMessage -> IO ()
   , debugLevel :: IORef Int
-  , testTracer :: Trace.Tracer
   }
 
 cloneTestApp :: TestApp -> IO TestApp
@@ -185,7 +180,6 @@ cloneTestApp testApp = do
       , testLogger = testLogger testApp
       , testGameLogger = testGameLogger testApp
       , debugLevel = debugLevel testApp
-      , testTracer = testTracer testApp
       }
 
 newtype TestAppT a = TestAppT {unTestAppT :: StateT TestApp IO a}
@@ -208,16 +202,6 @@ instance MonadUnliftIO m => MonadUnliftIO (StateT TestApp m) where
   withRunInIO inner =
     get >>= \st -> StateT $ \_ ->
       withRunInIO $ \runInIO -> (,st) <$> inner (runInIO . flip evalStateT st)
-
-instance Tracing TestAppT where
-  type SpanType TestAppT = Trace.Span
-  type SpanArgs TestAppT = Trace.SpanArguments
-  defaultSpanArgs = Trace.defaultSpanArguments
-  addAttribute = Trace.addAttribute
-  doTrace name args action = inSpan' name args action
-
-instance MonadTracer TestAppT where
-  getTracer = gets testTracer
 
 instance HasDebugLevel TestAppT where
   getDebugLevel = liftIO . readIORef =<< gets debugLevel
@@ -420,6 +404,10 @@ instance UpdateField "discard" Investigator [PlayerCard] where
 instance UpdateField "resources" Investigator Int where
   updateField resources =
     pure . overAttrs (Arkham.Investigator.Types.tokensL %~ setTokens Resource resources)
+
+instance UpdateField "clues" Investigator Int where
+  updateField clues =
+    pure . overAttrs (Arkham.Investigator.Types.tokensL %~ setTokens Clue clues)
 
 instance UpdateField "fight" Enemy Int where
   updateField fight = pure . overAttrs (\attrs -> attrs {enemyFight = Just (Fixed fight)})
@@ -709,11 +697,12 @@ skip = chooseOptionMatching "skip" \case
   SkipTriggersButton {} -> True
   _ -> False
 
--- | Peel off display-only question wrappers (source highlight, header label)
--- that the frontend renders but that tests should see through. Also normalizes
--- the window-ask flavors of ChooseOne, which differ from a plain ChooseOne only
--- in whether the queue regenerates the seat (see Entity.Answer), not in how a
--- spec answers them.
+{- | Peel off display-only question wrappers (source highlight, header label)
+that the frontend renders but that tests should see through. Also normalizes
+the window-ask flavors of ChooseOne, which differ from a plain ChooseOne only
+in whether the queue regenerates the seat (see Entity.Answer), not in how a
+spec answers them.
+-}
 stripQuestionWrappers :: Question msg -> Question msg
 stripQuestionWrappers = \case
   QuestionLabel _ _ q -> stripQuestionWrappers q
@@ -740,6 +729,7 @@ chooseFirstOption _reason = do
   questionMap <- gameQuestion <$> getGame
   case mapToList questionMap of
     [(_, question)] -> case stripQuestionWrappers question of
+      Read _ (BasicReadChoices (msg : _)) _ -> push (uiToRun msg) >> runMessages
       ChooseOne (msg : _) -> push (uiToRun msg) >> runMessages
       PlayerWindowChooseOne (msg : _) -> push (uiToRun msg) >> runMessages
       ChooseOneAtATime (msg : _) -> push (uiToRun msg) >> runMessages
@@ -762,6 +752,7 @@ chooseOptionMatching _reason f = do
   notFound msgs =
     liftIO $ expectationFailure $ "could not find a matching message in: " <> show msgs
   go iid question = case stripQuestionWrappers question of
+    Read _ (BasicReadChoices msgs) _ -> go iid (ChooseOne msgs)
     ChooseOne msgs -> case find f msgs of
       Just msg -> push (uiToRun msg) <* runMessages
       Nothing -> notFound msgs
@@ -819,13 +810,6 @@ newtype ArkhamGameExportData = ArkhamGameExportData {currentData :: Game}
   deriving stock Generic
   deriving anyclass FromJSON
 
-instance Tracing IO where
-  type SpanType IO = ()
-  type SpanArgs IO = ()
-  defaultSpanArgs = ()
-  addAttribute _ _ _ = pure ()
-  doTrace _ _ action = action ()
-
 gameTestFromFile :: FilePath -> (Investigator -> TestAppT ()) -> IO ()
 gameTestFromFile fp body = do
   export <- fromJustNote "failed to parse file" <$> decodeFileStrict' ("tests/" <> fp)
@@ -840,8 +824,7 @@ gameTestFromFile fp body = do
   queueRef <- newQueue []
   genRef <- newIORef $ mkStdGen (gameSeed g)
   debugLevelRef <- newIORef 0
-  tracer <- mkTestTracer
-  let testApp = TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef tracer
+  let testApp = TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef
   runReaderT (overGameM preloadModifiers) testApp
   runTestApp testApp (body investigator)
 
@@ -854,35 +837,23 @@ gameTestWith investigatorDef body = do
   queueRef <- newQueue []
   genRef <- newIORef $ mkStdGen (gameSeed g)
   debugLevelRef <- newIORef 0
-  tracer <- mkTestTracer
-  let testApp = TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef tracer
+  let testApp = TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef
   runReaderT (overGameM preloadModifiers) testApp
   runTestApp testApp (body investigator)
-
-mkTestTracer :: IO Trace.Tracer
-mkTestTracer = do
-  let dummyProcessor =
-        SpanProcessor
-          { spanProcessorOnStart = \_ _ -> pure ()
-          , spanProcessorOnEnd = \_ -> pure ()
-          , spanProcessorShutdown = async (pure ShutdownSuccess)
-          , spanProcessorForceFlush = pure ()
-          }
-  tp <- createTracerProvider [dummyProcessor] emptyTracerProviderOptions
-  let instrLib = InstrumentationLibrary "test" "1.0.0" "" A.emptyAttributes
-  pure $ makeTracer tp instrLib tracerOptions
 
 scenarioTest :: ScenarioId -> (Investigator -> TestAppT ()) -> IO ()
 scenarioTest = scenarioTestWith Investigators.jennyBarnes
 
--- | Like 'scenarioTest' but lets the caller choose which investigator the game
--- is seeded with (rather than the default Jenny Barnes).
+{- | Like 'scenarioTest' but lets the caller choose which investigator the game
+is seeded with (rather than the default Jenny Barnes).
+-}
 scenarioTestWith :: CardDef -> ScenarioId -> (Investigator -> TestAppT ()) -> IO ()
 scenarioTestWith investigatorDef = scenarioTestWithDifficulty investigatorDef Easy
 
--- | Like 'scenarioTestWith' but also lets the caller choose the difficulty
--- (needed for effects that differ between the Easy/Standard and Hard/Expert
--- sides of a scenario reference card).
+{- | Like 'scenarioTestWith' but also lets the caller choose the difficulty
+(needed for effects that differ between the Easy/Standard and Hard/Expert
+sides of a scenario reference card).
+-}
 scenarioTestWithDifficulty
   :: CardDef -> Difficulty -> ScenarioId -> (Investigator -> TestAppT ()) -> IO ()
 scenarioTestWithDifficulty investigatorDef difficulty scenarioId body = do
@@ -893,8 +864,7 @@ scenarioTestWithDifficulty investigatorDef difficulty scenarioId body = do
   queueRef <- newQueue []
   genRef <- newIORef $ mkStdGen (gameSeed g)
   debugLevelRef <- newIORef 0
-  tracer <- mkTestTracer
-  let testApp = TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef tracer
+  let testApp = TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef
   runReaderT (overGameM preloadModifiers) testApp
   runTestApp testApp (body investigator)
 
@@ -906,7 +876,9 @@ newGame scenario' investigator = do
       Game
         { gameWindowDepth = 0
         , gameWindowStack = Nothing
+        , gameRoundCount = 0
         , gameWindowTick = 0
+        , gameRetainedQuestion = False
         , gameSimultaneousAsks = mempty
         , gameWindowTickStack = []
         , gameEntryTicks = mempty
@@ -925,6 +897,7 @@ newGame scenario' investigator = do
         , gameLeadInvestigatorId = investigatorId
         , gameActivePlayerId = attr investigatorPlayerId investigator
         , gamePlayers = [attr investigatorPlayerId investigator]
+        , gameRetiredInvestigators = mempty
         , gamePhase = CampaignPhase -- TODO: maybe this should be a TestPhase or something?
         , gamePhaseStep = Nothing
         , gameSkillTest = Nothing
@@ -938,6 +911,7 @@ newGame scenario' investigator = do
         , gameInHandEntities = mempty
         , gameInDiscardEntities = mempty
         , gameActionRemovedEntities = mempty
+        , gameTombstones = mempty
         , gameInSearchEntities = defaultEntities
         , gameGameState = IsActive
         , gameFoundCards = mempty
@@ -956,6 +930,7 @@ newGame scenario' investigator = do
         , gameActionSnapshot = Transient Nothing
         , gameInAction = False
         , gameCards = mempty
+        , gameCustomCards = mempty
         , gameActiveCost = mempty
         , gameActiveAbilities = mempty
         , gameInSetup = False
@@ -980,10 +955,7 @@ newGame scenario' investigator = do
     queueRef <- Queue <$> newIORef []
     genRef <- newIORef $ mkStdGen (gameSeed game)
     debugLevelRef <- newIORef 0
-    provider <- Trace.initializeGlobalTracerProvider
-    let tracer = Trace.makeTracer provider $(Trace.detectInstrumentationLibrary) Trace.tracerOptions
-
-    runTestApp (TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef tracer) $ do
+    runTestApp (TestApp gameRef queueRef genRef Nothing (pure . const ()) debugLevelRef) $ do
       a1 <- testAgenda "01105" id
       let s'' = overAttrs (agendaStackL .~ IntMap.fromList [(1, [toCard a1, toCard a1])]) scenario'
       pure $ game {gameMode = That s''}

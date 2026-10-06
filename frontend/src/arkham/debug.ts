@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { updateGameRaw } from '@/arkham/api'
 import type { Scenario } from '@/arkham/types/Scenario'
+import { readTokenBag } from '@/arkham/types/TokenBag'
 
 // Scenario count keys that can be edited from the Scenario Debug modal. `key` is
 // the ScenarioCountKey tag (see Arkham.ScenarioLogKey); the current value is read
@@ -14,6 +15,7 @@ const scenarioDebugCounts: Record<string, ScenarioDebugCount[]> = {
   c83001: [{ key: 'StrengthOfTheAbyss', label: 'Strength of the Abyss' }], // The Eternal Slumber
   c83016: [{ key: 'StrengthOfTheAbyss', label: 'Strength of the Abyss' }], // The Night's Usurper
   c04277: [{ key: 'CurrentDepth', label: 'Depth' }], // The Depths of Yoth
+  c11688a: [{ key: 'CthulhuRage', label: "Cthulhu's Rage" }], // The Doom of Arkham Pt II
 }
 
 export function scenarioDebugCountsFor(scenario: Scenario): ScenarioDebugCount[] {
@@ -21,11 +23,22 @@ export function scenarioDebugCountsFor(scenario: Scenario): ScenarioDebugCount[]
 }
 
 // Scenarios with a bespoke debug section (beyond the generic count editors above).
-const scenariosWithCustomDebugOptions = ['c85001'] // The Blob That Ate Everything
+const scenariosWithCustomDebugOptions = [
+  'c85001', // The Blob That Ate Everything
+  'c11688a', // The Doom of Arkham Pt II
+]
+
+export function scenarioTokenBagsFor(scenario: Scenario) {
+  return Object.entries(scenario.customChaosBags ?? {}).flatMap(([key, value]) => {
+    const bag = readTokenBag(value)
+    return bag ? [{ key, bag, label: `${key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())} bag` }] : []
+  })
+}
 
 export function scenarioHasDebugOptions(scenario: Scenario): boolean {
   return scenariosWithCustomDebugOptions.includes(scenario.id)
     || scenarioDebugCountsFor(scenario).length > 0
+    || scenarioTokenBagsFor(scenario).length > 0
 }
 
 const debug = reactive({
@@ -33,7 +46,24 @@ const debug = reactive({
   toggle: () => {
     debug.active = !debug.active
   },
-  send: async (gameId: string, message: any) => updateGameRaw(gameId, message)
+  send: async (gameId: string, message: any) => updateGameRaw(gameId, message),
+  // A modifier that lives for the current skill test only.
+  skillTestModifier: async (
+    gameId: string,
+    skillTestId: string,
+    target: { tag: string, contents?: unknown },
+    modifier: { tag: string, contents?: unknown },
+  ) => updateGameRaw(gameId,
+    { tag: 'CreateWindowModifierEffect'
+    , contents:
+      [ { tag: 'EffectSkillTestWindow', contents: skillTestId }
+      , { tag: 'EffectModifiers'
+        , contents: [{ source: { tag: 'GameSource' }, type: modifier, activeDuringSetup: false, card: null }]
+        }
+      , { tag: 'GameSource' }
+      , target
+      ]
+    })
 })
 
 export function useDebug() {

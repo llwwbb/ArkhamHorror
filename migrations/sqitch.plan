@@ -17,8 +17,22 @@ change_player_id_to_uuid 2023-10-10T02:29:00Z Matthew Mongeau <halogenandtoast@M
 change_deck_url_to_nullable 2024-08-07T14:51:24Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Change deck url to nullable
 add_step_constraint 2024-08-20T03:08:45Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Constrait to ensure steps stay in sync
 arkham_epic [arkham_games users] 2026-06-26T00:00:00Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Epic Multiplayer events, groups, members, and shared-state steps
-add_admin_to_users [users] 2026-06-28T00:00:00Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Add admin flag to users
-arkham_ml_decisions [arkham_games] 2026-06-29T00:00:00Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Live imitation-learning decision capture
 arkham_game_undo_floors [arkham_games] 2026-06-29T12:00:00Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Per-game undo floor (lowest undoable step)
 arkham_achievements [arkham_games users] 2026-07-09T00:00:00Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Above-the-table achievements per user
+arkham_custom_cards [users] 2026-09-05T00:00:00Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Cards built in the card builder, kept per user
+arkham_deck_overlay [arkham_decks] 2026-09-05T12:00:00Z Matthew Mongeau <halogenandtoast@Mac-Studio.local> # Custom card overlay laid over a deck
+arkham_custom_card_sets [users arkham_custom_cards] 2026-09-11T00:00:00Z Claude <noreply@anthropic.com> # Named collections that own custom cards
+arkham_published_card_sets [users arkham_custom_card_sets] 2026-09-12T00:00:00Z Claude <noreply@anthropic.com> # Published card sets, their versions, and subscriptions to them
+arkham_published_card_set_likes [users arkham_published_card_sets] 2026-09-12T01:00:00Z Claude <noreply@anthropic.com> # Thumbs up on a published card set
+add_last_used_at_to_decks [arkham_decks arkham_players] 2026-09-12T02:00:00Z Claude <noreply@anthropic.com> # Track when a deck was last taken into a game
+add_phase_transition_notifications_to_users [users] 2026-09-12T03:00:00Z Claude <noreply@anthropic.com> # Add phase transition notification preference
+arkham_api_keys [users] 2026-09-27T00:00:00Z Claude <noreply@anthropic.com> # Scoped, revocable per-user keys for programmatic access
+arkham_card_set_submissions [arkham_published_card_sets] 2026-10-04T00:00:00Z Claude <noreply@anthropic.com> # Review queue for sets submitted to the marketplace
+arkham_game_stats [arkham_games] 2026-10-04T01:00:00Z Claude <noreply@anthropic.com> # Pre-extracted game facts for the admin stats panel
+add_descriptions_to_card_sets [arkham_custom_card_sets arkham_published_card_sets] 2026-10-05T00:00:00Z Claude <noreply@anthropic.com> # What a set is, for its own page and its marketplace listing
+add_urls_to_card_sets [add_descriptions_to_card_sets] 2026-10-05T01:00:00Z Claude <noreply@anthropic.com> # Where a set lives in the world, for its page and its marketplace listing
+add_payload_to_log_entries [add_urls_to_card_sets] 2026-10-05T02:00:00Z Claude <noreply@anthropic.com> # Structured log entries alongside the legacy flat body
+add_key_to_log_entries [add_payload_to_log_entries] 2026-10-05T03:00:00Z Claude <noreply@anthropic.com> # A stable identity for a log entry that is revised in place
+log_entry_group [add_key_to_log_entries] 2026-10-06T00:00:00Z Claude <noreply@anthropic.com> # Group id on a log entry, replacing the revisable-row key
+
 web_push_notifications [arkham_games users] 2026-07-18T00:00:00Z llwwbb <llwwbb7@gmail.com> # Per-device FCM subscriptions and durable notification outbox

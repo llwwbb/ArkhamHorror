@@ -10,6 +10,7 @@ import Arkham.EffectMetadata as X
 import Arkham.Helpers.Message as X
 import Arkham.Helpers.Query as X
 import Arkham.Helpers.SkillTest as X
+import Arkham.Helpers.Source (getSourceController)
 import Arkham.Id as X
 import Arkham.Source as X
 import Arkham.Target as X
@@ -17,7 +18,7 @@ import Arkham.Target as X
 import Arkham.Card
 import Arkham.Classes.Query (selectOne, (<=~>))
 import Arkham.Classes.RunMessage
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Matcher.Scenario
 import Arkham.Modifier
 import Arkham.Window (Window)
@@ -50,7 +51,8 @@ instance RunMessage EffectAttrs where
         pushWhen (isEndOfWindow a (EffectScenarioSetupWindow scenarioId)) (DisableEffect effectId)
       pure a
     Begin p | isEndOfWindow a (EffectUntilEndOfNextPhaseWindowFor p) -> do
-      pure $ a {effectWindow = Just $ EffectUntilEndOfPhaseWindowFor p}
+      pure
+        $ advanceEffectWindow (EffectUntilEndOfNextPhaseWindowFor p) (EffectUntilEndOfPhaseWindowFor p) a
     EndPhase | isEndOfWindow a EffectPhaseWindow -> do
       a <$ push (DisableEffect effectId)
     EndPhase -> do
@@ -62,11 +64,13 @@ instance RunMessage EffectAttrs where
         $ (DisableEffect effectId)
       pure a
     BeginTurn iid | isEndOfWindow a (EffectEndOfNextTurnWindow iid) -> do
-      pure $ a {effectWindow = Just $ EffectTurnWindow iid}
+      pure $ advanceEffectWindow (EffectEndOfNextTurnWindow iid) (EffectTurnWindow iid) a
     BeginTurn iid | isEndOfWindow a (EffectNextTurnWindow iid) -> do
       a <$ push (DisableEffect effectId)
     EndTurn iid | isEndOfWindow a (EffectTurnWindow iid) -> do
       a <$ push (DisableEffect effectId)
+    EndRound | isEndOfWindow a EffectUntilEndOfNextRoundWindow -> do
+      pure $ advanceEffectWindow EffectUntilEndOfNextRoundWindow EffectRoundWindow a
     EndRound | isEndOfWindow a EffectRoundWindow -> do
       a <$ push (DisableEffect effectId)
     EndRound -> do
@@ -93,6 +97,13 @@ instance RunMessage EffectAttrs where
     FinishedEvent _ | isEndOfWindow a EffectEventWindow -> do
       a <$ push (DisableEffect effectId)
     BeginAction | isEndOfWindow a EffectNextActionWindow -> do
+      active <- getActiveInvestigatorId
+      controller <- getSourceController a.source
+      pure
+        $ if maybe True (== active) controller
+          then advanceEffectWindow EffectNextActionWindow EffectActionWindow a
+          else a
+    FinishAction | isEndOfWindow a EffectActionWindow -> do
       a <$ push (DisableEffect effectId)
     ReplaceAct {} | isEndOfWindow a EffectActWindow -> do
       a <$ push (DisableEffect effectId)
@@ -119,10 +130,18 @@ instance RunMessage EffectAttrs where
       a <$ push (DisableEffect effectId)
     Do (CheckWindows windows') | any (isTakeDamage a) windows' && isEndOfWindow a EffectDamageWindow -> do
       a <$ push (DisableEffect effectId)
+    -- Damage reduced away to nothing never opens the `after TakeDamage` window (#5682),
+    -- so an effect that cancelled the whole hit lost its only disable trigger above and
+    -- its DamageTaken modifier stuck to the target forever, #5807. AssignedDamage is
+    -- pushed once per resolved assignment whatever amount survived the reductions.
+    AssignedDamage target _ _ _ | target == effectTarget && isEndOfWindow a EffectDamageWindow -> do
+      a <$ push (DisableEffect effectId)
     AfterRevelation _ tid | isEndOfWindow a (EffectRevelationWindow tid) -> do
       a <$ push (DisableEffect effectId)
     ResolvedCard _ card | isEndOfWindow a (EffectCardResolutionWindow $ toCardId card) -> do
       a <$ push (Priority $ DisableEffect effectId)
+    Discarded _ _ card | isEndOfWindow a (EffectUntilCardDiscarded $ toCardId card) -> do
+      a <$ push (DisableEffect effectId)
     ResolvedAbility ab | isEndOfWindow a (EffectAbilityWindow ab.ref) -> do
       a <$ push (DisableEffect effectId)
     Do (TakeResources iid _ _ _) | isEndOfWindow a (EffectGainResourcesWindow iid) -> do

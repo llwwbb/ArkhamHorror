@@ -1,0 +1,17 @@
+{
+    "applyAll": "Alle",
+    "skillTestTitle": "Fähigkeitsprobe",
+    "toBeCommitted": "Wird beigetragen",
+    "committedCards": "Beigetragene Karten",
+    "waitingForMorePlayers": "Warten auf weitere Spieler",
+    "showInviteLink": "Lade sie mit dieser URL ein:",
+    "gameOver": "Spiel vorbei",
+    "watchReplay": "Replay ansehen",
+    "submit": "Bestätigen",
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "outOfSyncHint": "Dein Spiel ist nicht synchronisiert, versuche neu zu verbinden...",
+    "error": "Fehler",
+    "errorContent": "Das ist höchstwahrscheinlich ein Fehler, bitte melde einen Fehlerbericht.",
+    "fileBug": "Fehler melden"
+}

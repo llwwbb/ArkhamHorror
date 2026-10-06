@@ -1,7 +1,8 @@
 module Arkham.Classes.GameLogger where
 
-import Arkham.Id
 import Arkham.Card.Id
+import Arkham.Id
+import Arkham.Log.Entry
 import Arkham.Prelude
 import Control.Monad.State.Strict
 import Control.Monad.Writer.Strict
@@ -38,15 +39,40 @@ formatAsSentence = go False
 
 data ClientMessage
   = ClientText Text
+  | {- | A structured log entry. The replacement for 'ClientText': it carries
+    parts rather than a brace-DSL string, so the client renders without
+    regexes, and it carries children, a cause and an audience, none of which a
+    flat string could express. Built with "Arkham.Log"; see @docs/game-log/@.
+    -}
+    ClientLogEntry LogEntry
+  | {- | Take back a log entry sent earlier, by its 'logEntryTag'.
+
+    For something the game said and then unsaid: a card committed to a test and
+    then uncommitted never happened, and leaving the line there is a lie about
+    the board. Deliberately narrow -- it deletes rows carrying that tag and
+    nothing else -- so it stays a retraction rather than a general edit.
+    -}
+    ClientRetractLog Text
   | ClientError Text
   | ClientCard Text Value
   | ClientCardOnly PlayerId Text Value
+  | {- | One investigator drew cards from their own deck: who to tell, the
+    heading, the cards themselves, and which kind of draw it was so the client
+    can honour a preference like "only the upkeep draw". Sent for every player
+    draw; the client decides whether to show anything.
+    -}
+    ClientDrewCards PlayerId Text Value Text
   | ClientTarot Value
   | ClientShowDiscard InvestigatorId
   | ClientShowUnder InvestigatorId
   | ClientUI Text
   | ClientAudio Text
   | ClientPlayabilityReport CardId Text [(Text, Maybe Text)]
+  | {- | A custom card's JSON did not do what it said. Carries enough to fix it:
+    which card, what went wrong, and the offending fragment. Never thrown --
+    the card simply did nothing -- so without this the author sees silence.
+    -}
+    ClientCustomCardIssue Text Text Value
 
 send :: HasGameLogger m => Text -> m ()
 send msg = do
@@ -62,6 +88,15 @@ sendAudio :: HasGameLogger m => Text -> m ()
 sendAudio fileName = do
   f <- getLogger
   liftIO $ f (ClientAudio fileName)
+
+{- | Report a custom card whose JSON could not be used, to whoever is looking at
+the game. Silent failure is the wrong default for something a person is in the
+middle of authoring.
+-}
+sendCustomCardIssue :: HasGameLogger m => Text -> Text -> Value -> m ()
+sendCustomCardIssue cardCode detail payload = do
+  f <- getLogger
+  liftIO $ f (ClientCustomCardIssue cardCode detail payload)
 
 sendError :: HasGameLogger m => Text -> m ()
 sendError msg = do
@@ -87,6 +122,14 @@ sendEnemyOnly :: HasGameLogger m => PlayerId -> Text -> Value -> m ()
 sendEnemyOnly pid title msg = do
   f <- getLogger
   liftIO $ f (ClientCardOnly pid title msg)
+
+{- | Announce a completed draw from an investigator's own deck. The whole batch
+goes in one message: a draw of six is one look at six cards, never six reveals.
+-}
+sendDrewCards :: HasGameLogger m => PlayerId -> Text -> Value -> Text -> m ()
+sendDrewCards pid title cards kind = do
+  f <- getLogger
+  liftIO $ f (ClientDrewCards pid title cards kind)
 
 sendTarot :: HasGameLogger m => Value -> m ()
 sendTarot msg = do

@@ -3,8 +3,10 @@ module Arkham.Decklist (module Arkham.Decklist, module Arkham.Decklist.Type) whe
 import Arkham.Card hiding (setTaboo)
 import Arkham.Card.PlayerCard
 import Arkham.Customization
+import Arkham.Decklist.RandomBasicWeakness (ArkhamBuildCardPool, parseArkhamBuildCardPool)
 import Arkham.Decklist.Type
 import Arkham.Id
+import Arkham.Investigator.Cards (allInvestigatorCards)
 import Arkham.Name
 import Arkham.PlayerCard
 import Arkham.Prelude hiding (optional, try, (<|>))
@@ -24,6 +26,7 @@ data Decklist = Decklist
   , decklistCards :: [PlayerCard]
   , decklistExtraDeck :: [PlayerCard]
   , decklistTaboo :: Maybe TabooList
+  , decklistCardPool :: Maybe ArkhamBuildCardPool
   , decklistUrl :: Maybe Text
   , decklistCardAttachments :: Map CardCode [CardCode]
   }
@@ -41,6 +44,9 @@ instance HasField "extra" Decklist [PlayerCard] where
 instance HasField "taboo" Decklist (Maybe TabooList) where
   getField = decklistTaboo
 
+instance HasField "cardPool" Decklist (Maybe ArkhamBuildCardPool) where
+  getField = decklistCardPool
+
 instance HasField "url" Decklist (Maybe Text) where
   getField = decklistUrl
 
@@ -55,6 +61,7 @@ loadDecklist decklist =
     <$> loadDecklistCards slots decklist
     <*> loadExtraDeck decklist
     <*> pure (fromTabooId $ taboo_id decklist)
+    <*> pure (parseArkhamBuildCardPool decklist)
     <*> pure (url decklist)
     <*> pure (decklistAttachments decklist)
 
@@ -79,14 +86,22 @@ loadExtraDeck decklist = do
       pure $ T.splitOn "," s
 
   case mResult of
-    Nothing -> loadDecklistCards sideSlotsWithoutAttachments decklist
+    Nothing -> loadDecklistCards (withoutInvestigatorCards . sideSlotsWithoutAttachments) decklist
     Just codes -> do
       let convert =
             applyDecklistCardMeta decklist
               . applyCustomizations decklist
               . setPlayerCardOwner (decklistInvestigatorId decklist)
               . setTaboo (fromTabooId $ taboo_id decklist)
-      traverse ((`genPlayerCardWith` convert) . lookupPlayerCardDef . CardCode) codes
+      for (filter (not . isInvestigatorCardCode) $ map CardCode codes) \cardCode ->
+        genPlayerCardWith (lookupPlayerCardDef cardCode) convert
+
+-- side decks may include the investigator's own card, which is not a player card
+isInvestigatorCardCode :: CardCode -> Bool
+isInvestigatorCardCode = (`Map.member` allInvestigatorCards)
+
+withoutInvestigatorCards :: Map CardCode Int -> Map CardCode Int
+withoutInvestigatorCards = Map.filterWithKey \cardCode _ -> not (isInvestigatorCardCode cardCode)
 
 applyDecklistCardMeta :: ArkhamDBDecklist -> PlayerCard -> PlayerCard
 applyDecklistCardMeta decklist pCard = case Map.lookup pCard.cardCode (decklistAttachments decklist) of

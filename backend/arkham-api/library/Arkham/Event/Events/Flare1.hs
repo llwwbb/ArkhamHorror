@@ -29,7 +29,7 @@ instance RunMessage Flare1 where
       chooseOrRunOneM iid do
         when (notNull fightableEnemies) do
           labeledI "fight" $ doStep 1 msg
-        cardI18n $ scope "flare1" $ labeled' "searchForAlly" $ doStep 2 msg
+        cardI18n $ scope "flare1" $ labeled "searchForAlly" $ doStep 2 msg
       pure e
     DoStep n (CardEnteredPlay _iid (isCard attrs -> True)) -> do
       pure $ Flare1 $ setMeta n attrs
@@ -48,7 +48,9 @@ instance RunMessage Flare1 where
           chooseTargetM iid investigators \x -> search x e x [fromTopOfDeck 9] #ally (defer e IsNotDraw)
         _ -> error "Invalid meta"
       pure e
-    SearchFound iid (isTarget attrs -> True) _ cards -> do
+    SearchFound _ (isTarget attrs -> True) _ cards -> do
+      -- we may have searched another investigator's deck, but the ally enters play under your control
+      let iid = attrs.controller
       targetCount <- getTotalSearchTargets iid cards 1
       when (null cards) $ continue_ iid
       focusCards cards do

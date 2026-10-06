@@ -13,40 +13,53 @@ import Arkham.Asset.Types (SomeAssetCard)
 import Arkham.Card.CardCode
 import Arkham.EncounterSet (EncounterSet)
 import Arkham.Enemy.Types (SomeEnemyCard)
-import Arkham.Homebrew.ContentEntries ()
+import Arkham.Homebrew.ContentEntries (DiscoveredModules)
 import Arkham.Homebrew.TH
 import Arkham.Homebrew.Types as X
-import Arkham.Id (CampaignId)
 import Arkham.Location.Types (SomeLocationCard)
-import Arkham.Prelude ()
+import Arkham.Prelude (Text)
+import Arkham.Skill.Types (SomeSkillCard)
+import Arkham.Story.Types (SomeStoryCard)
 import Arkham.Treachery.Types (SomeTreacheryCard)
 
 allHomebrewContent :: HomebrewContent
 allHomebrewContent = $(discoverInstances ''IsHomebrewContent 'homebrewContent)
 
+{- | Unused; see 'discoveredModules'. Without it GHC does not rebuild this
+module when a campaign is added.
+-}
+discoveredContentModules :: Text
+discoveredContentModules = discoveredModules @DiscoveredModules
+
 acts :: [SomeActCard]
-acts = hcActs allHomebrewContent
+acts = allHomebrewContent.acts
 
 agendas :: [SomeAgendaCard]
-agendas = hcAgendas allHomebrewContent
+agendas = allHomebrewContent.agendas
 
 assets :: [SomeAssetCard]
-assets = hcAssets allHomebrewContent
+assets = allHomebrewContent.assets
 
 enemies :: [SomeEnemyCard]
-enemies = hcEnemies allHomebrewContent
+enemies = allHomebrewContent.enemies
 
 locations :: [SomeLocationCard]
-locations = hcLocations allHomebrewContent
+locations = allHomebrewContent.locations
+
+skills :: [SomeSkillCard]
+skills = allHomebrewContent.skills
+
+stories :: [SomeStoryCard]
+stories = allHomebrewContent.stories
 
 treacheries :: [SomeTreacheryCard]
-treacheries = hcTreacheries allHomebrewContent
+treacheries = allHomebrewContent.treacheries
 
-scenarios :: [(CardCode, HomebrewScenario)]
-scenarios = hcScenarios allHomebrewContent
+scenarios :: HomebrewScenarios
+scenarios = allHomebrewContent.scenarios
 
 scenarioSets :: [(CardCode, EncounterSet)]
-scenarioSets = hcScenarioSets allHomebrewContent
+scenarioSets = [(cardCode, encounterSet) | (cardCode, HomebrewScenario encounterSet _) <- scenarios]
 
-campaigns :: [(CampaignId, HomebrewCampaign)]
-campaigns = hcCampaigns allHomebrewContent
+campaigns :: HomebrewCampaigns
+campaigns = allHomebrewContent.campaigns

@@ -16,6 +16,7 @@ import Arkham.Id
 import Arkham.Key
 import Arkham.Layout
 import Arkham.Location.Grid
+import Arkham.Location.Group
 import Arkham.Matcher hiding (assetAt)
 import Arkham.Message
 import Arkham.Message.Lifted
@@ -29,7 +30,6 @@ import Arkham.Scenario.Types
 import Arkham.ScenarioLogKey
 import Arkham.Target
 import Arkham.Token (Token, addTokens)
-import Arkham.Tracing
 import Control.Lens
 import Control.Monad.Random (MonadRandom (..))
 import Control.Monad.State.Strict
@@ -64,7 +64,59 @@ data ScenarioBuilderState = ScenarioBuilderState
   { attrs :: ScenarioAttrs
   , otherCards :: [Card]
   , isReturnTo :: Bool
+  , overrides :: SetupOverrides
   }
+
+{- | Deltas a wrapping scenario declares before running an original setup block, so that
+block can stay a verbatim copy of the one it wraps. An unofficial "Return to" box reads
+like its printed scenario card: @replaceSet AgentsOfCthulhu StalkersOfCthulhu@,
+@substitute Acts.thePit Acts.thePitV2@. Empty for every ordinary scenario, which is
+every scenario that never calls one of these.
+-}
+data SetupOverrides = SetupOverrides
+  { overriddenSets :: Map Set.EncounterSet (Maybe Set.EncounterSet)
+  -- ^ 'Nothing' means the gather is skipped entirely.
+  , overriddenCards :: Map CardCode CardDef
+  }
+
+noSetupOverrides :: SetupOverrides
+noSetupOverrides = SetupOverrides mempty mempty
+
+overrideSetsL :: Lens' SetupOverrides (Map Set.EncounterSet (Maybe Set.EncounterSet))
+overrideSetsL = lens (.overriddenSets) \m x -> m {overriddenSets = x}
+
+overrideCardsL :: Lens' SetupOverrides (Map CardCode CardDef)
+overrideCardsL = lens (.overriddenCards) \m x -> m {overriddenCards = x}
+
+overridesL :: Lens' ScenarioBuilderState SetupOverrides
+overridesL = lens (.overrides) \m x -> m {overrides = x}
+
+-- | Gather @new@ wherever the wrapped block gathers @old@.
+replaceSet :: Monad m => Set.EncounterSet -> Set.EncounterSet -> ScenarioBuilderT m ()
+replaceSet old new = overridesL . overrideSetsL . at old .= Just (Just new)
+
+-- | Skip the wrapped block's gather of this set.
+ignoreSet :: Monad m => Set.EncounterSet -> ScenarioBuilderT m ()
+ignoreSet old = overridesL . overrideSetsL . at old .= Just Nothing
+
+{- | Use @new@ wherever the wrapped block names @old@ -- the "replace the X act card with
+the new version from the Return set" instruction. A total substitution: for a partial
+swap (one of each copy) write the cards out in your own block instead.
+-}
+substitute :: Monad m => CardDef -> CardDef -> ScenarioBuilderT m ()
+substitute old new = overridesL . overrideCardsL . at old.cardCode .= Just new
+
+-- | Resolve a gather through 'replaceSet' or 'ignoreSet'.
+resolveSet
+  :: Monad m => Set.EncounterSet -> ScenarioBuilderT m (Maybe Set.EncounterSet)
+resolveSet s = use (overridesL . overrideSetsL . at s) <&> fromMaybe (Just s)
+
+-- | Resolve a card def through 'substitute'.
+resolveDef :: Monad m => CardDef -> ScenarioBuilderT m CardDef
+resolveDef def = use (overridesL . overrideCardsL . at def.cardCode) <&> fromMaybe def
+
+resolveDefs :: Monad m => [CardDef] -> ScenarioBuilderT m [CardDef]
+resolveDefs = traverse resolveDef
 
 attrsL :: Lens' ScenarioBuilderState ScenarioAttrs
 attrsL = lens (.attrs) \m x -> m {attrs = x}
@@ -77,7 +129,7 @@ isReturnToL = lens (.isReturnTo) \m x -> m {isReturnTo = x}
 
 newtype ScenarioBuilderT m a = ScenarioBuilderT {unScenarioBuilderT :: StateT ScenarioBuilderState m a}
   deriving newtype
-    (Functor, Applicative, Monad, MonadIO, MonadState ScenarioBuilderState, MonadTrans, Tracing)
+    (Functor, Applicative, Monad, MonadIO, MonadState ScenarioBuilderState, MonadTrans)
 
 instance MonadRandom m => MonadRandom (ScenarioBuilderT m) where
   getRandom = lift getRandom
@@ -114,7 +166,7 @@ runScenarioSetup f attrs body =
     . (.attrs)
     <$> execStateT
       (clearCards >> body.unScenarioBuilderT >> shuffleEncounterDeck)
-      (ScenarioBuilderState (attrs & campaignStepL .~ Nothing) [] False)
+      (ScenarioBuilderState (attrs & campaignStepL .~ Nothing) [] False noSetupOverrides)
 
 shuffleEncounterDeck :: (HasGame m, MonadRandom m, MonadState ScenarioBuilderState m) => m ()
 shuffleEncounterDeck = do
@@ -134,21 +186,40 @@ clearCards = do
   attrsL . victoryDisplayL .= []
 
 gather :: CardGen m => Set.EncounterSet -> ScenarioBuilderT m ()
-gather encounterSet = do
+gather = withResolvedSet \encounterSet -> do
   (other, cards) <- partition isDoubleSided <$> gatherEncounterSet encounterSet
   attrsL . encounterDeckL %= (Deck cards <>)
   otherCardsL %= (map toCard other <>)
 
+{- | Run a gather against the set 'replaceSet' names in its place, or not at all if
+'ignoreSet' dropped it. Plain for every scenario that declares no overrides.
+-}
+withResolvedSet
+  :: Monad m
+  => (Set.EncounterSet -> ScenarioBuilderT m ())
+  -> Set.EncounterSet
+  -> ScenarioBuilderT m ()
+withResolvedSet f encounterSet = resolveSet encounterSet >>= traverse_ f
+
 gatherJust :: CardGen m => Set.EncounterSet -> [CardDef] -> ScenarioBuilderT m ()
-gatherJust encounterSet defs = do
-  cards <-
-    filter ((`cardMatch` mapOneOf cardDefIs defs) . toCard)
-      . excludeDoubleSided
-      <$> gatherEncounterSet encounterSet
-  attrsL . encounterDeckL %= (Deck cards <>)
+gatherJust encounterSet defs = withResolvedSet go encounterSet
+ where
+  go s = do
+    cards <-
+      filter ((`cardMatch` mapOneOf cardDefIs defs) . toCard)
+        . excludeDoubleSided
+        <$> gatherEncounterSet s
+    attrsL . encounterDeckL %= (Deck cards <>)
+
+gatherJustMatching :: ReverseQueue m => Set.EncounterSet -> CardMatcher -> ScenarioBuilderT m ()
+gatherJustMatching encounterSet matcher = withResolvedSet go encounterSet
+ where
+  go s = do
+    gather s
+    removeCards =<< amongGathered (CardFromEncounterSet s <> not_ matcher)
 
 gatherAndSetAside :: ReverseQueue m => Set.EncounterSet -> ScenarioBuilderT m ()
-gatherAndSetAside encounterSet = do
+gatherAndSetAside = withResolvedSet \encounterSet -> do
   cards <- map toCard <$> gatherEncounterSet encounterSet
   push $ SetAsideCards cards
 
@@ -178,7 +249,8 @@ placeStoryCapture def = do
 setAside :: (ReverseQueue m, FindInEncounterDeck a, HasCallStack) => [a] -> ScenarioBuilderT m ()
 setAside = setAsideWith pure
 
-setAsideFacedown :: (ReverseQueue m, FindInEncounterDeck a, HasCallStack) => [a] -> ScenarioBuilderT m ()
+setAsideFacedown
+  :: (ReverseQueue m, FindInEncounterDeck a, HasCallStack) => [a] -> ScenarioBuilderT m ()
 setAsideFacedown = setAsideWith (setFacedown True)
 
 setAsideWith
@@ -204,6 +276,7 @@ setAsideWith f as = do
   cards' <- traverse f cards
   attrsL . setAsideCardsL %= (<> cards')
   attrsL . encounterDecksL . each . _1 %= flip removeEachFromDeck (map toCardDef cards)
+
 -- setAside :: ReverseQueue m => [CardDef] -> ScenarioBuilderT m ()
 -- setAside defs = do
 --   setAsideCards defs
@@ -296,6 +369,31 @@ placeLabeled lbl def = do
   lid <- placeLocationCard def
   push $ SetLocationLabel lid lbl
   pure lid
+
+{- | Declare the groups whose boxes the map draws. Membership comes from 'placeLocationGroup'
+(or 'Arkham.Helpers.Location.joinLocationGroup' for a location that arrives later); this
+only fixes each group's key and how its box lays its members out.
+-}
+setLocationGroups :: Monad m => [LocationGroup] -> ScenarioBuilderT m ()
+setLocationGroups groups = attrsL . locationGroupsL .= groups
+
+{- | Place a whole group at once, in the order given. The index is assigned here and
+stored on each location, so the order inside the box is fixed at placement time and
+survives reload, undo and replay — a later query returning members in a different order
+cannot reshuffle the box.
+
+Members may also carry a grid position; a group only changes how they are drawn and how
+connections are routed to them.
+-}
+placeLocationGroup
+  :: ReverseQueue m => LocationGroupKey -> [CardDef] -> ScenarioBuilderT m [LocationId]
+placeLocationGroup key defs = for (zip [0 ..] defs) \(i, def) -> do
+  lid <- place def
+  push $ SetLocationGroup lid (GroupMembership key i)
+  pure lid
+
+placeLocationGroup_ :: ReverseQueue m => LocationGroupKey -> [CardDef] -> ScenarioBuilderT m ()
+placeLocationGroup_ key defs = void $ placeLocationGroup key defs
 
 placeInGrid :: ReverseQueue m => Pos -> CardDef -> ScenarioBuilderT m LocationId
 placeInGrid pos def = do
@@ -489,25 +587,25 @@ addAdditionalReferences codes = attrsL . additionalReferencesL %= (<> codes)
 
 setActDeck :: ReverseQueue m => [CardDef] -> ScenarioBuilderT m ()
 setActDeck defs = do
-  cards <- genCards defs
+  cards <- genCards =<< resolveDefs defs
   attrsL . actStackL %= insertMap 1 cards
   push SetActDeck
 
 setAgendaDeck :: ReverseQueue m => [CardDef] -> ScenarioBuilderT m ()
 setAgendaDeck defs = do
-  cards <- genCards defs
+  cards <- genCards =<< resolveDefs defs
   attrsL . agendaStackL %= insertMap 1 cards
   push SetAgendaDeck
 
 setAgendaDeckN :: ReverseQueue m => Int -> [CardDef] -> ScenarioBuilderT m ()
 setAgendaDeckN n defs = do
-  cards <- genCards defs
+  cards <- genCards =<< resolveDefs defs
   attrsL . agendaStackL %= insertMap n cards
   push SetAgendaDeck
 
 setActDeckN :: ReverseQueue m => Int -> [CardDef] -> ScenarioBuilderT m ()
 setActDeckN n defs = do
-  cards <- genCards defs
+  cards <- genCards =<< resolveDefs defs
   attrsL . actStackL %= insertMap n cards
   push SetActDeck
 

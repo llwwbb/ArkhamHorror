@@ -6,7 +6,7 @@ import type { Investigator } from '@/arkham/types/Investigator'
 import type { Game } from '@/arkham/types/Game'
 import InvestigatorRow from '@/arkham/components/InvestigatorRow.vue'
 import LogIcons from '@/arkham/components/LogIcons.vue'
-import { imgsrc } from '@/arkham/helpers'
+import { campaignSetIcon, scenarioSetIcon } from '@/arkham/helpers'
 import { setGameLocalStorageItem } from '@/arkham/localStorage'
 
 const router = useRouter()
@@ -27,7 +27,7 @@ const isMultiplayer = ref(false)
 const importMode = ref<'Solo' | 'WithFriends'>('Solo')
 const selectedInvestigator = ref<string | null>(null)
 const gamePreview = ref<GamePreview | null>(null)
-const gameStub = { campaign: null, scenario: null } as Game
+const gameStub = { campaign: null, scenario: null, investigators: {} } as unknown as Game
 const loading = ref(false)
 const error = ref<string | null>(null)
 
@@ -140,8 +140,8 @@ defineExpose({
 
     <div v-if="gamePreview" class="game-preview">
       <div v-if="gamePreview.scenarioId || gamePreview.campaignId" class="preview-icon">
-        <img v-if="gamePreview.scenarioId" :src="imgsrc(`sets/${gamePreview.scenarioId.replace('c', '')}.png`)" />
-        <img v-else-if="gamePreview.campaignId" :src="imgsrc(`sets/${gamePreview.campaignId}.png`)" />
+        <img v-if="gamePreview.scenarioId" :src="scenarioSetIcon(gamePreview.scenarioId)" />
+        <img v-else-if="gamePreview.campaignId" :src="campaignSetIcon(gamePreview.campaignId)" />
       </div>
       <div class="preview-info">
         <div class="preview-name">{{ gamePreview.name }}</div>

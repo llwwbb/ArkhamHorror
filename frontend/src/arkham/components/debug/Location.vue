@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 
-import { useMenu } from '@/composable/menu';
+import { useEscape } from '@/composable/escape';
 import Draggable from '@/components/Draggable.vue';
 import PoolItem from '@/arkham/components/PoolItem.vue';
 import { computed, ref } from 'vue';
@@ -18,7 +18,6 @@ type Props = {
 
 const emit = defineEmits<{ close: [] }>()
 const props = defineProps<Props>()
-const { addEntry } = useMenu()
 const placeTokens = ref(false);
 const placeTokenType = ref<Token>("Clue");
 const tokenTypes = Object.values(TokenType);
@@ -33,19 +32,13 @@ const canAdjustFloodLevel = computed(() => {
 })
 const currentFloodLevel = computed<Arkham.FloodLevel>(() => props.location.floodLevel ?? 'Unflooded')
 
-addEntry({
-  id: `close-debug-${props.location.id}`,
-  content: "",
-  shortcut: "Escape",
-  action: () => emit('close')
-})
-
+useEscape(() => emit('close'))
 
 const debug = useDebug()
 const id = computed(() => props.location.id)
 const cardCode = computed(() => props.location.cardCode)
 const image = computed(() => {
-  return cardImg(cardCode.value.replace('c', ''))
+  return cardImg(cardCode.value.replace(/^c/, ''))
 })
 
 const clues = computed(() => props.location.tokens[TokenType.Clue])
@@ -81,7 +74,8 @@ const createModifier = (target: {tag: string, contents: string}, modifier: {tag:
 <template>
   <Draggable>
     <template #handle><h2>{{ $t('debug.location.title') }}</h2></template>
-    <div class="location--outer">
+    <div class="debug-modal debug-window">
+      <div class="location--outer">
       <div class="location" :data-index="location.cardId">
         <div class="card-frame">
           <div class="card-wrapper">
@@ -118,8 +112,9 @@ const createModifier = (target: {tag: string, contents: string}, modifier: {tag:
         <button v-if="location.revealed" @click="debug.send(game.id, {tag: 'Reset', contents: { 'tag': 'LocationTarget', contents: id }})">{{ $t('debug.location.reset') }}</button>
         <button @click="placeTokens = true">{{ $t('debug.common.placeTokens') }}</button>
         <button v-if="anyTokens" @click="debug.send(game.id, {tag: 'TokenMessage', contents: {tag: 'ClearTokens_', contents: { tag: 'LocationTarget', contents: id}}})">{{ $t('debug.common.removeAllTokens') }}</button>
-        <button @click="emit('close')">{{ $t('debug.common.close') }}</button>
       </div>
+      </div>
+      <button class="debug-close" @click="emit('close')">{{ $t('debug.common.close') }}</button>
     </div>
   </Draggable>
 </template>
@@ -160,10 +155,11 @@ const createModifier = (target: {tag: string, contents: string}, modifier: {tag:
 }
 
 .location--outer {
-  padding: 10px;
   display: flex;
   flex-direction: row;
-  align-items: center;
+  /* Card pinned to the top: the button column is taller than the art, and
+     centring it left the card floating mid-panel. */
+  align-items: flex-start;
   gap: 10px;
 }
 

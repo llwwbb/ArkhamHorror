@@ -1,14 +1,33 @@
 <script lang="ts" setup>
 import { onMounted, onBeforeUnmount, computed, ref, nextTick, watch } from 'vue'
 import type {Game} from '@/arkham/types/Game'
+import { createLaserBeam, COSMIC_EMISSARY_STOPS, type LaserBeamInstance } from '@/arkham/laserBeam'
+import { useSettings } from '@/stores/settings'
+import Treachery from '@/arkham/components/Treachery.vue'
 
 export interface Props {
   game: Game
   playerId: string
+  allowCurvedPaths?: boolean
   enableCosmicEmissaryAnimation?: boolean
+  zoom?: number
 }
 
+// The laser layer is a sibling of the SVG rather than part of it, so this
+// component now has two roots and must not try to inherit attributes.
+defineOptions({ inheritAttrs: false })
+
 const props = defineProps<Props>()
+const emits = defineEmits<{ choose: [value: number] }>()
+const settings = useSettings()
+
+// The location grid is scaled with a CSS transform but the SVG is its sibling,
+// drawn in screen pixels from bounding rects. Endpoints follow the cards on
+// their own; everything sized in px -- stroke, dashes, chevrons, the bow on a
+// curved route -- has to be scaled by hand or the lines stay hairline-thin on a
+// zoomed-in board.
+const mapZoom = computed(() => (props.zoom && props.zoom > 0 ? props.zoom : 1))
+const scaled = (px: number) => px * mapZoom.value
 const allLocations = computed(() => Object.values(props.game.locations))
 
 const locations = computed(() =>
@@ -32,6 +51,45 @@ const sortByDataId = (a: HTMLElement, b: HTMLElement) => {
   if (!aId || !bId) return 0
   return aId < bId ? -1 : aId > bId ? 1 : 0
 }
+/* A location inside a group is drawn in that group's box, and the box is what the map
+ * connects: every member of a row connecting to every member of the next would otherwise
+ * draw a dozen lines where one belongs. So an endpoint resolves to its box element when
+ * it has one, connections between two members of the SAME box are dropped, and the many
+ * member-to-member edges between two boxes collapse into a single box-to-box edge. */
+const groupKeyOf = (locationId: string): string | null =>
+  props.game.locations[locationId]?.group?.key ?? null
+
+/** A group's box if the id is a group key, else the location's own element. */
+const elementFor = (id: string): HTMLElement | null =>
+  document.querySelector<HTMLElement>(`.location-group[data-id="${id}"]`)
+    ?? document.querySelector<HTMLElement>(`[data-id="${id}"]`)
+
+const connectionsOf = (locationId: string): string[] => {
+  const cs = props.game.locations[locationId]?.connectedLocations
+  if (!cs) return []
+  return Array.isArray(cs) ? cs : Object.values(cs)
+}
+
+/* A box stands in for its members only for the connections the cards are printed with,
+ * which is what the group was for: a whole row connects to the row below by symbol. A
+ * granted connection belongs to the one location that was granted it -- Path Forward
+ * opens the way up from a single location -- so that edge is drawn from the location
+ * itself, to each location it actually reaches. */
+const isGranted = (fromId: string, toId: string): boolean =>
+  props.game.locations[fromId]?.grantedConnections?.includes(toId) ?? false
+
+/** The pair the map actually joins: the two boxes, or the two locations. */
+const resolvedEdge = (fromId: string, toId: string): [string, string] =>
+  isGranted(fromId, toId)
+    ? [fromId, toId]
+    : [groupKeyOf(fromId) ?? fromId, groupKeyOf(toId) ?? toId]
+
+/** True when both ends sit in the same box, so there is nothing to draw between them. */
+const sameGroup = (a: string, b: string): boolean => {
+  const ka = groupKeyOf(a)
+  return ka !== null && ka === groupKeyOf(b)
+}
+
 const toConnection = (div1: HTMLElement, div2: HTMLElement): string | undefined => {
   const [leftDiv, rightDiv] = [div1, div2].sort(sortByDataId)
   const { id: leftDivId } = leftDiv.dataset
@@ -41,17 +99,63 @@ const toConnection = (div1: HTMLElement, div2: HTMLElement): string | undefined 
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const protoRef = ref<SVGLineElement | null>(null)
+const connectionProtoRef = ref<SVGPathElement | null>(null)
 const chevronProtoRef = ref<SVGPathElement | null>(null)
+const groupFrameProtoRef = ref<SVGRectElement | null>(null)
 let svgEl: SVGSVGElement | null = null
 let defsEl: SVGDefsElement | null = null
 let lineProto: SVGLineElement | null = null
+let connectionProto: SVGPathElement | null = null
 let chevronProto: SVGPathElement | null = null
+let groupFrameProto: SVGRectElement | null = null
 
 const EPS = 0.5
 const close = (a: number, b: number) => Math.abs(a - b) < EPS
 const linesByConn = new Map<string, SVGLineElement>()
+const connectionPathsByConn = new Map<string, SVGPathElement>()
 const fateGlowLinesByConn = new Map<string, SVGLineElement>()
 const chevronsByConn = new Map<string, SVGPathElement>()
+/* The group boxes are drawn here rather than as the div's own border so the connections
+ * sit on top of them: the div lives inside the scaled location grid, which transform
+ * makes a stacking context, so nothing outside it can ever paint between the box and its
+ * members. The div keeps the layout; this draws the frame. */
+const groupFramesByKey = new Map<string, SVGRectElement>()
+
+function drawGroupFrames(): Set<string> {
+  const live = new Set<string>()
+  if (!svgEl) return live
+  const svgRect = svgEl.getBoundingClientRect()
+  for (const box of document.querySelectorAll<HTMLElement>('.location-group[data-id]')) {
+    const key = box.dataset.id
+    if (!key) continue
+    const rect = box.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) continue
+    live.add(key)
+    let frame = groupFramesByKey.get(key)
+    if (!frame) {
+      // Cloned from the proto like every other element here, so it carries the scoped
+      // style attribute -- a freshly created node would match no rule and paint black.
+      if (!groupFrameProto) continue
+      frame = groupFrameProto.cloneNode(true) as SVGRectElement
+      frame.classList.remove('original')
+      // First child, so every line and chevron paints over it.
+      svgEl.insertBefore(frame, svgEl.firstChild)
+      groupFramesByKey.set(key, frame)
+    }
+    setSvgAttr(frame, 'x', String(rect.left - svgRect.left))
+    setSvgAttr(frame, 'y', String(rect.top - svgRect.top))
+    setSvgAttr(frame, 'width', String(rect.width))
+    setSvgAttr(frame, 'height', String(rect.height))
+    setSvgAttr(frame, 'rx', String(scaled(12)))
+    setSvgAttr(frame, 'stroke-width', String(scaled(2)))
+  }
+  for (const [key, frame] of groupFramesByKey) {
+    if (live.has(key)) continue
+    frame.remove()
+    groupFramesByKey.delete(key)
+  }
+  return live
+}
 
 type GridDirection = 'North' | 'East' | 'South' | 'West'
 
@@ -105,6 +209,33 @@ function connectionKey(id1: string, id2: string): string {
   return `${left}:${right}`
 }
 
+// Cards placed *between* two locations (Broken Couplings) hang off the
+// connection, not off either location, so they are drawn here rather than in
+// Location.vue. Midpoints come from the same geometry pass that draws the
+// lines; they are only measured when something actually needs them.
+const midpoints = ref<Record<string, { x: number; y: number }>>({})
+
+const betweenTreacheries = computed(() =>
+  Object.values(props.game.treacheries)
+    .filter(t => t.placement.tag === 'BetweenLocations')
+    .map(t => {
+      const [a, b] = (t.placement as { contents: [string, string] }).contents
+      return { treachery: t, connection: connectionKey(a, b) }
+    })
+)
+
+const trackedConnections = computed(() => new Set(betweenTreacheries.value.map(t => t.connection)))
+
+function midpointStyle(connection: string) {
+  const point = midpoints.value[connection]
+  if (!point) return { display: 'none' }
+  return {
+    left: `${point.x}px`,
+    top: `${point.y}px`,
+    transform: `translate(-50%, -50%) scale(${mapZoom.value})`,
+  }
+}
+
 function mineCartNextConnection(): string | null {
   const cart = mineCart.value
   if ((props.game.scenario?.id !== 'c10501' && props.game.scenario?.id !== 'c10502') || cart?.placement.tag !== 'AtLocation') {
@@ -136,6 +267,328 @@ function directionVector(direction: GridDirection): { x: number; y: number } {
     case 'South': return { x: 0, y: 1 }
     case 'West': return { x: -1, y: 0 }
   }
+}
+
+type ConnectionCandidate = {
+  connection: string
+  start: HTMLElement
+  end: HTMLElement
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+function connectionPoints(div1: HTMLElement, div2: HTMLElement) {
+  if (!svgEl) return null
+  const svgRect = svgEl.getBoundingClientRect()
+  const lRect = div1.getBoundingClientRect()
+  const rRect = div2.getBoundingClientRect()
+  const lCenterX = (lRect.left - svgRect.left) + (lRect.width / 2)
+  const lCenterY = (lRect.top - svgRect.top) + (lRect.height / 2)
+  const rCenterX = (rRect.left - svgRect.left) + (rRect.width / 2)
+  const rCenterY = (rRect.top - svgRect.top) + (rRect.height / 2)
+  const offsetTrackLine = isWrittenInRockAct2.value
+  const vertical = Math.abs(rCenterY - lCenterY) > Math.abs(rCenterX - lCenterX)
+
+  const x1 = offsetTrackLine && vertical ? (lRect.left - svgRect.left) + (lRect.width * 0.78) : lCenterX
+  const y1 = offsetTrackLine && !vertical ? (lRect.top - svgRect.top) + (lRect.height * 0.8) : lCenterY
+  const x2 = offsetTrackLine && vertical ? (rRect.left - svgRect.left) + (rRect.width * 0.78) : rCenterX
+  const y2 = offsetTrackLine && !vertical ? (rRect.top - svgRect.top) + (rRect.height * 0.8) : rCenterY
+
+  /* A line runs centre to centre, which a location's own card hides. A group's box is
+   * mostly empty, so the stretch from its centre out to its edge would be drawn across
+   * the inside of the box -- pull those endpoints back to the edge. */
+  const a = clipToGroupEdge(div1, x1, y1, x2, y2, lRect)
+  const b = clipToGroupEdge(div2, x2, y2, x1, y1, rRect)
+  return { x1: a.x, y1: a.y, x2: b.x, y2: b.y }
+}
+
+/** Endpoint pulled back to the boundary of a group's box, along the line it lies on. */
+function clipToGroupEdge(
+  div: HTMLElement, cx: number, cy: number, towardX: number, towardY: number, rect: DOMRect,
+) {
+  if (!div.classList.contains('location-group')) return { x: cx, y: cy }
+  const dx = towardX - cx
+  const dy = towardY - cy
+  if (dx === 0 && dy === 0) return { x: cx, y: cy }
+  const scaleX = dx === 0 ? Infinity : (rect.width / 2) / Math.abs(dx)
+  const scaleY = dy === 0 ? Infinity : (rect.height / 2) / Math.abs(dy)
+  const scale = Math.min(scaleX, scaleY)
+  return { x: cx + dx * scale, y: cy + dy * scale }
+}
+
+function segmentsConflict(a: ConnectionCandidate, b: ConnectionCandidate): boolean {
+  // Lines meeting at the same location are expected to share an endpoint.
+  if (a.start.dataset.id === b.start.dataset.id || a.start.dataset.id === b.end.dataset.id ||
+      a.end.dataset.id === b.start.dataset.id || a.end.dataset.id === b.end.dataset.id) return false
+
+  const cross = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
+    (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  const c1 = cross(a.x1, a.y1, a.x2, a.y2, b.x1, b.y1)
+  const c2 = cross(a.x1, a.y1, a.x2, a.y2, b.x2, b.y2)
+  const c3 = cross(b.x1, b.y1, b.x2, b.y2, a.x1, a.y1)
+  const c4 = cross(b.x1, b.y1, b.x2, b.y2, a.x2, a.y2)
+  const tolerance = 1
+
+  if (((c1 > tolerance && c2 < -tolerance) || (c1 < -tolerance && c2 > tolerance)) &&
+      ((c3 > tolerance && c4 < -tolerance) || (c3 < -tolerance && c4 > tolerance))) return true
+
+  // Collinear segments need a visible shared run, not merely a touching point.
+  if ([c1, c2, c3, c4].every(value => Math.abs(value) <= tolerance)) {
+    const useX = Math.abs(a.x2 - a.x1) >= Math.abs(a.y2 - a.y1)
+    const aMin = Math.min(useX ? a.x1 : a.y1, useX ? a.x2 : a.y2)
+    const aMax = Math.max(useX ? a.x1 : a.y1, useX ? a.x2 : a.y2)
+    const bMin = Math.min(useX ? b.x1 : b.y1, useX ? b.x2 : b.y2)
+    const bMax = Math.max(useX ? b.x1 : b.y1, useX ? b.x2 : b.y2)
+    return Math.min(aMax, bMax) - Math.max(aMin, bMin) > scaled(8)
+  }
+
+  return false
+}
+
+function curveOffsets(candidates: ConnectionCandidate[]): Map<string, number> {
+  const conflictCounts = new Map<string, number>()
+  const lengthSquared = (candidate: ConnectionCandidate) =>
+    (candidate.x2 - candidate.x1) ** 2 + (candidate.y2 - candidate.y1) ** 2
+
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const a = candidates[i]
+      const b = candidates[j]
+      if (!segmentsConflict(a, b)) continue
+      // Keep the shorter/local connection straight and bend the connection
+      // spanning more of the board. Ties are resolved by the stable id.
+      const curved = lengthSquared(a) === lengthSquared(b)
+        ? (a.connection < b.connection ? b : a)
+        : (lengthSquared(a) > lengthSquared(b) ? a : b)
+      conflictCounts.set(curved.connection, (conflictCounts.get(curved.connection) ?? 0) + 1)
+    }
+  }
+
+  const result = new Map<string, number>()
+  for (const [connection, count] of conflictCounts) {
+    const sign = Array.from(connection).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 2 === 0 ? 1 : -1
+    result.set(connection, sign * scaled(Math.min(34 + (count - 1) * 10, 64)))
+  }
+
+  if (!svgEl) return result
+  const svgRect = svgEl.getBoundingClientRect()
+  const locationRects = locations.value.flatMap(location => {
+    const element = document.querySelector<HTMLElement>(`[data-id="${location.id}"]`)
+    if (!element) return []
+    const rect = element.getBoundingClientRect()
+    return [{
+      id: location.id,
+      x: rect.left - svgRect.left - scaled(6),
+      y: rect.top - svgRect.top - scaled(6),
+      width: rect.width + scaled(12),
+      height: rect.height + scaled(12),
+    }]
+  })
+  const boardCenter = locationRects.reduce(
+    (sum, rect) => ({ x: sum.x + rect.x + rect.width / 2, y: sum.y + rect.y + rect.height / 2 }),
+    { x: 0, y: 0 },
+  )
+  if (locationRects.length > 0) {
+    boardCenter.x /= locationRects.length
+    boardCenter.y /= locationRects.length
+  }
+
+  const intersectionsForOffset = (candidate: ConnectionCandidate, curveOffset: number) => {
+    const endpointIds = new Set([candidate.start.dataset.id, candidate.end.dataset.id])
+    const dx = candidate.x2 - candidate.x1
+    const dy = candidate.y2 - candidate.y1
+    const distance = Math.hypot(dx, dy) || 1
+    const controlX = (candidate.x1 + candidate.x2) / 2 - (dy / distance) * curveOffset
+    const controlY = (candidate.y1 + candidate.y2) / 2 + (dx / distance) * curveOffset
+    const hitIds = new Set<string>()
+    for (let step = 1; step < 50; step++) {
+      const t = step / 50
+      const oneMinusT = 1 - t
+      const x = oneMinusT ** 2 * candidate.x1 + 2 * oneMinusT * t * controlX + t ** 2 * candidate.x2
+      const y = oneMinusT ** 2 * candidate.y1 + 2 * oneMinusT * t * controlY + t ** 2 * candidate.y2
+      for (const rect of locationRects) {
+        if (endpointIds.has(rect.id)) continue
+        if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) hitIds.add(rect.id)
+      }
+    }
+    return hitIds.size
+  }
+
+  for (const candidate of candidates) {
+    const straightIntersections = intersectionsForOffset(candidate, 0)
+    if (straightIntersections === 0) continue
+    // Give longer routes crossing several cards a distinctly wider lane so
+    // nested connections do not continue to sit on top of one another.
+    const magnitude = scaled(Math.min(90 + (straightIntersections - 1) * 75, 165))
+    const positiveIntersections = intersectionsForOffset(candidate, magnitude)
+    const negativeIntersections = intersectionsForOffset(candidate, -magnitude)
+    if (positiveIntersections !== negativeIntersections) {
+      result.set(candidate.connection, positiveIntersections < negativeIntersections ? magnitude : -magnitude)
+      continue
+    }
+
+    // If both sides are equally clear, bend toward the outside of the board.
+    const normalX = -(candidate.y2 - candidate.y1) / Math.sqrt(lengthSquared(candidate))
+    const normalY = (candidate.x2 - candidate.x1) / Math.sqrt(lengthSquared(candidate))
+    const midpointX = (candidate.x1 + candidate.x2) / 2
+    const midpointY = (candidate.y1 + candidate.y2) / 2
+    const outwardDot = (midpointX - boardCenter.x) * normalX + (midpointY - boardCenter.y) * normalY
+    result.set(candidate.connection, (outwardDot >= 0 ? 1 : -1) * magnitude)
+  }
+  return result
+}
+
+function obstructedChevronCurve(candidate: ConnectionCandidate): number | null {
+  // Shifting an endpoint can add or remove an obstruction, so base this on the
+  // current layout rather than particular cards or original grid positions.
+  if (!svgEl) return null
+  const svgRect = svgEl.getBoundingClientRect()
+  const endpointIds = new Set([candidate.start.dataset.id, candidate.end.dataset.id])
+  const obstructed = locations.value.some(location => {
+    if (endpointIds.has(location.id)) return false
+    const element = document.querySelector<HTMLElement>(`[data-id="${location.id}"]`)
+    if (!element) return false
+    const rect = element.getBoundingClientRect()
+    const left = rect.left - svgRect.left - 6
+    const right = rect.right - svgRect.left + 6
+    const top = rect.top - svgRect.top - 6
+    const bottom = rect.bottom - svgRect.top + 6
+    return Array.from({ length: 49 }, (_, index) => (index + 1) / 50).some(t => {
+      const x = candidate.x1 + (candidate.x2 - candidate.x1) * t
+      const y = candidate.y1 + (candidate.y2 - candidate.y1) * t
+      return x >= left && x <= right && y >= top && y <= bottom
+    })
+  })
+  if (!obstructed) return null
+
+  const centers = locations.value.flatMap(location => {
+    const element = document.querySelector<HTMLElement>(`[data-id="${location.id}"]`)
+    const points = element && connectionPoints(element, element)
+    return points ? [{ x: points.x1, y: points.y1 }] : []
+  })
+  if (centers.length === 0) return null
+
+  const boardCenter = centers.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 })
+  boardCenter.x /= centers.length
+  boardCenter.y /= centers.length
+
+  const dx = candidate.x2 - candidate.x1
+  const dy = candidate.y2 - candidate.y1
+  const distance = Math.hypot(dx, dy) || 1
+  const normalX = -dy / distance
+  const normalY = dx / distance
+  const midpointX = (candidate.x1 + candidate.x2) / 2
+  const midpointY = (candidate.y1 + candidate.y2) / 2
+  const outwardDot = (midpointX - boardCenter.x) * normalX + (midpointY - boardCenter.y) * normalY
+  // A shallow lane clears a card without swinging into the next row.
+  const magnitude = Math.min(Math.max(distance * 0.28, 100), 140)
+  return (outwardDot >= 0 ? 1 : -1) * magnitude
+}
+
+/** Distance from a point to a segment, clamped to the segment's ends. */
+function distanceToSegment(px: number, py: number, segment: ConnectionCandidate): number {
+  const dx = segment.x2 - segment.x1
+  const dy = segment.y2 - segment.y1
+  const lengthSquared = dx * dx + dy * dy
+  const t = lengthSquared === 0
+    ? 0
+    : Math.max(0, Math.min(1, ((px - segment.x1) * dx + (py - segment.y1) * dy) / lengthSquared))
+  return Math.hypot(px - (segment.x1 + t * dx), py - (segment.y1 + t * dy))
+}
+
+/* 'segmentsConflict' answers whether two segments cross or lie on one line, which is too
+ * exact for two routes that merely run alongside each other: a row connects to the row
+ * below from its box's centre while the location a Path Forward connects back up sits a
+ * couple of pixels off that centre, so the two never quite coincide and neither crosses
+ * the other. Walking the shorter route and asking how much of it runs within a few pixels
+ * of the longer one catches that, and the exact overlap too. */
+function routesShareALane(a: ConnectionCandidate, b: ConnectionCandidate): boolean {
+  // Routes out of the same place are expected to start together and fan apart.
+  if (a.start.dataset.id === b.start.dataset.id || a.start.dataset.id === b.end.dataset.id ||
+      a.end.dataset.id === b.start.dataset.id || a.end.dataset.id === b.end.dataset.id) return false
+
+  const lengthSquared = (c: ConnectionCandidate) => (c.x2 - c.x1) ** 2 + (c.y2 - c.y1) ** 2
+  const [shorter, longer] = lengthSquared(a) <= lengthSquared(b) ? [a, b] : [b, a]
+  const lane = scaled(12)
+  const samples = 20
+  let alongside = 0
+  for (let step = 0; step <= samples; step++) {
+    const t = step / samples
+    const x = shorter.x1 + (shorter.x2 - shorter.x1) * t
+    const y = shorter.y1 + (shorter.y2 - shorter.y1) * t
+    if (distanceToSegment(x, y, longer) <= lane) alongside++
+  }
+  return alongside / (samples + 1) >= 0.5
+}
+
+/* Two arrows can share a lane without either crossing a card, which 'obstructedChevronCurve'
+ * is the only other reason to bend one: a row's printed connection down to the row below and
+ * the single location a Path Forward connects back up both run between the same two boxes.
+ * Bend one of them so they read as two routes rather than one. Which one bends follows
+ * 'curveOffsets' -- the longer route gives way, ties by the stable connection key. */
+function overlappingRouteCurve(candidate: ConnectionCandidate, others: ConnectionCandidate[]): number {
+  const lengthSquared = (c: ConnectionCandidate) => (c.x2 - c.x1) ** 2 + (c.y2 - c.y1) ** 2
+  let conflicts = 0
+  for (const other of others) {
+    if (other.connection === candidate.connection) continue
+    if (!segmentsConflict(candidate, other) && !routesShareALane(candidate, other)) continue
+    const bend = lengthSquared(candidate) === lengthSquared(other)
+      ? candidate.connection > other.connection
+      : lengthSquared(candidate) > lengthSquared(other)
+    if (bend) conflicts++
+  }
+  if (conflicts === 0) return 0
+  const sign = Array.from(candidate.connection).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 2 === 0 ? 1 : -1
+  return sign * scaled(Math.min(34 + (conflicts - 1) * 10, 64))
+}
+
+function makeOrUpdateConnectionPath(candidate: ConnectionCandidate, curveOffset = 0) {
+  if (!svgEl || !connectionProto) return
+  const { connection, start, end, x1, y1, x2, y2 } = candidate
+  const leftDivId = start.dataset.id
+  const rightDivId = end.dataset.id
+  if (!leftDivId || !rightDivId) return
+
+  let path = connectionPathsByConn.get(connection)
+  if (!path) {
+    // Clone a template node so Vue's scoped-style attribute is retained.
+    path = connectionProto.cloneNode(true) as SVGPathElement
+    path.classList.remove('original')
+    path.classList.add('connection')
+    path.dataset.connection = connection
+    svgEl.appendChild(path)
+    connectionPathsByConn.set(connection, path)
+  }
+
+  if (curveOffset === 0) {
+    path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`)
+    path.classList.remove('curved')
+  } else {
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const distance = Math.hypot(dx, dy) || 1
+    const controlX = (x1 + x2) / 2 - (dy / distance) * curveOffset
+    const controlY = (y1 + y2) / 2 + (dx / distance) * curveOffset
+    path.setAttribute('d', `M ${x1} ${y1} Q ${controlX} ${controlY} ${x2} ${y2}`)
+    path.classList.add('curved')
+  }
+
+  if (trackedConnections.value.has(connection)) {
+    const point = path.getPointAtLength(path.getTotalLength() / 2)
+    nextMidpoints[connection] = { x: point.x, y: point.y }
+  }
+
+  if (connection === mineCartNextConnection()) path.classList.add('mine-cart-next-line')
+  else path.classList.remove('mine-cart-next-line')
+
+  const investigator = Object.values(props.game.investigators).find(i => i.playerId === props.playerId)
+  const activeLine = !!investigator && (
+    (leftDivId === investigator.location && investigator.connectedLocations.includes(rightDivId)) ||
+    (rightDivId === investigator.location && investigator.connectedLocations.includes(leftDivId))
+  )
+  path.classList.toggle('active', activeLine)
 }
 
 function makeOrUpdateLine(div1: HTMLElement, div2: HTMLElement, className?: string, preserveDirection = false) {
@@ -194,12 +647,21 @@ function makeOrUpdateLine(div1: HTMLElement, div2: HTMLElement, className?: stri
   else line.classList.remove('mine-cart-next-line')
 
   if (className === 'fate-of-the-vale-enemy-line') {
-    updateFateGlowLine(connection, line, x1, y1, x2, y2)
-    line.style.filter = ''
-    if (props.enableCosmicEmissaryAnimation === false) {
-      line.removeAttribute('style')
+    // The laser replaces both SVG lines outright, so it is tried first and the
+    // SVG treatment only rebuilt if it declines.
+    if (useLaserBeams.value && updateLaserBeam(connection, x1, y1, x2, y2)) {
+      removeFateSvgDecoration(connection)
+      line.style.display = 'none'
     } else {
-      updateFateOfTheValeEnemyLineGradient(line, connection, x1, y1, x2, y2)
+      removeLaserBeam(connection)
+      line.style.display = ''
+      updateFateGlowLine(connection, line, x1, y1, x2, y2)
+      line.style.filter = ''
+      if (props.enableCosmicEmissaryAnimation === false) {
+        line.removeAttribute('style')
+      } else {
+        updateFateOfTheValeEnemyLineGradient(line, connection, x1, y1, x2, y2)
+      }
     }
   }
 
@@ -254,8 +716,8 @@ function makeOrUpdateMineCartInvalidLine(locationDiv: HTMLElement, direction: Gr
     chevronsByConn.set(xConnection, xMark)
   }
 
-  const size = 7
-  const thickness = 3
+  const size = scaled(7)
+  const thickness = scaled(3)
   xMark.setAttribute('d', [
     `M${xMarkCenter - size},${yMarkCenter - size + thickness}`,
     `L${xMarkCenter - size + thickness},${yMarkCenter - size}`,
@@ -275,6 +737,87 @@ function setSvgAttr(el: SVGElement, name: string, value: string) {
   if (el.getAttribute(name) !== value) el.setAttribute(name, value)
 }
 
+// --- Cosmic Emissary laser beams -------------------------------------------
+//
+// The four emissary connections are drawn as WebGL laser beams instead of the
+// SVG glow + dashed gradient pair. Each beam gets a canvas sized to the
+// connection's length and rotated into place, because the shader always draws
+// along the canvas's horizontal centre line.
+//
+// The SVG treatment is NOT deleted — it stays as the fallback for browsers
+// without WebGL2, for prefers-reduced-motion, and for the extra-animations
+// setting. laserBeamsSupported flips to false the first time a context fails to
+// come up, and every connection falls back together rather than one by one.
+
+// Tall enough that the glow has decayed to nothing well before the canvas
+// border; the shader's edge fade cleans up whatever is left.
+const LASER_BEAM_HEIGHT = 72
+const laserLayerRef = ref<HTMLElement | null>(null)
+const laserBeamsSupported = ref(true)
+const lasersByConn = new Map<string, { canvas: HTMLCanvasElement; instance: LaserBeamInstance }>()
+
+const useLaserBeams = computed(
+  () =>
+    laserBeamsSupported.value &&
+    settings.extraAnimations &&
+    props.enableCosmicEmissaryAnimation !== false,
+)
+
+function updateLaserBeam(connection: string, x1: number, y1: number, x2: number, y2: number): boolean {
+  const layer = laserLayerRef.value
+  if (!layer) return false
+
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const length = Math.hypot(dx, dy)
+  if (length < 1) return false
+
+  let entry = lasersByConn.get(connection)
+  if (!entry) {
+    const canvas = document.createElement('canvas')
+    canvas.className = 'laser-beam'
+    canvas.dataset.connection = connection
+    layer.appendChild(canvas)
+    const instance = createLaserBeam(canvas, { stops: COSMIC_EMISSARY_STOPS })
+    if (!instance) {
+      canvas.remove()
+      laserBeamsSupported.value = false
+      return false
+    }
+    entry = { canvas, instance }
+    lasersByConn.set(connection, entry)
+  }
+
+  const { canvas, instance } = entry
+  canvas.style.width = `${length}px`
+  canvas.style.height = `${LASER_BEAM_HEIGHT}px`
+  canvas.style.left = `${(x1 + x2) / 2 - length / 2}px`
+  canvas.style.top = `${(y1 + y2) / 2 - LASER_BEAM_HEIGHT / 2}px`
+  canvas.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`
+  instance.resize()
+  return true
+}
+
+function removeLaserBeam(connection: string) {
+  const entry = lasersByConn.get(connection)
+  if (!entry) return
+  entry.instance.destroy()
+  entry.canvas.remove()
+  lasersByConn.delete(connection)
+}
+
+function removeAllLaserBeams() {
+  for (const connection of [...lasersByConn.keys()]) removeLaserBeam(connection)
+}
+
+// Drops the SVG glow line and its smoke filter for a connection the laser has
+// taken over.
+function removeFateSvgDecoration(connection: string) {
+  fateGlowLinesByConn.get(connection)?.remove()
+  fateGlowLinesByConn.delete(connection)
+  defsEl?.querySelector(`#fate-of-the-vale-smoke-filter-${connection.replace(/[^a-zA-Z0-9_-]/g, '-')}`)?.remove()
+}
+
 function updateFateSmokeFilter(connection: string, x1: number, y1: number, x2: number, y2: number): string | null {
   if (!defsEl) return null
   const filterId = `fate-of-the-vale-smoke-filter-${connection.replace(/[^a-zA-Z0-9_-]/g, '-')}`
@@ -292,7 +835,7 @@ function updateFateSmokeFilter(connection: string, x1: number, y1: number, x2: n
     defsEl.appendChild(filter)
   }
 
-  const pad = 96
+  const pad = scaled(96)
   setSvgAttr(filter, 'x', String(Math.min(x1, x2) - pad))
   setSvgAttr(filter, 'y', String(Math.min(y1, y2) - pad))
   setSvgAttr(filter, 'width', String(Math.abs(x2 - x1) + pad * 2))
@@ -351,7 +894,7 @@ function updateFateOfTheValeEnemyLineGradient(line: SVGLineElement, connection: 
   if (dist < 1) return
   const ux = dx / dist
   const uy = dy / dist
-  const patternLength = 96
+  const patternLength = scaled(96)
 
   setSvgAttr(gradient, 'x1', String(x1))
   setSvgAttr(gradient, 'y1', String(y1))
@@ -372,7 +915,7 @@ const CHEVRON_SPACING = 10   // px between chevron centers along the line
 const CHEVRON_LEN = 8        // along-axis depth (back of polygon to outer tip)
 const CHEVRON_HEIGHT = 10    // total perpendicular height (wing tip to wing tip)
 const CHEVRON_EDGE_PAD = 8   // extra px past each card edge before drawing
-function makeOrUpdateChevrons(srcDiv: HTMLElement, dstDiv: HTMLElement, connection: string) {
+function makeOrUpdateChevrons(srcDiv: HTMLElement, dstDiv: HTMLElement, connection: string, curveOffset = 0) {
   if (!svgEl || !chevronProto) return
   const svgRect = svgEl.getBoundingClientRect()
   const sRect = srcDiv.getBoundingClientRect()
@@ -399,22 +942,41 @@ function makeOrUpdateChevrons(srcDiv: HTMLElement, dstDiv: HTMLElement, connecti
     const ty = Math.abs(uy) > 1e-6 ? halfH / Math.abs(uy) : Infinity
     return Math.min(tx, ty)
   }
-  const startD = exitDist(sRect.width / 2, sRect.height / 2) + CHEVRON_EDGE_PAD
-  const endD = dist - exitDist(dRect.width / 2, dRect.height / 2) - CHEVRON_EDGE_PAD
+  // Straight chevrons stop outside the card edges. Curved routes continue to
+  // each card's center and are naturally hidden underneath the location cards.
+  const edgePad = scaled(CHEVRON_EDGE_PAD)
+  const spacing = scaled(CHEVRON_SPACING)
+  const startD = curveOffset === 0 ? exitDist(sRect.width / 2, sRect.height / 2) + edgePad : 0
+  const endD = curveOffset === 0 ? dist - exitDist(dRect.width / 2, dRect.height / 2) - edgePad : dist
   const span = endD - startD
   if (span < 0) return // cards overlap or are flush
 
   // Fixed spacing, centered in the visible band — never stretches chevrons
   // to the boundary.
-  const count = Math.max(1, Math.round(span / CHEVRON_SPACING) + 1)
-  const usedSpan = (count - 1) * CHEVRON_SPACING
+  const count = Math.max(1, Math.round(span / spacing) + 1)
+  const usedSpan = (count - 1) * spacing
   const offset = (span - usedSpan) / 2
   const segments: string[] = []
+  const controlX = (x1 + x2) / 2 - uy * curveOffset
+  const controlY = (y1 + y2) / 2 + ux * curveOffset
   for (let i = 0; i < count; i++) {
-    const d = startD + offset + i * CHEVRON_SPACING
-    const cx = x1 + ux * d
-    const cy = y1 + uy * d
-    segments.push(chevronPath(cx, cy, ux, uy, px, py))
+    const d = startD + offset + i * spacing
+    if (curveOffset === 0) {
+      const cx = x1 + ux * d
+      const cy = y1 + uy * d
+      segments.push(chevronPath(cx, cy, ux, uy, px, py))
+    } else {
+      const t = d / dist
+      const oneMinusT = 1 - t
+      const cx = oneMinusT ** 2 * x1 + 2 * oneMinusT * t * controlX + t ** 2 * x2
+      const cy = oneMinusT ** 2 * y1 + 2 * oneMinusT * t * controlY + t ** 2 * y2
+      const tangentX = 2 * oneMinusT * (controlX - x1) + 2 * t * (x2 - controlX)
+      const tangentY = 2 * oneMinusT * (controlY - y1) + 2 * t * (y2 - controlY)
+      const tangentLength = Math.hypot(tangentX, tangentY) || 1
+      const curveUx = tangentX / tangentLength
+      const curveUy = tangentY / tangentLength
+      segments.push(chevronPath(cx, cy, curveUx, curveUy, -curveUy, curveUx))
+    }
   }
   const pathD = segments.join(' ')
 
@@ -446,8 +1008,8 @@ function chevronPath(cx: number, cy: number, ux: number, uy: number, px: number,
   // reference SVG. Going clockwise from the tip:
   //   F (tip) -> A (top wing) -> B (top outer back) -> C (notch tip)
   //   -> D (bottom outer back) -> E (bottom wing) -> close.
-  const L = CHEVRON_LEN
-  const H = CHEVRON_HEIGHT / 2
+  const L = scaled(CHEVRON_LEN)
+  const H = scaled(CHEVRON_HEIGHT) / 2
   // Local-to-world projection: lx along (ux,uy), ly perpendicular along (px,py).
   const toWorld = (lx: number, ly: number) =>
     `${(cx + lx * ux + ly * px).toFixed(1)},${(cy + lx * uy + ly * py).toFixed(1)}`
@@ -460,35 +1022,51 @@ function chevronPath(cx: number, cy: number, ux: number, uy: number, px: number,
   return `M${f} L${a} L${b} L${c} L${d} L${e} Z`
 }
 
+let nextMidpoints: Record<string, { x: number; y: number }> = {}
+
 function handleConnections(includeFateOfTheVale = true) {
   if(!svgEl) return
   const live = new Set<string>()
+  nextMidpoints = {}
+
+  drawGroupFrames()
 
   // Build directed edge set so we can detect one-way connections by absence of
   // the reverse edge. connectedLocations is symmetric for normal connections
   // but asymmetric when a location's connectedMatchers don't match back.
+  // Keyed by RESOLVED endpoints: a row's symbols collapse onto the two boxes while the
+  // grant that opens the climb stays on its own location, so the box-to-box edge and the
+  // location's edge back are two different pairs -- each one-way, which is the truth.
   const directed = new Set<string>()
   for (const loc of allLocations.value) {
-    const cs = Array.isArray(loc.connectedLocations)
-      ? loc.connectedLocations
-      : Object.values(loc.connectedLocations)
-    for (const dst of cs) directed.add(`${loc.id}->${dst}`)
+    for (const dst of connectionsOf(loc.id)) {
+      if (sameGroup(loc.id, dst)) continue
+      const [from, to] = resolvedEdge(loc.id, dst)
+      directed.add(`${from}->${to}`)
+    }
   }
 
+  const normalConnections = new Map<string, ConnectionCandidate>()
+  const chevronCandidates: ConnectionCandidate[] = []
   for (const location of locations.value) {
     const { id, connectedLocations } = location
     const connections = Array.isArray(connectedLocations)
       ? connectedLocations
       : Object.values(connectedLocations)
 
-    const start = document.querySelector<HTMLElement>(`[data-id="${id}"]`)
-    if (!start) continue
-
     for (const dst of connections) {
-      const end = document.querySelector<HTMLElement>(`[data-id="${dst}"]`)
-      if (!end) continue
+      const dstId = dst as string
+      // Members of one box need no line between them.
+      if (sameGroup(id, dstId)) continue
+      const [fromId, toId] = resolvedEdge(id, dstId)
+      const start = elementFor(fromId)
+      const end = elementFor(toId)
+      if (!start || !end) continue
+      // Both ends resolved to the same element (two members of one box, or a box
+      // connecting to itself) -- nothing to draw.
+      if (start === end) continue
 
-      const reverseExists = directed.has(`${dst}->${id}`)
+      const reverseExists = directed.has(`${toId}->${fromId}`)
 
       if (reverseExists) {
         const conn = toConnection(start, end)
@@ -498,9 +1076,15 @@ function handleConnections(includeFateOfTheVale = true) {
           conn === `${m.type.contents?.[0]}:${m.type.contents?.[1]}`
         )) continue
         live.add(conn)
-        makeOrUpdateLine(start, end)
+        if (!normalConnections.has(conn)) {
+          const [left, right] = [start, end].sort(sortByDataId)
+          const points = connectionPoints(left, right)
+          if (points) normalConnections.set(conn, { connection: conn, start: left, end: right, ...points })
+        }
       } else {
-        const conn = `${id}->${dst}`
+        // Keyed by resolved endpoints, so the many member-to-member edges between two
+        // boxes collapse into one arrow instead of one per pair.
+        const conn = `${fromId}->${toId}`
         if (location.modifiers?.some(m =>
           m.type?.tag === 'DoNotDrawConnection' &&
           (
@@ -508,10 +1092,28 @@ function handleConnections(includeFateOfTheVale = true) {
             (m.type.contents?.[0] === dst && m.type.contents?.[1] === id)
           )
         )) continue
+        if (live.has(conn)) continue
         live.add(conn)
-        makeOrUpdateChevrons(start, end, conn)
+        const points = connectionPoints(start, end)
+        // Deferred: an arrow's lane depends on the others, and the rest are not known yet.
+        if (points) chevronCandidates.push({ connection: conn, start, end, ...points })
+        else makeOrUpdateChevrons(start, end, conn, 0)
       }
     }
+  }
+
+  const candidates = Array.from(normalConnections.values())
+  const offsets = props.allowCurvedPaths ? curveOffsets(candidates) : new Map<string, number>()
+  for (const candidate of candidates) {
+    makeOrUpdateConnectionPath(candidate, offsets.get(candidate.connection) ?? 0)
+  }
+
+  const everyRoute = [...candidates, ...chevronCandidates]
+  for (const candidate of chevronCandidates) {
+    const curveOffset = props.allowCurvedPaths
+      ? (obstructedChevronCurve(candidate) ?? overlappingRouteCurve(candidate, everyRoute))
+      : 0
+    makeOrUpdateChevrons(candidate.start, candidate.end, candidate.connection, curveOffset)
   }
 
   const invalidMineCart = mineCartInvalidDirection()
@@ -553,12 +1155,17 @@ function handleConnections(includeFateOfTheVale = true) {
     makeOrUpdateLine(start, end, "enemy-line")
   }
 
+  for (const [conn, el] of connectionPathsByConn) {
+    if (!live.has(conn)) {
+      el.remove()
+      connectionPathsByConn.delete(conn)
+    }
+  }
   for (const [conn, el] of linesByConn) {
     if (!live.has(conn)) {
       if (!includeFateOfTheVale && el.classList.contains('fate-of-the-vale-enemy-line')) continue
-      fateGlowLinesByConn.get(conn)?.remove()
-      fateGlowLinesByConn.delete(conn)
-      defsEl?.querySelector(`#fate-of-the-vale-smoke-filter-${conn.replace(/[^a-zA-Z0-9_-]/g, '-')}`)?.remove()
+      removeFateSvgDecoration(conn)
+      removeLaserBeam(conn)
       el.remove()
       linesByConn.delete(conn)
     }
@@ -568,6 +1175,12 @@ function handleConnections(includeFateOfTheVale = true) {
       el.remove()
       chevronsByConn.delete(conn)
     }
+  }
+
+  // This runs every animation frame while the board is settling, so only commit
+  // when a midpoint actually moved -- otherwise the overlay re-renders forever.
+  if (JSON.stringify(nextMidpoints) !== JSON.stringify(midpoints.value)) {
+    midpoints.value = nextMidpoints
   }
 }
 
@@ -584,13 +1197,40 @@ function stopTransientTracking() {
   requestId.value = null
 }
 
+// The burst exists to follow location cards while they move, but most of what
+// wakes it is a --can-interact class landing on a card, which moves nothing.
+// So redraw only on frames where the geometry actually changed, and end the
+// burst once the cards have come to rest. Sub-pixel and five frames: anything
+// still animating moves the rect every frame, easing tail included.
+const TRANSIENT_STABLE_FRAMES = 5
+
+function locationGeometrySignature(): string {
+  const cards = document.querySelector('.location-cards')
+  if (!cards) return ''
+  let sig = ''
+  for (const el of cards.querySelectorAll<HTMLElement>('[data-id]')) {
+    const r = el.getBoundingClientRect()
+    sig += `${el.dataset.id}:${r.left.toFixed(2)},${r.top.toFixed(2)},${r.width.toFixed(2)},${r.height.toFixed(2)};`
+  }
+  return sig
+}
+
 function requestTransientConnectionTracking(durationMs = 260) {
   transientTrackingUntil = Math.max(transientTrackingUntil, performance.now() + durationMs)
   if (requestId.value !== null) return
+  let lastSignature = locationGeometrySignature()
+  let stableFrames = 0
   const tick = (ts: number) => {
     requestId.value = null
     if (ts >= transientTrackingUntil) return
-    handleConnections(false)
+    const signature = locationGeometrySignature()
+    if (signature === lastSignature) {
+      if (++stableFrames >= TRANSIENT_STABLE_FRAMES) return
+    } else {
+      lastSignature = signature
+      stableFrames = 0
+      handleConnections(false)
+    }
     requestId.value = window.requestAnimationFrame(tick)
   }
   requestId.value = window.requestAnimationFrame(tick)
@@ -610,7 +1250,9 @@ onMounted(async () => {
   svgEl = svgRef.value
   defsEl = svgEl?.querySelector('defs') ?? null
   lineProto = protoRef.value
+  connectionProto = connectionProtoRef.value
   chevronProto = chevronProtoRef.value
+  groupFrameProto = groupFrameProtoRef.value
   // First draw immediately so a cold refresh shows lines at once, then redraw
   // after layout/images/cached Cosmic Emissary transforms settle. The normal
   // animation tick intentionally skips Fate of the Vale enemy lines, so without
@@ -646,6 +1288,14 @@ watch(mineCart, ()=> { requestConnectionUpdate() }, { flush: 'post' })
 watch(isWrittenInRockAct2, ()=> { requestConnectionUpdate() }, { flush: 'post' })
 watch(enemies, ()=> { requestConnectionUpdate() }, { flush: 'post' })
 watch(() => props.enableCosmicEmissaryAnimation, () => { requestConnectionUpdate() }, { flush: 'post' })
+watch(mapZoom, () => { requestConnectionUpdate() }, { flush: 'post' })
+watch(trackedConnections, () => { requestConnectionUpdate() }, { flush: 'post' })
+// Turning the beams off has to tear the canvases down, not just stop drawing
+// them; the redraw then rebuilds the SVG lines in their place.
+watch(useLaserBeams, (enabled) => {
+  if (!enabled) removeAllLaserBeams()
+  requestConnectionUpdate()
+}, { flush: 'post' })
 
 onBeforeUnmount(()=> {
   window.removeEventListener('resize', requestConnectionUpdate)
@@ -664,28 +1314,58 @@ onBeforeUnmount(()=> {
     defsEl?.querySelector(`#fate-of-the-vale-smoke-filter-${conn.replace(/[^a-zA-Z0-9_-]/g, '-')}`)?.remove()
     el.remove()
   }
+  for (const [, el] of connectionPathsByConn) el.remove()
   for (const [,el] of fateGlowLinesByConn) el.remove()
+  removeAllLaserBeams()
   linesByConn.clear()
+  connectionPathsByConn.clear()
   fateGlowLinesByConn.clear()
   for (const [,el] of chevronsByConn) el.remove()
   chevronsByConn.clear()
   svgEl = null
   defsEl = null
   lineProto = null
+  connectionProto = null
   chevronProto = null
+  groupFrameProto = null
 })
 </script>
 
 <template>
-  <svg ref="svgRef" class="connections-svg" :class="{ 'cosmic-emissary-animation-disabled': props.enableCosmicEmissaryAnimation === false }">
+  <svg
+    ref="svgRef"
+    class="connections-svg"
+    :class="{ 'cosmic-emissary-animation-disabled': props.enableCosmicEmissaryAnimation === false }"
+    :style="{ '--map-zoom': mapZoom }"
+  >
     <defs>
     </defs>
     <line ref="protoRef" class="line original" stroke-dasharray="5, 5"/>
+    <path ref="connectionProtoRef" class="line original" stroke-dasharray="5, 5"/>
     <path ref="chevronProtoRef" class="chevrons original"/>
+    <rect ref="groupFrameProtoRef" class="location-group-frame original"/>
   </svg>
+  <div ref="laserLayerRef" class="connections-lasers" aria-hidden="true"></div>
+  <div class="connections-between">
+    <div
+      v-for="{ treachery, connection } in betweenTreacheries"
+      :key="treachery.id"
+      class="between-card"
+      :style="midpointStyle(connection)"
+    >
+      <Treachery :game="game" :treachery="treachery" :playerId="playerId" @choose="emits('choose', $event)" />
+    </div>
+  </div>
 </template>
 
 <style scoped>
+/* The frame of a location group. Drawn here, under the lines, rather than as the box
+ * div's own border -- see drawGroupFrames. */
+.location-group-frame {
+  fill: var(--location-group-fill, rgba(255, 255, 255, 0.04));
+  stroke: var(--location-group-border, rgba(255, 255, 255, 0.28));
+}
+
 .connections-svg{
   pointer-events: none;
   position: absolute;
@@ -694,12 +1374,63 @@ onBeforeUnmount(()=> {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 0;
+  z-index: var(--z-board-connections);
   overflow: hidden;
 }
 
+/* Shares the SVG's coordinate space and stacking level, so the beams sit under
+   the location cards exactly like the lines they replace. */
+.connections-lasers{
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: var(--z-board-connections);
+  overflow: hidden;
+}
+
+.connections-lasers :deep(.laser-beam){
+  position: absolute;
+  max-width: none;
+  transform-origin: 50% 50%;
+  pointer-events: none;
+}
+
+/* Above the cards, because a coupling hangs in the gutter and its ability button
+   overlaps the neighbouring car -- at the cards' own level the car paints over
+   the button and swallows the click. */
+.connections-between{
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: var(--z-board-connection-attachments);
+}
+
+.connections-between > *{
+  position: absolute;
+  pointer-events: auto;
+  transform-origin: 50% 50%;
+}
+
+.between-card{
+  width: 70px;
+}
+
+.between-card :deep(img.card){
+  width: 100%;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+}
+
 .line{
-  stroke-width: 6px;
+  fill: none;
+  stroke-width: max(1px, calc(6px * var(--map-zoom, 1)));
+  stroke-dasharray: calc(5px * var(--map-zoom, 1)) calc(5px * var(--map-zoom, 1));
   stroke: rgba(255, 255, 255, 0.2);
 }
 .line.active:not(.mine-cart-next-line){
@@ -721,31 +1452,31 @@ onBeforeUnmount(()=> {
 
 .mine-cart-next-line{
   stroke: rgba(74 190 111 / 0.85);
-  filter: drop-shadow(0 0 2px rgba(74 190 111 / 0.35));
+  filter: drop-shadow(0 0 calc(2px * var(--map-zoom, 1)) rgba(74 190 111 / 0.35));
 }
 
 .mine-cart-invalid-line{
   stroke: rgba(220 48 48 / 0.85);
-  filter: drop-shadow(0 0 2px rgba(220 48 48 / 0.45));
+  filter: drop-shadow(0 0 calc(2px * var(--map-zoom, 1)) rgba(220 48 48 / 0.45));
 }
 
 .mine-cart-invalid-x{
   fill: rgba(220 48 48 / 0.95);
   stroke: none;
-  filter: drop-shadow(0 0 2px rgba(220 48 48 / 0.45));
+  filter: drop-shadow(0 0 calc(2px * var(--map-zoom, 1)) rgba(220 48 48 / 0.45));
 }
 
 .fate-of-the-vale-enemy-line-glow {
   stroke: rgba(132 202 199 / 0.52);
-  stroke-width: 22px;
+  stroke-width: calc(22px * var(--map-zoom, 1));
   stroke-linecap: round;
   stroke-opacity: 0.9;
   vector-effect: non-scaling-stroke;
 }
 
 .fate-of-the-vale-enemy-line{
-  stroke-width: 10px;
-  stroke-dasharray: 86 10;
+  stroke-width: calc(10px * var(--map-zoom, 1));
+  stroke-dasharray: calc(86px * var(--map-zoom, 1)) calc(10px * var(--map-zoom, 1));
   stroke-linecap: round;
   stroke-opacity: 1;
   vector-effect: non-scaling-stroke;

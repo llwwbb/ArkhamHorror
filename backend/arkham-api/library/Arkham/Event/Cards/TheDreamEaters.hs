@@ -165,7 +165,9 @@ practiceMakesPerfect =
     { cdSkills = [#willpower, #intellect]
     , cdCardTraits = setFromList [Gambit, Tactic]
     , cdFastWindow = Just FastPlayerWindow
-    , cdCriteria = Just $ Criteria.DuringSkillTest SkillTestAtYourLocation
+    , cdCriteria =
+        Just
+          $ Criteria.DuringSkillTest (SkillTestAtYourLocation <> SkillTestOfInvestigator (affectsOthers Anyone))
     }
 
 extensiveResearch1 :: CardDef
@@ -184,7 +186,7 @@ spectralRazor =
     { cdSkills = [#willpower, #combat]
     , cdCardTraits = singleton Spell
     , cdActions = #fight
-    , cdCriteria = Just $ exists $ oneOf [CanFightEnemy ThisCard, CanEngageEnemy ThisCard]
+    , cdCriteria = Just $ oneOf [Criteria.canFightSomething ThisCard, exists $ CanEngageEnemy ThisCard]
     , cdOverrideActionPlayableIfCriteriaMet = True
     }
 

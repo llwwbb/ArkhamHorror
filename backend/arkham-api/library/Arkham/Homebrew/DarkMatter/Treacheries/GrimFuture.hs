@@ -1,9 +1,9 @@
 module Arkham.Homebrew.DarkMatter.Treacheries.GrimFuture (grimFuture) where
 
 import Arkham.Ability
+import Arkham.Homebrew.DarkMatter.CardDefs.Treacheries qualified as Cards
 import Arkham.Matcher
 import Arkham.Message.Lifted.Choose
-import Arkham.Homebrew.DarkMatter.CardDefs.Treacheries qualified as Cards
 import Arkham.Treachery.Import.Lifted
 
 newtype GrimFuture = GrimFuture TreacheryAttrs
@@ -15,7 +15,8 @@ grimFuture = treachery GrimFuture Cards.grimFuture
 
 instance HasAbilities GrimFuture where
   getAbilities (GrimFuture a) =
-    [ restricted a 1 (InThreatAreaOf You)
+    [ skillTestAbility
+        $ restricted a 1 (InThreatAreaOf You)
         $ forced
         $ OrWindowMatcher [AgendaAdvances #when AnyAgenda, ActAdvances #when AnyAct]
     ]

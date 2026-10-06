@@ -3,9 +3,9 @@ module Arkham.Homebrew.DarkMatter.Treacheries.RadiantCrown (radiantCrown) where
 import Arkham.Ability
 import Arkham.Helpers.Modifiers (ModifierType (..), modified_)
 import Arkham.Helpers.SkillTest (getSkillTest)
+import Arkham.Homebrew.DarkMatter.CardDefs.Treacheries qualified as Cards
 import Arkham.Matcher
 import Arkham.Placement
-import Arkham.Homebrew.DarkMatter.CardDefs.Treacheries qualified as Cards
 import Arkham.Treachery.Import.Lifted
 
 newtype RadiantCrown = RadiantCrown TreacheryAttrs
@@ -31,7 +31,6 @@ instance RunMessage RadiantCrown where
   runMessage msg t@(RadiantCrown attrs) = runQueueT $ case msg of
     Revelation _iid (isSource attrs -> True) -> do
       placeTreachery attrs NextToAgenda
-      gainSurge attrs
       pure t
     UseThisAbility _ (isSource attrs -> True) 1 -> do
       toDiscard (attrs.ability 1) attrs

@@ -13,7 +13,7 @@ import Arkham.Enemy.Creation (EnemyCreation (..))
 import Arkham.Enemy.Helpers
 import Arkham.Enemy.Types
 import Arkham.ForMovement
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.GameValue
 import Arkham.Helpers.Calculation
 import Arkham.Helpers.Damage (damageEffectMatches)
@@ -42,7 +42,6 @@ import Arkham.Scenario.Types (Field (ScenarioDefeatedEnemies))
 import Arkham.Source
 import Arkham.Spawn
 import Arkham.Target
-import Arkham.Tracing
 import Arkham.Window (mkAfter, mkWhen, windowType)
 import Arkham.Window qualified as Window
 import Arkham.Zone
@@ -61,7 +60,7 @@ isActionTarget :: Targetable a => a -> Target -> Bool
 isActionTarget a = isTarget a . toProxyTarget
 
 spawnAt
-  :: (HasGame m, Tracing m, HasQueue Message m, MonadRandom m)
+  :: (HasGame m, HasQueue Message m, MonadRandom m)
   => EnemyId -> Maybe InvestigatorId -> SpawnAt -> m ()
 spawnAt _ _ NoSpawn = pure ()
 spawnAt eid miid (SpawnAtLocation lid) = do
@@ -131,6 +130,17 @@ noSpawn attrs miid = do
     : [ Surge iid (toSource attrs) | enemySurgeIfUnableToSpawn attrs, iid <- toList miid
       ]
 
+{- | The damage and horror an enemy's attack deals, the way 'PerformEnemyAttack'
+computes it: the modified 'EnemyHealthDamage'\/'EnemySanityDamage', except that
+an attack in flight can have its damage switched off ('attackDealDamage').
+-}
+getEnemyAttackDamageAndHorror :: HasGame m => EnemyId -> m (Int, Int)
+getEnemyAttackDamageAndHorror eid = do
+  mdetails <- field EnemyAttacking eid
+  damage <- if all attackDealDamage mdetails then field EnemyHealthDamage eid else pure 0
+  horror <- field EnemySanityDamage eid
+  pure (damage, horror)
+
 getModifiedDamageAmount :: (HasGame m, Targetable target) => target -> DamageAssignment -> m Int
 getModifiedDamageAmount target damageAssignment = do
   modifiers' <- getModifiers target
@@ -154,7 +164,7 @@ getModifiedDamageAmount target damageAssignment = do
   applyModifierCaps _ n = pure n
 
 getModifiedKeywords
-  :: (HasCallStack, HasGame m, Tracing m, ToId enemy EnemyId) => enemy -> m (Set Keyword)
+  :: (HasCallStack, HasGame m, ToId enemy EnemyId) => enemy -> m (Set Keyword)
 getModifiedKeywords e = do
   mods <- getModifiers (asId e)
   keywords <- field EnemyKeywords (asId e)
@@ -199,7 +209,7 @@ called while the skill test is the current one, so the test-scoped ignore
 modifier is active.
 -}
 ignoredKeywordWindowsForEnemy
-  :: (HasCallStack, HasGame m, Tracing m)
+  :: (HasCallStack, HasGame m)
   => Source -> InvestigatorId -> EnemyId -> Keyword -> ModifierType -> m [Message]
 ignoredKeywordWindowsForEnemy source iid eid keyword ignoreModifier = do
   -- The target may be a concealed mini-card rather than a real Enemy entity
@@ -214,7 +224,7 @@ ignoredKeywordWindowsForEnemy source iid eid keyword ignoreModifier = do
         then ignoredKeywordWindows source [toTarget iid, toTarget eid] ignoreModifier
         else pure []
 
-canEnterLocation :: (HasGame m, Tracing m) => EnemyId -> LocationId -> m Bool
+canEnterLocation :: HasGame m => EnemyId -> LocationId -> m Bool
 canEnterLocation eid lid = do
   modifiers' <- (<>) <$> getModifiers lid <*> getModifiers eid
   not <$> flip anyM modifiers' \case
@@ -226,15 +236,41 @@ canEnterLocation eid lid = do
     Modifier.CannotMove -> fieldMap EnemyPlacement isInPlayPlacement eid
     _ -> pure False
 
-canSpawnInLocation :: (HasGame m, Tracing m) => EnemyId -> LocationId -> m Bool
+canSpawnInLocation :: HasGame m => EnemyId -> LocationId -> m Bool
 canSpawnInLocation eid lid = do
   modifiers' <- (<>) <$> getModifiers lid <*> getModifiers eid
   not <$> flip anyM modifiers' \case
     Modifier.CannotSpawnIn matcher -> lid <=~> matcher
     _ -> pure False
 
+{- | The members a composite enemy stands for, if it is one. See
+'Modifier.InteractAsOneOf'.
+-}
+getInteractAsOneOf :: HasGame m => EnemyId -> m (Maybe EnemyMatcher)
+getInteractAsOneOf eid = do
+  mods <- getModifiers eid
+  pure $ listToMaybe [m | Modifier.InteractAsOneOf m <- mods]
+
+{- | Rewrite a fight/evade matcher so that a composite enemy it picks out is replaced
+by the enemy cards it is made of — "when interacting with Cthulhu, choose one of the
+cards on the Cthulhu Board". The composite is subtracted rather than left to its own
+@CannotBe*@ modifiers because the fight override path ('withFightOverride') matches on
+'EnemyCanBeAttackedBy', which does not read them.
+
+The identity function unless some enemy the matcher already picks out is composite.
+-}
+expandCompositeEnemies :: HasGame m => EnemyMatcher -> m EnemyMatcher
+expandCompositeEnemies matcher = do
+  composites <-
+    select matcher >>= \eids -> forMaybeM eids \eid -> fmap (eid,) <$> getInteractAsOneOf eid
+  pure $ case composites of
+    [] -> matcher
+    _ ->
+      oneOf (matcher : map snd composites)
+        <> not_ (mapOneOf EnemyWithId (map fst composites))
+
 getFightableEnemyIds
-  :: (HasGame m, Tracing m, Sourceable source) => InvestigatorId -> source -> m [EnemyId]
+  :: (HasGame m, Sourceable source) => InvestigatorId -> source -> m [EnemyId]
 getFightableEnemyIds iid (toSource -> source) = do
   fightAnywhereEnemyIds <-
     select AnyEnemy >>= filterM \eid -> do
@@ -262,20 +298,20 @@ getFightableEnemyIds iid (toSource -> source) = do
         )
         modifiers'
 
-getEnemyAccessibleLocations :: (HasGame m, Tracing m) => EnemyId -> m [LocationId]
+getEnemyAccessibleLocations :: HasGame m => EnemyId -> m [LocationId]
 getEnemyAccessibleLocations eid = do
   location <- fieldMap EnemyLocation (fromJustNote "must be at a location") eid
   matcher <- getConnectedMatcher NotForMovement location
   connectedLocationIds <- select matcher
   filterM (canEnterLocation eid) connectedLocationIds
 
-getUniqueEnemy :: (HasCallStack, HasGame m, Tracing m) => CardDef -> m EnemyId
+getUniqueEnemy :: (HasCallStack, HasGame m) => CardDef -> m EnemyId
 getUniqueEnemy = selectJust . enemyIs
 
-getUniqueEnemyMaybe :: (HasGame m, Tracing m) => CardDef -> m (Maybe EnemyId)
+getUniqueEnemyMaybe :: HasGame m => CardDef -> m (Maybe EnemyId)
 getUniqueEnemyMaybe = selectOne . enemyIs
 
-getEnemyIsInPlay :: (HasGame m, Tracing m) => CardDef -> m Bool
+getEnemyIsInPlay :: HasGame m => CardDef -> m Bool
 getEnemyIsInPlay = selectAny . enemyIs
 
 defeatEnemy :: (HasGame m, Sourceable source) => EnemyId -> InvestigatorId -> source -> m [Message]
@@ -291,24 +327,28 @@ cancelEnemyEngagement iid eid = do
     Window.EnemyEngaged _ eid' | eid == eid' -> True
     _ -> False
 
-enemyEngagedInvestigators :: (HasGame m, Tracing m) => EnemyId -> m [InvestigatorId]
+enemyEngagedInvestigators :: HasGame m => EnemyId -> m [InvestigatorId]
 enemyEngagedInvestigators eid = do
   asIfEngaged <- select $ InvestigatorWithModifier (AsIfEngagedWith eid)
   mPlacement <- fieldMay EnemyPlacement eid
   others <- case mPlacement of
     Just (InThreatArea iid) -> pure [iid]
-    Just (AtLocation lid) -> do
-      isEngagedMassive <- eid <=~> (MassiveEnemy <> ReadyEnemy)
-      if isEngagedMassive then select (investigatorAt lid) else pure []
+    Just (AtLocation lid) -> massiveEngaged [lid]
+    -- At each of its locations, so Massive engages everyone standing on any of them.
+    Just (AtLocations lids) -> massiveEngaged (toList lids)
     Just (AsSwarm eid' _) -> enemyEngagedInvestigators eid'
     _ -> pure []
   pure . nub $ asIfEngaged <> others
+ where
+  massiveEngaged lids = do
+    isEngagedMassive <- eid <=~> (MassiveEnemy <> ReadyEnemy)
+    if isEngagedMassive then select (investigatorAt $ mapOneOf LocationWithId lids) else pure []
 
-enemyMatches :: (HasGame m, Tracing m) => EnemyId -> Matcher.EnemyMatcher -> m Bool
+enemyMatches :: HasGame m => EnemyId -> Matcher.EnemyMatcher -> m Bool
 enemyMatches !enemyId !mtchr = elem enemyId <$> select mtchr
 
 enemyAttackMatches
-  :: (HasGame m, Tracing m)
+  :: HasGame m
   => InvestigatorId -> EnemyAttackDetails -> Matcher.EnemyAttackMatcher -> m Bool
 enemyAttackMatches youId details@EnemyAttackDetails {..} = \case
   Matcher.EnemyAttackMatches as -> allM (enemyAttackMatches youId details) as
@@ -340,7 +380,7 @@ enemyAttackMatches youId details@EnemyAttackDetails {..} = \case
       ]
 
 spawnAtOneOf
-  :: (HasGame m, Tracing m, HasQueue Message m)
+  :: (HasGame m, HasQueue Message m)
   => Maybe InvestigatorId -> EnemyId -> [LocationId] -> m ()
 spawnAtOneOf miid eid targetLids = do
   locations' <- select $ Matcher.IncludeEmptySpace Matcher.Anywhere
@@ -374,7 +414,7 @@ spawnAtOneOf miid eid targetLids = do
           | (windows', lid) <- windowPairs
           ]
 
-sourceCannotDamageEnemyReason :: (HasGame m, Tracing m) => EnemyId -> Source -> m (Maybe Modifier.Modifier)
+sourceCannotDamageEnemyReason :: HasGame m => EnemyId -> Source -> m (Maybe Modifier.Modifier)
 sourceCannotDamageEnemyReason eid source = do
   modifiers' <- getFullModifiers (EnemyTarget eid)
   findPreventingModifier modifiers'
@@ -387,6 +427,10 @@ sourceCannotDamageEnemyReason eid source = do
       else findPreventingModifier rest
 
   prevents = \case
+    -- EncounterCardSource covers the printed "or encounter cards" clause that
+    -- Poltergeist / Ghost Light / Miasmatic Shadow carry. It deliberately does
+    -- NOT match the basic action abilities even though those are anchored on the
+    -- encounter card being fought — see Arkham.Helpers.Source and issue #5342.
     CannotBeDamagedByPlayerSourcesExcept matcher ->
       not
         <$> sourceMatches
@@ -403,11 +447,11 @@ sourceCannotDamageEnemyReason eid source = do
     CannotBeDamaged -> pure True
     _ -> pure False
 
-sourceCanDamageEnemy :: (HasGame m, Tracing m) => EnemyId -> Source -> m Bool
+sourceCanDamageEnemy :: HasGame m => EnemyId -> Source -> m Bool
 sourceCanDamageEnemy eid source = isNothing <$> sourceCannotDamageEnemyReason eid source
 
 getDamageableEnemies
-  :: (HasGame m, Tracing m, ToId investigator InvestigatorId, Sourceable source)
+  :: (HasGame m, ToId investigator InvestigatorId, Sourceable source)
   => investigator -> source -> EnemyMatcher -> m [EnemyId]
 getDamageableEnemies investigator source matcher = do
   canDealDamage <- can.deal.damage (asId investigator)
@@ -452,7 +496,7 @@ createEngagedWith investigator ec =
     }
 {-# INLINE createEngagedWith #-}
 
-getDefeatedEnemyHealth :: (HasGame m, Tracing m) => EnemyId -> m (Maybe Int)
+getDefeatedEnemyHealth :: HasGame m => EnemyId -> m (Maybe Int)
 getDefeatedEnemyHealth eid = do
   getEnemyField EnemyHealthActual eid >>= \case
     Just healthValue -> Just <$> calculate healthValue
@@ -470,7 +514,7 @@ type family FlatField k where
 
 getEnemyField
   :: forall a m
-   . (Typeable a, Typeable (FlatField a), HasGame m, Tracing m)
+   . (Typeable a, Typeable (FlatField a), HasGame m)
   => Field Enemy a -> EnemyId -> m (Maybe (FlatField a))
 getEnemyField fld eid = do
   val <-
@@ -508,13 +552,14 @@ insteadOfDamage (asId -> eid) body = do
     notAfterDamage = \case
       (windowType -> Window.TakeDamage _ _ (EnemyTarget eid') _) | eid == eid' -> False
       _ -> True
-  lift do
-    overMessagesM \case
-      CheckWindows ws -> case filter notAfterDamage ws of
-        [] -> pure []
-        ws' -> pure [CheckWindows ws']
-      Damaged (EnemyTarget eid') dmg | eid == eid' -> evalQueueT (body dmg)
-      other -> pure [other]
+  -- 'rewriteQueuedM' because the pending 'Damaged' is wrapped in 'MoveWithSkillTest' by
+  -- the time any When-damage-window responder runs; a flat scan never finds it.
+  lift $ overMessagesM $ rewriteQueuedM \case
+    CheckWindows ws -> case filter notAfterDamage ws of
+      [] -> pure []
+      ws' -> pure [CheckWindows ws']
+    Damaged (EnemyTarget eid') dmg | eid == eid' -> evalQueueT (body dmg)
+    other -> pure [other]
 
 {- | Reduce the amount of the pending 'Damaged' message on this enemy to at most
 @n@ (leaving it unchanged if it is already lower). Pair with a forced ability
@@ -525,15 +570,13 @@ reduceDamageTakenTo
   :: (HasQueue Message m, MonadTrans t, ToId enemy EnemyId)
   => enemy -> Int -> t m ()
 reduceDamageTakenTo (asId -> eid) n =
-  lift
-    $ replaceMessageMatching
-      (\case Damaged (EnemyTarget eid') _ -> eid == eid'; _ -> False)
-      \case
-        Damaged target dmg -> [Damaged target dmg {damageAssignmentAmount = min n dmg.amount}]
-        other -> [other]
+  lift $ overMessagesM $ rewriteQueuedM \case
+    Damaged target@(EnemyTarget eid') dmg
+      | eid == eid' -> pure [Damaged target dmg {damageAssignmentAmount = min n dmg.amount}]
+    other -> pure [other]
 
 patrol :: (ReverseQueue m, ToId enemy EnemyId) => enemy -> m ()
 patrol (asId -> eid) = whenJustM (getPatrolMatcher eid) $ push . PatrolMove eid
 
-getPatrolMatcher :: (HasGame m, Tracing m) => EnemyId -> m (Maybe LocationMatcher)
+getPatrolMatcher :: HasGame m => EnemyId -> m (Maybe LocationMatcher)
 getPatrolMatcher eid = preview (folded . _Patrol) <$> getModifiedKeywords eid

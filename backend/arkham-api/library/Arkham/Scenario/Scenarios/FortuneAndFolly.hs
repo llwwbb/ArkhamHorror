@@ -1,7 +1,7 @@
 module Arkham.Scenario.Scenarios.FortuneAndFolly (fortuneAndFolly, fortuneAndFollyPart2) where
 
-import Arkham.Act.Cards qualified as Acts
-import Arkham.Agenda.Cards qualified as Agendas
+import Arkham.Act.CardDefs.FortuneAndFolly qualified as Acts
+import Arkham.Agenda.CardDefs.FortuneAndFolly qualified as Agendas
 import Arkham.Asset.Cards qualified as Assets
 import Arkham.Asset.Types (Field (AssetCard, AssetCardCode, AssetPlacement))
 import Arkham.Campaign.Types (Field (..))
@@ -14,8 +14,8 @@ import Arkham.Campaigns.TheScarletKeys.Key.Types (Field (ScarletKeyTokens))
 import Arkham.Campaigns.TheScarletKeys.Meta hiding (Standard)
 import Arkham.Card
 import Arkham.EncounterSet qualified as Set
-import Arkham.Enemy.Cards qualified as Enemies
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.Enemy.CardDefs.FortuneAndFolly qualified as Enemies
+import Arkham.GameEnv
 import Arkham.Helpers
 import Arkham.Helpers.Campaign (campaignField)
 import Arkham.Helpers.FlavorText
@@ -28,7 +28,7 @@ import Arkham.Id
 import Arkham.Investigator.Types (Field (InvestigatorClues, InvestigatorDamage, InvestigatorHorror))
 import Arkham.Keyword qualified as Keyword
 import Arkham.Layout
-import Arkham.Location.Cards qualified as Locations
+import Arkham.Location.CardDefs.FortuneAndFolly qualified as Locations
 import Arkham.Location.Types (Field (LocationCardsUnderneath, LocationPrintedSymbol))
 import Arkham.LocationSymbol
 import Arkham.Matcher hiding (AssetCard, Discarded, enemyAt)
@@ -44,11 +44,11 @@ import Arkham.Scenario.Options
 import Arkham.Scenario.Types (ScenarioAttrs (..), campaignStepL)
 import Arkham.ScenarioLogKey
 import Arkham.Scenarios.FortuneAndFolly.Helpers
-import Arkham.Story.Cards qualified as Stories
+import Arkham.Story.CardDefs.FortuneAndFolly qualified as Stories
 import Arkham.Story.Types (Field (StoryClues))
 import Arkham.Token
 import Arkham.Trait (Trait (Casino, Role, Unpracticed))
-import Arkham.Treachery.Cards qualified as Treacheries
+import Arkham.Treachery.CardDefs.FortuneAndFolly qualified as Treacheries
 import Arkham.Window qualified as Window
 import Data.Map.Strict qualified as Map
 
@@ -160,7 +160,8 @@ instance HasModifiersFor FortuneAndFolly where
       ]
       \(enemyCode, patrolDestination, patrolDirection) ->
         selectEach (LocationWithEnemy $ enemyIsExact enemyCode) \loc -> do
-          reversed <- selectAny $ enemyIsExact enemyCode <> EnemyWithModifier (ScenarioModifier "reverseDirection")
+          reversed <-
+            selectAny $ enemyIsExact enemyCode <> EnemyWithModifier (ScenarioModifier "reverseDirection")
           sym <- field LocationPrintedSymbol loc
           let newSym = Map.findWithDefault sym sym $ case patrolDirection of
                 Clockwise -> if reversed then counterClockwiseMap else clockwiseMap
@@ -203,17 +204,17 @@ instance RunMessage FortuneAndFolly where
         else doStep 3 PreScenarioSetup
       pure $ FortuneAndFolly $ attrs & campaignStepL .~ Nothing
     DoStep 2 PreScenarioSetup -> scope "intro" do
-      flavor $ setTitle "title" >> p "intro2"
+      flavor $ h "title" >> p "intro2"
       doStep 4 PreScenarioSetup
       pure s
     DoStep 3 PreScenarioSetup -> scope "intro" do
-      flavor $ setTitle "title" >> p "intro3"
+      flavor $ h "title" >> p "intro3"
       doStep 4 PreScenarioSetup
       pure s
     DoStep 4 PreScenarioSetup -> scope "intro" do
-      storyWithChooseOneM' (setTitle "title" >> p "intro4") do
-        labeled' "skip" $ doStep (-1) PreScenarioSetup
-        labeled' "doNotSkip" $ doStep 5 PreScenarioSetup
+      storyWithChooseOneM (setTitle "title" >> p "intro4") do
+        labeled "skip" $ doStep (-1) PreScenarioSetup
+        labeled "doNotSkip" $ doStep 5 PreScenarioSetup
       pure s
     DoStep 5 PreScenarioSetup -> scope "intro" do
       flavor $ setTitle "title" >> p "intro5"
@@ -364,7 +365,7 @@ instance RunMessage FortuneAndFolly where
       pure s
     ResolveChaosToken _ ElderThing iid -> do
       chooseOneM iid do
-        labeled' "elderThing.alarm" do
+        labeled "elderThing.alarm" do
           raiseAlarmLevel ElderThing [iid]
           passSkillTest
         unscoped skip_
@@ -384,10 +385,16 @@ instance RunMessage FortuneAndFolly where
         then scenarioSpecific "checkGameIcons" params
         else focusCards params.cards do
           chooseOneM params.investigator do
-            labeled' "keepHand" $ scenarioSpecific "checkGameIcons" params
+            labeled "keepHand" $ scenarioSpecific "checkGameIcons" params
             for_ (eachWithRest params.cards) \(card, rest) ->
-              targeting card $ scenarioSpecific "mulligan" params {cards = rest}
+              targeting card
+                $ scenarioSpecific "mulligan" params {cards = rest, setAside = card : params.setAside}
       pure attrs
+    -- Returns the cards a game icon check was holding to the encounter discard,
+    -- after a mid-check reshuffle has consumed the rest of the pile.
+    ScenarioSpecific "restoreGameIconCards" val -> fmap FortuneAndFolly do
+      let params = toResult @CheckGameIcons val
+      pure $ attrs & discardL %~ (checkedCards params <>)
     ScenarioSpecific "checkGameIcons" val -> fmap FortuneAndFolly do
       let params = toResult @CheckGameIcons val
       pcs <- mapMaybeM toPlayingCard params.cards
@@ -406,12 +413,18 @@ instance RunMessage FortuneAndFolly where
               push $ DiscardedCards params.investigator ScenarioSource params.target $ toCard <$> params.cards
           pure attrs
         else case attrs.encounterDeck of
+          Deck [] | scenarioInShuffle attrs -> pure attrs
           Deck [] -> do
-            unless (scenarioInShuffle attrs) do
-              checkWhen Window.EncounterDeckRunsOutOfCards
-              shuffleEncounterDiscardBackIn
-              push msg
-            pure attrs
+            -- "set aside the cards that have already been discarded, shuffle the
+            -- remainder of the discard pile into the encounter deck, then continue
+            -- discarding cards". Hold this check's cards out of the shuffle and put
+            -- them back once it has run.
+            let aside = map (.id) (checkedCards params)
+            checkWhen Window.EncounterDeckRunsOutOfCards
+            shuffleEncounterDiscardBackIn
+            scenarioSpecific "restoreGameIconCards" params
+            push msg
+            pure $ attrs & discardL %~ filter ((`notElem` aside) . (.id))
           Deck (card : deck) -> do
             checkWhen $ Window.Discarded (Just params.investigator) ScenarioSource (toCard card)
             push $ Discarded (CardIdTarget card.id) ScenarioSource (toCard card)
@@ -492,12 +505,12 @@ instance RunMessage FortuneAndFolly where
       roles <- selectWithField AssetCard (AssetWithTrait Role <> AssetWithTrait Unpracticed)
       when (alarm || notNull roles) do
         lead <- getLead
-        storyWithChooseOneM' (p "choices") do
-          labeledValidate' alarm "alarm" do
+        storyWithChooseOneM (p "choices") do
+          labeledValidate alarm "alarm" do
             eachInvestigator $ reduceAlarmLevel attrs
             doStep (n - 1) msg'
-          labeledValidate' (notNull roles) "flipRole" do
-            storyWithChooseOneM' (p.basic "chooseRoleToFlip") do
+          labeledValidate (notNull roles) "flipRole" do
+            storyWithChooseOneM (p.basic "chooseRoleToFlip") do
               for_ roles \(roleAsset, roleCard) -> do
                 flippableCardLabeled roleCard $ flipOver lead roleAsset
             doStep (n - 1) msg'
@@ -554,7 +567,7 @@ handleFortunesChosen = unlessM getIsStandalone do
   tokens <- campaignField CampaignChaosBag
   let tokenPairs = mapMaybe (\face -> (face,) <$> fortunesChosenToken face) tokens
   leadChooseOneM do
-    questionLabeled' "fortunesChosen"
+    questionLabeled "fortunesChosen"
     for_ tokenPairs \(original, replacement) -> do
       chaosTokenLabeled original $ push $ SwapChaosToken original replacement
 

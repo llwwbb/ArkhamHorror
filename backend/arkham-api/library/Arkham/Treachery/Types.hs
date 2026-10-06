@@ -182,7 +182,7 @@ instance HasCardCode TreacheryAttrs where
   toCardCode = treacheryCardCode
 
 instance HasCardDef TreacheryAttrs where
-  toCardDef a = case lookup (treacheryCardCode a) allTreacheryCards of
+  toCardDef a = case lookup (treacheryCardCode a) allTreacheryCards <|> lookupCustomCardDef (treacheryCardCode a) of
     Just def -> def
     Nothing ->
       error $ "missing card def for treachery " <> show (treacheryCardCode a)
@@ -370,8 +370,8 @@ someTreacheryCardCodes (SomeTreacheryCard CardBuilder {..}) =
 
 makeLensesWith suffixedFields ''TreacheryAttrs
 
-setMeta :: ToJSON a => a -> TreacheryAttrs -> TreacheryAttrs
-setMeta a = metaL .~ toJSON a
+setMeta :: (ToJSON a, Entity b, EntityAttrs b ~ TreacheryAttrs) => a -> b -> b
+setMeta a = overAttrs (metaL .~ toJSON a)
 
 $(deriveToJSON (aesonOptions $ Just "treachery") ''TreacheryAttrs)
 

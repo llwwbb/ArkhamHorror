@@ -15,20 +15,17 @@ import {-# SOURCE #-} Arkham.Card (
 import Arkham.Card.CardDef (CardDef, toCardDef)
 import Arkham.Card.EncounterCard
 import Arkham.Card.PlayerCard
-import Arkham.Classes.Entity
 import Arkham.Classes.GameLogger
 import Arkham.Classes.HasAbilities
 import Arkham.Classes.HasDistance
 import Arkham.Classes.HasGame
 import Arkham.Classes.HasQueue
 import Arkham.Distance
-import Arkham.Entities
 import {-# SOURCE #-} Arkham.Game
 import Arkham.Game.Settings
 import Arkham.GameT
 import Arkham.History
 import Arkham.Id
-import Arkham.Investigator.Types (InvestigatorAttrs)
 import Arkham.Message
 import Arkham.Modifier
 import Arkham.Phase
@@ -37,12 +34,10 @@ import Arkham.Random
 import Arkham.SkillTest.Base
 import {-# SOURCE #-} Arkham.Source
 import Arkham.Target
-import Arkham.Tracing
 import Arkham.Window
 import Control.Monad.Random.Lazy hiding (filterM, foldM, fromList)
 import Data.Dependent.Map qualified as DMap
 import Data.Map.Strict qualified as Map
-import OpenTelemetry.Trace.Monad (MonadTracer (..))
 
 -- Some ORPHANS we may want to move
 
@@ -101,7 +96,6 @@ toGameEnv
      , HasStdGen env
      , HasGameLogger m
      , MonadReader env m
-     , MonadTracer m
      )
   => m GameEnv
 toGameEnv = do
@@ -110,7 +104,6 @@ toGameEnv = do
   gameEnvQueue <- messageQueue
   gameCacheRef <- newIORef DMap.empty
   gameLogger <- getLogger
-  gameTracer <- getTracer
   pure $ GameEnv {..}
 
 runWithEnv
@@ -119,7 +112,6 @@ runWithEnv
      , HasStdGen env
      , HasGameLogger m
      , MonadReader env m
-     , MonadTracer m
      )
   => GameT a
   -> m a
@@ -170,7 +162,7 @@ getHistory RoundHistory iid = do
 getHistoryField :: HasGame m => HistoryType -> InvestigatorId -> HistoryField k -> m k
 getHistoryField htype iid fld = viewHistoryField fld <$> getHistory htype iid
 
-getDistance :: (HasGame m, Tracing m) => LocationId -> LocationId -> m (Maybe Distance)
+getDistance :: HasGame m => LocationId -> LocationId -> m (Maybe Distance)
 getDistance l1 l2 = do
   game <- getGame
   getDistance' game l1 l2
@@ -202,11 +194,26 @@ getAllAbilities = cached GetAllAbilitiesKey $ getAbilities <$> getGame
 getSettings :: HasGame m => m Settings
 getSettings = gameSettings <$> getGame
 
+{- | Whether "as if" should be ignored for this investigator right now. The
+Chapter 2 ruling confines the altered state to the ability being resolved, so
+windows that offer other abilities bracket themselves with 'SetAsIfAtIgnored'.
+Chapter 1 keeps the altered state throughout and always answers False.
+-}
+getAsIfIgnored :: HasGame m => InvestigatorId -> m Bool
+getAsIfIgnored iid = do
+  settings <- getSettings
+  g <- getGame
+  pure $ settingsStrictAsIfAt settings && iid `member` gameAsIfAtIgnored g
+
 getCurrentBatchId :: HasGame m => m (Maybe BatchId)
 getCurrentBatchId = gameCurrentBatchId <$> getGame
 
 getAllPlayers :: HasGame m => m [PlayerId]
 getAllPlayers = gamePlayers <$> getGame
+
+-- | Investigators set aside because their player left the campaign.
+getRetiredInvestigators :: HasGame m => m [InvestigatorId]
+getRetiredInvestigators = keys . gameRetiredInvestigators <$> getGame
 
 getActivePlayer :: HasGame m => m PlayerId
 getActivePlayer = gameActivePlayerId <$> getGame
@@ -253,19 +260,13 @@ withoutModifiersOf source body = do
     modifiers' = Map.map (filter ((/= toSource source) . (.source))) modifiers
   runReaderT body $ game & modifiersL .~ modifiers'
 
-withInvestigatorEdit
-  :: HasGame m => InvestigatorId -> (InvestigatorAttrs -> InvestigatorAttrs) -> ReaderT Game m a -> m a
-withInvestigatorEdit iid f body = do
-  game <- getGame
-  runReaderT body $ game & entitiesL . investigatorsL . ix iid %~ overAttrs f
-
 withActiveInvestigator :: HasGame m => InvestigatorId -> ReaderT Game m a -> m a
 withActiveInvestigator iid body = do
   game <- getGame
   runReaderT body $ game & activeInvestigatorIdL .~ iid
 
 withActiveInvestigatorAdjust
-  :: (HasGame m, Tracing m) => InvestigatorId -> ReaderT Game m a -> m a
+  :: HasGame m => InvestigatorId -> ReaderT Game m a -> m a
 withActiveInvestigatorAdjust iid body = do
   game <- getGame
   game' <-
@@ -288,6 +289,12 @@ getWindowStack = fromMaybe [] . gameWindowStack <$> getGame
 
 getCurrentWindowTick :: HasGame m => m (Maybe Int)
 getCurrentWindowTick = listToMaybe . gameWindowTickStack <$> getGame
+
+{- | The monotonic window clock. Read it to pin a triggering condition's
+initiation tick onto a window built ahead of when it is checked.
+-}
+getWindowTick :: HasGame m => m Int
+getWindowTick = gameWindowTick <$> getGame
 
 getEntryTicks :: HasGame m => m (Map CardId Int)
 getEntryTicks = gameEntryTicks <$> getGame

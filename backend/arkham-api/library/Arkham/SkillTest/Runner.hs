@@ -8,7 +8,6 @@ import Arkham.Ability
 import Arkham.Action qualified as Action
 import Arkham.Calculation
 import Arkham.Card
-import Arkham.ChaosBag.RevealStrategy
 import Arkham.ChaosToken
 import Arkham.ChaosToken.Types
 import Arkham.Classes hiding (matches)
@@ -37,27 +36,26 @@ import Arkham.SkillType
 import Arkham.Source
 import Arkham.Target
 import Arkham.Timing qualified as Timing
-import Arkham.Tracing
 import Arkham.Window (Window (..), mkAfter, mkWhen, mkWindow)
 import Arkham.Window qualified as Window
 import Control.Lens (each)
 import Data.Map.Strict qualified as Map
 
-locationTargetToMaybeCard :: (HasCallStack, HasGame m, Tracing m) => LocationId -> m (Maybe Card)
+locationTargetToMaybeCard :: (HasCallStack, HasGame m) => LocationId -> m (Maybe Card)
 locationTargetToMaybeCard lid = do
   mCard <- targetToMaybeCard (LocationTarget lid)
   case mCard of
     Just card -> pure $ Just card
     Nothing -> fmap toCard <$> maybeLocation lid
 
-skillTestTargetToMaybeCard :: (HasCallStack, HasGame m, Tracing m) => Target -> m (Maybe Card)
+skillTestTargetToMaybeCard :: (HasCallStack, HasGame m) => Target -> m (Maybe Card)
 skillTestTargetToMaybeCard = \case
   LocationTarget lid -> locationTargetToMaybeCard lid
   ProxyTarget t _ -> skillTestTargetToMaybeCard t
   t -> targetToMaybeCard t
 
 skillTestSourceToMaybeCard
-  :: (HasCallStack, HasGame m, Tracing m, Sourceable source) => source -> m (Maybe Card)
+  :: (HasCallStack, HasGame m, Sourceable source) => source -> m (Maybe Card)
 skillTestSourceToMaybeCard (toSource -> source) = case source of
   LocationSource lid -> locationTargetToMaybeCard lid
   AbilitySource src _ -> skillTestSourceToMaybeCard src
@@ -67,7 +65,7 @@ skillTestSourceToMaybeCard (toSource -> source) = case source of
   PaymentSource inner -> skillTestSourceToMaybeCard inner
   s -> sourceToMaybeCard s
 
-totalModifiedSkillValue :: (HasGame m, Tracing m) => SkillTest -> m Int
+totalModifiedSkillValue :: HasGame m => SkillTest -> m Int
 totalModifiedSkillValue s = do
   results <- calculateSkillTestResultsData s
   chaosTokenValues <- totalChaosTokenValues s
@@ -93,9 +91,9 @@ computeCommitCosts iid cards = do
 instance RunMessage SkillTest where
   runMessage msg s@SkillTest {..} = case msg of
     RepeatSkillTest sid skillTestId' | skillTestId' == skillTestId -> do
-      push
-        $ BeginSkillTestWithPreMessages' []
-        $ ( buildSkillTest
+      let
+        repeated =
+          ( buildSkillTest
               sid
               skillTestInvestigator
               skillTestSource
@@ -104,15 +102,37 @@ instance RunMessage SkillTest where
               skillTestBaseValue
               (fromMaybe skillTestDifficulty skillTestOriginalDifficulty)
           )
-          { skillTestAction = skillTestAction
-          }
+            { skillTestAction = skillTestAction
+            , skillTestDifficultyIncrease = skillTestDifficultyIncrease
+            }
+      -- A repeat is not the declaring card's own test, so it is deferred here rather than
+      -- by 'handleSkillTestNesting': the card's tail must not ride along with it, or an
+      -- event that repeats a test (Live and Learn) discards only after the repeat ends.
+      inSkillTestWindow <- fromQueue $ elem EndSkillTestWindow
+      if inSkillTestWindow
+        then do
+          -- the test is performed again, not responded to twice, so the window it was
+          -- declared in is over: drop the re-check 'WindowAsk' queued behind the ask, or a
+          -- second Live and Learn is offered against a test that is already being repeated
+          let
+            endedThisTest w = case windowType w of
+              Window.SkillTestEnded st -> st.id == skillTestId
+              _ -> False
+          removeAllMessagesMatching \case
+            Do (CheckWindows ws) -> any endedThisTest ws
+            _ -> False
+          -- while this test is still current, so 'EffectNextSkillTestWindow' re-points
+          push $ NextSkillTest sid
+          insertAfterMatching [BeginSkillTestWithPreMessages' [] repeated] (== EndSkillTestWindow)
+        else push $ BeginSkillTestWithPreMessages' [] repeated
       pure s
     IncreaseSkillTestDifficulty n -> do
       -- see: faqs/drawing-thin
-      -- This alters the test's *inherent* difficulty, so it must also apply to
-      -- the original difficulty a RepeatSkillTest (Live and Learn) restores.
-      let increase (SkillTestDifficulty d) = SkillTestDifficulty (SumCalculation [d, Fixed n])
-      pure $ s & difficultyL %~ increase & originalDifficultyL %~ fmap increase
+      -- Tracked apart from the difficulty calculation so a SetDifficulty effect
+      -- (Sixth Sense, Unearth the Ancients) replaces the base value without
+      -- swallowing the increase. It is the test's *inherent* difficulty though,
+      -- so a RepeatSkillTest (Live and Learn) carries it over.
+      pure $ s & difficultyIncreaseL +~ n
     ChaosTokenCanceled _ _ token -> do
       let cancelIf t = if t.id == token.id then token {chaosTokenCancelled = True} else t
       pure
@@ -263,21 +283,7 @@ instance RunMessage SkillTest where
                   pushAll
                     $ resolve (RevealChaosToken (toSource s) iid (ChaosToken t chaosTokenFace (Just iid) False False))
         | otherwise -> do
-            let
-              applyRevealStategyModifier (MultiReveal _ b) (ChangeRevealStrategy n) = MultiReveal n b
-              applyRevealStategyModifier _ (ChangeRevealStrategy n) = n
-              applyRevealStategyModifier n RevealAnotherChaosToken = MultiReveal n (Reveal 1)
-              applyRevealStategyModifier n (DrawAdditionalChaosTokens m) =
-                let
-                  go = \case
-                    Reveal x -> RevealAndChoose (x + m) 1
-                    RevealAndChoose x z -> RevealAndChoose (x + m) z
-                    other -> other
-                 in
-                  go n
-              applyRevealStategyModifier n _ = n
-              revealStrategy =
-                foldl' applyRevealStategyModifier (Reveal 1) (modifiers' <> modifiers'')
+            revealStrategy <- getSkillTestRevealStrategy s
             hasRun <- fromQueue (elem (RunSkillTest iid))
             lockCommits <-
               if RevealChaosTokensBeforeCommittingCards `notElem` modifiers''
@@ -304,17 +310,17 @@ instance RunMessage SkillTest where
       withQueue_ $ filter $ \case
         Will FailedSkillTest {} -> False
         Will PassedSkillTest {} -> False
-        CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _] ->
+        CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _ _] ->
           False
-        CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _] ->
+        CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _ _] ->
           False
-        Do (CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _]) ->
+        Do (CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _ _]) ->
           False
-        Do (CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _]) ->
+        Do (CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _ _]) ->
           False
-        CheckWindows [Window Timing.After (Window.SkillTestStep ResolveChaosSymbolEffectsStep) _] ->
+        CheckWindows [Window Timing.After (Window.SkillTestStep ResolveChaosSymbolEffectsStep) _ _] ->
           False
-        Do (CheckWindows [Window Timing.After (Window.SkillTestStep ResolveChaosSymbolEffectsStep) _]) ->
+        Do (CheckWindows [Window Timing.After (Window.SkillTestStep ResolveChaosSymbolEffectsStep) _ _]) ->
           False
         Ask player' (ChooseOne [SkillTestApplyResultsButton])
           | player == player' -> False
@@ -433,6 +439,7 @@ instance RunMessage SkillTest where
             & (resultL .~ SucceededBy Automatic modifiedSkillValue')
             & (originalDifficultyL .~ skillTestOriginalDifficulty)
             & (difficultyL .~ SkillTestDifficulty (Fixed 0))
+            & (difficultyIncreaseL .~ 0)
       results <- calculateSkillTestResultsData s'
       push $ SkillTestResults results
       pure $ s' & stepL .~ DetermineSuccessOrFailureOfSkillTestStep
@@ -443,14 +450,15 @@ instance RunMessage SkillTest where
         _ -> False
       push $ chooseOne player [SkillTestApplyResultsButton]
       -- "You succeed by n, instead" overrides the tested values entirely, so the
-      -- result can't be recalculated from them (FailTies etc. must not apply)
-      mods <- getModifiers (toTarget s)
-      let x = getSum $ mconcat [Sum m | SkillTestResultValueModifier m <- mods]
-      push $ SkillTestResults $ SkillTestResultsData n 0 0 0 (guard (x /= 0) $> x) True
+      -- result can't be recalculated from them (FailTies etc. must not apply).
+      -- The test itself is untouched though: only an *automatic* success has a
+      -- total difficulty of 0, so the real numbers are still reported.
+      results <- calculateRawSkillTestResultsData s
+      push $ SkillTestResults results {skillTestResultsSuccess = True}
       pure
         $ s
         & (resultL .~ SucceededBy NonAutomatic n)
-        & (difficultyL .~ SkillTestDifficulty (Fixed 0))
+        & (resultForcedL .~ True)
     FailSkillTest -> do
       push $ Do FailSkillTest
       when (skillTestStep < SkillTestFastWindow2) $ push CheckAllAdditionalCommitCosts
@@ -577,6 +585,11 @@ instance RunMessage SkillTest where
           -- triggers run *after* the plain/additional-cost commits.
           case triggerCommits of
             [] -> pure ()
+            -- Copies of the same card have the same on-commit effect, so ordering
+            -- them is not a real choice; run them in commit order instead.
+            _
+              | length (nub $ map (toCardCode . snd) triggerCommits) <= 1 ->
+                  pushAll [CommitCard i c | (i, c) <- triggerCommits]
             _ -> do
               player <- getPlayer skillTestInvestigator
               push
@@ -702,7 +715,11 @@ instance RunMessage SkillTest where
               other -> other
             _ -> id
 
-      discardMessages <- forMaybeM discards $ \(iid, discard) -> do
+      discardMessages <- forMaybeM discards $ \(committer, discard) -> do
+        -- A committed card returns to its *owner*, not to whoever committed it. These
+        -- differ when an effect lets you commit another investigator's card (e.g. Guided
+        -- by the Unseen (3), which digs into the performing investigator's deck).
+        let iid = fromMaybe committer discard.owner
         mods <- map resultF <$> getModifiers (toCardId discard)
         let mDevourer = listToMaybe [iid' | SetAfterPlay (DevourThis iid') <- mods]
         pure
@@ -712,9 +729,8 @@ instance RunMessage SkillTest where
             | PlaceOnBottomOfDeckInsteadOfDiscard `elem` mods ->
                 Just (PutCardOnBottomOfDeck iid (Deck.InvestigatorDeck iid) (toCard discard))
             | ReturnToHandAfterTest `elem` mods -> Just $ AddToHand iid [toCard discard]
-            | ShuffleIntoDeckInsteadOfDiscard `elem` mods
-            , Just owner <- discard.owner ->
-                Just $ ShuffleCardsIntoDeck (Deck.InvestigatorDeck owner) [toCard discard]
+            | ShuffleIntoDeckInsteadOfDiscard `elem` mods ->
+                Just $ ShuffleCardsIntoDeck (Deck.InvestigatorDeck iid) [toCard discard]
             | otherwise -> guard (LeaveCardWhereItIs `notElem` mods) $> AddToDiscard iid discard
 
       modifiers' <- getModifiers (toTarget s)
@@ -881,7 +897,6 @@ instance RunMessage SkillTest where
 
       modifiers' <- getModifiers (toTarget s)
       let
-        successTimes = if DoubleSuccess `elem` modifiers' then 2 else 1
         modifiedSkillTestResult =
           foldl' modifySkillTestResult skillTestResult modifiers'
         modifySkillTestResult r (SkillTestResultValueModifier n) = case r of
@@ -897,12 +912,24 @@ instance RunMessage SkillTest where
           let passed target =
                 Priority
                   $ PassedSkillTest skillTestInvestigator skillTestAction skillTestSource target skillTestType n
+          -- ST.7: every result registers itself as an option (chaos token
+          -- effects, committed card riders, and the initiator's own consequence
+          -- via 'OriginalOptionKind'), then we collect. One result resolves
+          -- straight away; several let the investigator pick the order.
+          --
+          -- The collect must come last so initiators still get to register --
+          -- see the Fight/Evade handlers in "Arkham.Enemy.Runner". Mirrors the
+          -- failure branch below.
+          --
+          -- Results are DETERMINED once and RESOLVED N times (Double or Nothing
+          -- makes N 2, see 'getSkillTestResolveTimes' at the collect). Repeating
+          -- the determination instead would let riders such as Vicious Blow push
+          -- their 'DamageDealt' modifier once per repeat and stack it, whereas
+          -- the FAQ says to first determine the results of the successful test
+          -- (bonus damage included) and only then resolve those effects twice.
           pushAll
-            $ cycleN
-              successTimes
-              ( [passed target | target <- skillTestSubscribers <> tokenSubscribers]
-                  <> [passed (SkillTestInitiatorTarget skillTestTarget)]
-              )
+            $ [passed target | target <- skillTestSubscribers <> tokenSubscribers]
+            <> [passed (SkillTestInitiatorTarget skillTestTarget), CollectSkillTestOptions]
         FailedBy _ n -> do
           investigatorsToResolveFailure <-
             (`notNullOr` [skillTestInvestigator])
@@ -960,9 +987,13 @@ instance RunMessage SkillTest where
             <> [After $ passed target | target <- skillTestSubscribers <> tokenSubscribers]
             <> [After $ passed (SkillTestInitiatorTarget skillTestTarget)]
         FailedBy _ n -> do
-          hauntedAbilities <- case (skillTestTarget, skillTestAction) of
-            (LocationTarget lid, Just Action.Investigate) -> select $ HauntedAbility <> AbilityOnLocation (LocationWithId lid)
-            _ -> pure []
+          -- Deferred so the ask is built after the `When` windows below, where a
+          -- card like Neither Rain nor Snow can still cancel it.
+          mHauntedLocation <- case (skillTestTarget, skillTestAction) of
+            (LocationTarget lid, Just Action.Investigate) -> do
+              hasHaunted <- selectAny $ HauntedAbility <> AbilityOnLocation (LocationWithId lid)
+              pure $ guard hasHaunted $> lid
+            _ -> pure Nothing
 
           investigatorsToResolveFailure <-
             (`notNullOr` [skillTestInvestigator])
@@ -970,33 +1001,36 @@ instance RunMessage SkillTest where
 
           let needsChoice = skillTestResolveFailureInvestigator `notElem` investigatorsToResolveFailure
           let
-            handleChoice resolver player =
+            handleChoice resolver =
               let failed target = FailedSkillTest resolver skillTestAction skillTestSource target skillTestType n
                in [When (failed (Initiator skillTestTarget))]
                     <> [When (failed target) | target <- skillTestSubscribers <> tokenSubscribers]
-                    <> [ chooseOneAtATime player [AbilityLabel resolver ab [] [] [] | ab <- hauntedAbilities]
-                       | notNull hauntedAbilities
-                       ]
+                    <> [ResolveHauntedAbilities resolver lid | lid <- toList mHauntedLocation]
                     <> [After $ failed target | target <- skillTestSubscribers <> tokenSubscribers]
                     <> [After $ failed (SkillTestInitiatorTarget skillTestTarget)]
 
           if needsChoice
             then do
-              resolversWithPlayers <- traverse (traverseToSnd getPlayer) investigatorsToResolveFailure
               lead <- getLeadPlayer
 
               push
                 $ chooseOrRunOne
                   lead
-                  [ targetLabel resolver
-                      $ SetSkillTestResolveFailureInvestigator resolver
-                      : handleChoice resolver player
-                  | (resolver, player) <- resolversWithPlayers
+                  [ targetLabel resolver $ SetSkillTestResolveFailureInvestigator resolver : handleChoice resolver
+                  | resolver <- investigatorsToResolveFailure
                   ]
-            else do
-              player <- getPlayer skillTestResolveFailureInvestigator
-              pushAll $ handleChoice skillTestResolveFailureInvestigator player
+            else pushAll $ handleChoice skillTestResolveFailureInvestigator
         Unrun -> pure ()
+      pure s
+    ResolveHauntedAbilities iid lid -> do
+      modifiers' <- getModifiers (toTarget s)
+      targetMods <- getModifiers skillTestTarget
+      let cancelled = CancelEffects `elem` modifiers' && EffectsCannotBeCanceled `notElem` targetMods
+      unless cancelled do
+        hauntedAbilities <- select $ HauntedAbility <> AbilityOnLocation (LocationWithId lid)
+        unless (null hauntedAbilities) do
+          player <- getPlayer iid
+          push $ chooseOneAtATime player [AbilityLabel iid ab [] [] [] | ab <- hauntedAbilities]
       pure s
     AddSubscriber t -> pure $ s & subscribersL <>~ [t]
     RerunSkillTest -> case skillTestResult of
@@ -1006,13 +1040,13 @@ instance RunMessage SkillTest where
         withQueue_ $ filter $ \case
           Will FailedSkillTest {} -> False
           Will PassedSkillTest {} -> False
-          CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _] ->
+          CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _ _] ->
             False
-          CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _] ->
+          CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _ _] ->
             False
-          Do (CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _]) ->
+          Do (CheckWindows [Window Timing.When (Window.WouldFailSkillTest _ _) _ _]) ->
             False
-          Do (CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _]) ->
+          Do (CheckWindows [Window Timing.When (Window.WouldPassSkillTest _ _) _ _]) ->
             False
           Ask player' (ChooseOne [SkillTestApplyResultsButton])
             | player == player' -> False
@@ -1021,6 +1055,9 @@ instance RunMessage SkillTest where
         unless hasRun $ push $ RunSkillTest skillTestInvestigator
         pure s
     RecalculateSkillTestResults -> runMessage (RecalculateSkillTestResultsCanChangeAutomatic False) s
+    -- A forced "you succeed by n instead" is not derived from the tested
+    -- values, so there is nothing to recalculate it from.
+    RecalculateSkillTestResultsCanChangeAutomatic _ | skillTestResultForced -> pure s
     RecalculateSkillTestResultsCanChangeAutomatic canChange -> do
       let
         isAutomatic =

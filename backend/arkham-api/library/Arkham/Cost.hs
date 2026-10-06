@@ -7,6 +7,7 @@ import Arkham.Zone as X
 
 import Arkham.Asset.Uses
 import Arkham.Calculation
+import Arkham.CampaignLogKey (CampaignLogKey)
 import Arkham.Campaigns.TheForgottenAge.Supply
 import {-# SOURCE #-} Arkham.Card
 import Arkham.ChaosToken.Types (ChaosToken, ChaosTokenFace)
@@ -17,9 +18,11 @@ import Arkham.Customization
 import {-# SOURCE #-} Arkham.Enemy.Types (Enemy)
 import Arkham.Field
 import Arkham.GameValue
+import Arkham.I18n (cardNameVar, countVar, labelKey, withI18n)
 import Arkham.Id
 import Arkham.Key
 import Arkham.Matcher
+import Arkham.Name (Named)
 import Arkham.Prelude
 import Arkham.Scenario.Deck
 import Arkham.ScenarioLogKey
@@ -27,6 +30,7 @@ import Arkham.SkillType
 import Arkham.Source
 import Arkham.Strategy
 import Arkham.Target
+import Arkham.Trait (Trait)
 import Control.Lens (Plated (..), Prism', cosmos, prism', sumOf, toListOf, _2)
 import Data.Aeson.TH
 import Data.Data.Lens (uniplate)
@@ -60,6 +64,7 @@ data Payment
   | AdditionalActionPayment
   | ChosenEnemyPayment EnemyId
   | ChosenCardPayment CardId
+  | ChosenTraitPayment Trait
   | CluePayment InvestigatorId Int
   | DoomPayment Int
   | ResourcePayment Int
@@ -81,11 +86,13 @@ data Payment
   | SealChaosTokenPayment ChaosToken
   | ReleaseChaosTokenPayment ChaosToken
   | ReturnChaosTokenToPoolPayment ChaosToken
+  | ReturnChaosTokensToPoolPayment [ChaosToken]
   | ReturnToHandPayment Card
   | NoPayment
   | SupplyPayment Supply
   | AddCurseTokenPayment Int
   | AddFrostTokenPayment Int
+  | AddTokenPayment Int ChaosTokenFace
   deriving stock (Show, Eq, Ord, Data)
 
 instance Plated Payment where
@@ -109,9 +116,18 @@ data Cost
   | GroupDiscardCost GameValue ExtendedCardMatcher LocationMatcher
   | GroupSkillIconCost Int (Set SkillIcon) LocationMatcher
   | GroupClueCost GameValue LocationMatcher
+  | -- | A group clue cost whose size is computed (e.g. reduced by campaign-log entries)
+    CalculatedGroupClueCost GameCalculation LocationMatcher
   | SameLocationGroupClueCost GameValue LocationMatcher
   | GroupClueCostRange (Int, Int) LocationMatcher
   | PlaceClueOnLocationCost GameValue
+  | {- | As 'PlaceClueOnLocationCost', but the clues come from (and are placed at
+    the location of) the matched investigator rather than the one paying.
+    Write 'ThatInvestigator' to charge the investigator in the window that
+    triggered the ability (e.g. "when an investigator at your location would
+    discover clues, place 1 of their clues on that location instead").
+    -}
+    InvestigatorPlaceClueOnLocationCost InvestigatorMatcher GameValue
   | ExhaustCost Target
   | ShuffleTopOfScenarioDeckIntoYourDeck Int ScenarioDeckKey
   | ChooseEnemyCost EnemyMatcher
@@ -119,7 +135,19 @@ data Cost
   | ChooseEnemyCostAndMaybeGroupFieldClueCost LocationMatcher EnemyMatcher (Field Enemy (Maybe Int))
   | ChosenEnemyCost EnemyId
   | ChooseExtendedCardCost ExtendedCardMatcher
+  | {- | "Reveal a card from your hand": choose a card the matcher accepts and
+    reveal it, paying it as the card chosen.
+
+    Neither half of that is 'RevealCost' or 'ChooseExtendedCardCost' on its own.
+    'RevealCost' reveals a card already named, so it cannot express a reveal the
+    player chooses; 'ChooseExtendedCardCost' chooses without revealing, and
+    revealing is not a formality -- a revealed card is public, and it is what
+    'CannotRevealCards' forbids, so this is unaffordable to an investigator who
+    cannot reveal.
+    -}
+    RevealChosenCardCost ExtendedCardMatcher
   | ChosenCardCost CardId
+  | ChosenTraitCost Trait -- internal to track the chosen trait
   | DiscardAssetCost AssetMatcher
   | ExhaustAssetCost AssetMatcher
   | ExhaustXAssetCost AssetMatcher
@@ -143,6 +171,10 @@ data Cost
   | DiscardHandCost
   | DoomCost Source Target Int
   | EnemyDoomCost Int EnemyMatcher
+  | {- | "Place N doom on a card you control." Unlike 'DoomCost', which names its
+    target up front, the payer picks which matching asset takes the doom.
+    -}
+    AssetDoomCost Int AssetMatcher
   | EnemyAttackCost EnemyId
   | RemoveEnemyDamageCost GameValue EnemyMatcher
   | ExileCost Target
@@ -157,6 +189,11 @@ data Cost
   | SameSkillIconCost Int
   | SameSkillIconCostMatching Int ExtendedCardMatcher
   | DiscardCombinedCost Int
+  | {- | 'DiscardCombinedCost' where the total is worked out when the cost is
+    paid rather than written in advance -- "cards with a combined value equal to
+    or greater than your resources".
+    -}
+    CalculatedDiscardCombinedCost GameCalculation
   | ShuffleDiscardCost Int CardMatcher
   | Free
   | ScenarioResourceCost Int
@@ -176,14 +213,38 @@ data Cost
   | CostWhenTreacheryElse TreacheryMatcher Cost Cost
   | CostOnlyWhen Criterion Cost
   | CostIfEnemy EnemyMatcher Cost Cost
+  | CostIfLocation LocationMatcher Cost Cost
   | CostIfCustomization Customization Cost Cost
   | CostIfRemembered ScenarioLogKey Cost Cost
   | UpTo GameCalculation Cost
   | AtLeastOne GameCalculation Cost
   | SealCost ChaosTokenMatcher
   | SealMultiCost Int ChaosTokenMatcher
+  | {- | "Search the chaos bag for a matching token and seal it on your
+    investigator card." Unlike 'SealCost', which leaves the sealed token for the
+    played card to claim, this attaches it to the paying investigator, so it
+    works for costs paid outside of playing a card (movement, ability tolls).
+    -}
+    SealOnInvestigatorCost ChaosTokenMatcher
+  | SealChaosTokenOnInvestigatorCost ChaosToken -- internal to track sealed token
+  | {- | "Reveal N random chaos tokens." The revealed tokens are delivered to the
+    'Source' as 'RequestedChaosTokens', so the card that contributed the cost
+    decides what they mean; additional costs are contributed by a card other than
+    the one acting, so the active cost's own source would route them elsewhere.
+    -}
+    RevealChaosTokensCost Source Int
+  | {- | "Search the encounter deck (and discard pile) for a matching card." The
+    found card is delivered to the 'Target' as 'FoundEncounterCard', so the card
+    that contributed the cost decides what happens to it.
+    -}
+    FindEncounterCardCost Target [ScenarioZone] CardMatcher
   | AddFrostTokenCost Int
   | AddCurseTokenCost Int
+  | {- | Add N chaos tokens of this face to the chaos bag. Faces drawn from a
+    limited pool (bless\/curse\/frost\/blood, and any homebrew face with a
+    'tokenPool') can only be paid while that pool still has enough tokens.
+    -}
+    AddTokenCost Int ChaosTokenFace
   | AddCurseTokensCost Int Int
   | AddCurseTokensEqualToShroudCost
   | AddCurseTokensEqualToSkillTestDifficulty
@@ -191,7 +252,8 @@ data Cost
   | ReleaseChaosTokensCost Int ChaosTokenMatcher
   | SealChaosTokenCost ChaosToken -- internal to track sealed token
   | ReturnChaosTokensToPoolCost Int ChaosTokenMatcher
-  | ReturnChaosTokenToPoolCost ChaosToken
+  | ReturnChaosTokenToPoolCost ChaosToken -- internal to track a chosen token
+  | ReturnChosenChaosTokensToPoolCost -- internal, returns the chosen tokens as one batch
   | SupplyCost LocationMatcher Supply
   | ResolveEachHauntedAbility LocationId -- the circle undone, see TrappedSpirits
   | ShuffleBondedCost Int CardCode
@@ -202,9 +264,28 @@ data Cost
   | AsIfAtLocationCost LocationId Cost
   | NonBlankedCost Cost
   | DrawEncounterCardsCost Int
+  | {- | Discard from the top of the encounter deck until a matching card is
+    discarded, then draw it (Dark Matter's All-Seeing Eye taxes each scan).
+    The 'Source' is what the resulting 'RequestedEncounterCard' is addressed to:
+    additional costs are contributed by a card other than the one performing the
+    action, so the active cost's own source would route the answer to the wrong
+    card.
+    -}
+    DiscardEncounterUntilFirstCost Source ExtendedCardMatcher
+  | {- | Cross out tally marks from one of the paying investigator's own
+    campaign-log counts (Dark Matter's "Memories"). The handler clamps the count
+    at zero, so the affordability check is what keeps the cost honest.
+    -}
+    CrossOffRecordCost CampaignLogKey Int
   | GloriaCost -- lol, not going to attempt to make this generic
   | ArchiveOfConduitsUnidentifiedCost -- this either
   | LabeledCost Text Cost
+  | {- | Carries the card that contributed this cost. An active cost is sourced to the
+    card being paid for, so a rider handed to it from elsewhere -- a location charging
+    you to leave it -- would otherwise be attributed to the wrong card. Payment is
+    sourced to the contributor instead, and its questions highlight it on the board.
+    -}
+    SourcedCost Source Cost
   | FlipScarletKeyCost
   | -- We do the costs that can kill the investigator last so we don't trigger discards before the cost is paid
     DirectHorrorCost Source InvestigatorMatcher Int
@@ -218,6 +299,24 @@ data Cost
   | ConcealedXCost
   | XCost Cost
   | OneOfDistanceCost LocationMatcher Cost
+  | {- | "…and choose one of its Traits": one of the traits of the card chosen
+    earlier in this same cost.
+
+    Sub-costs of a 'Costs' are paid in order, each seeing what the ones before it
+    paid, which is the only way to say "its" -- the trait depends on a card the
+    player has not picked yet when the cost is written.
+
+    Declared last because that /is/ the mechanism. Combining costs sorts them
+    ('Semigroup Cost', and every ability's cost is at least @ActionCost 0 <>@ its
+    own), so the order written down is thrown away and this derived 'Ord' is what
+    decides what is paid when. Last means after anything that could have chosen a
+    card -- including an 'OrCost' of two ways to choose one.
+
+    Affordability cannot be checked: which card it will be is unknown until the
+    earlier cost is paid. So the cost that chooses the card is the one that has to
+    require the card to have a trait at all ('CardWithAnyTrait').
+    -}
+    ChooseTraitOfChosenCardCost
   deriving stock (Show, Eq, Ord, Data)
 
 instance Plated Cost
@@ -230,6 +329,20 @@ assetUseCost a uType n = UseCost (AssetWithId $ toId a) uType n
 
 dynamicAssetUseCost :: (Entity a, EntityId a ~ AssetId) => a -> UseType -> GameCalculation -> Cost
 dynamicAssetUseCost a uType c = DynamicUseCost (AssetWithId $ toId a) uType (DynamicCalculation c)
+
+{- | "Spend N resources", payable from your own pool or from this asset's own
+resource uses. Both branches are labeled: an unlabeled 'OrCost' renders them as
+"N Resources" and "Spend N Resources", which never says which one takes the
+card's own stock (#5730).
+-}
+resourceOrUseCost :: (Entity a, EntityId a ~ AssetId, HasCardCode a, Named a) => a -> Int -> Cost
+resourceOrUseCost a n =
+  OrCost
+    [ LabeledCost (withI18n $ countVar n $ "$" <> labelKey "cost.resourceFromPool") (ResourceCost n)
+    , LabeledCost
+        (withI18n $ countVar n $ cardNameVar a $ "$" <> labelKey "cost.resourceFromCard")
+        (assetUseCost a #resource n)
+    ]
 
 exhaust :: Targetable a => a -> Cost
 exhaust = ExhaustCost . toTarget
@@ -335,6 +448,11 @@ instance FromJSON Cost where
 totalActionCost :: Cost -> Int
 totalActionCost = sumOf (cosmos . _ActionCost)
 
+totalActionPayment :: Payment -> Int
+totalActionPayment payment =
+  sumOf (cosmos . _ActionPayment) payment
+    + length (toListOf (cosmos . _AdditionalActionPayment) payment)
+
 totalResourcePayment :: Payment -> Int
 totalResourcePayment = sumOf (cosmos . _ResourcePayment)
 
@@ -378,6 +496,9 @@ chosenEnemyPayment = listToMaybe . toListOf (cosmos . _ChosenEnemyPayment)
 
 chosenCardPayment :: Payment -> Maybe CardId
 chosenCardPayment = listToMaybe . toListOf (cosmos . _ChosenCardPayment)
+
+chosenTraitPayment :: Payment -> Maybe Trait
+chosenTraitPayment = listToMaybe . toListOf (cosmos . _ChosenTraitPayment)
 
 addedCurseTokenPayment :: Payment -> Int
 addedCurseTokenPayment = sum . toListOf (cosmos . _AddCurseTokenPayment)

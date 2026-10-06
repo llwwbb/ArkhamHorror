@@ -15,11 +15,12 @@ medicalStudent :: AssetCard MedicalStudent
 medicalStudent = ally MedicalStudent Cards.medicalStudent (1, 1)
 
 healableAsset :: Sourceable source => source -> DamageType -> LocationMatcher -> AssetMatcher
-healableAsset (toSource -> source) hType loc = HealableAsset source hType $ at_ loc <> AssetControlledBy (affectsOthers Anyone)
+healableAsset (toSource -> source) hType loc =
+  HealableAsset source hType $ #ally <> at_ loc <> AssetControlledBy (affectsOthers Anyone)
 
 instance HasAbilities MedicalStudent where
   getAbilities (MedicalStudent x) =
-    [controlled x 1 criteria $ freeReaction (AssetEntersPlay #when (be x))]
+    [controlled x 1 criteria $ freeReaction (AssetEntersPlay #after (be x))]
    where
     healable hType = HealableInvestigator (toSource x) hType $ at_ YourLocation
     criteria =

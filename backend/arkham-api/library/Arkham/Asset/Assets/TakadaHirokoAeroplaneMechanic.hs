@@ -26,7 +26,7 @@ instance RunMessage TakadaHirokoAeroplaneMechanic where
   runMessage msg a@(TakadaHirokoAeroplaneMechanic attrs) = runQueueT $ case msg of
     UseThisAbility iid (isSource attrs -> True) 1 -> do
       campaignI18n
-        $ chooseAmount'
+        $ chooseAmount
           iid
           "takadaHirokoAeroplaneMechanic.resourcesToTake"
           "$resources"

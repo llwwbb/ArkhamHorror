@@ -142,6 +142,7 @@ zeal =
       , cdKeywords = singleton (Keyword.Bonded 1 "06030")
       , cdUnique = True
       , cdLevel = Nothing
+      , cdTags = ["cat"]
       }
 
 augur :: CardDef
@@ -279,6 +280,7 @@ versatile2 =
     $ (asset "06167" "Versatile" 0 Neutral)
       { cdCardTraits = singleton Talent
       , cdLevel = Just 2
+      , cdTags = [noGameplayEffectTag]
       }
 
 theSilverKey :: CardDef
@@ -494,6 +496,7 @@ summonedHound1 =
     , cdAdditionalCost = Just (ShuffleBondedCost 1 "06283")
     , cdLevel = Just 1
     , cdBondedWith = [(1, "06283")]
+    , cdTags = ["dog"]
     }
 
 theBlackCat5 :: CardDef

@@ -11,7 +11,7 @@ import Arkham.I18n
 import Arkham.Matcher hiding (InvestigatorEliminated)
 import Arkham.Message.Lifted.Choose
 import Arkham.Message.Lifted.Placement
-import Arkham.Scenarios.HorrorInHighGear.Helpers (scenarioI18n)
+import Arkham.Scenarios.TheInnsmouthConspiracy.HorrorInHighGear.Helpers (scenarioI18n)
 import Arkham.Trait (Trait (Road))
 import Arkham.Window qualified as Window
 
@@ -54,8 +54,8 @@ instance RunMessage ThomasDawsonsCarRunning where
       attrs' <- liftRunMessage msg attrs
       passengers <- select $ InVehicleMatching (be attrs)
       for_ (headMay passengers) \p -> do
-        chooseOrRunOneM p $ withI18n do
-          nameVar attrs.name $ questionLabeled' "chooseNewDriverFor"
+        chooseOrRunOneM p do
+          withI18n $ nameVar attrs.name $ questionLabeled "chooseNewDriver"
           targets passengers $ push . SetDriver attrs.id
       pure . ThomasDawsonsCarRunning $ attrs' & driverL .~ Nothing
     Flip _ _ (isTarget attrs -> True) -> do

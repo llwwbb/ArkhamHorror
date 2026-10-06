@@ -1,6 +1,6 @@
 module Arkham.Helpers.SkillTest (module X, module Arkham.Helpers.SkillTest) where
 
-import {-# SOURCE #-} Arkham.GameEnv as X (getSkillTest, getSkillTestId)
+import Arkham.GameEnv as X (getSkillTest, getSkillTestId, getsSkillTest)
 import Arkham.Helpers.SkillTest.Target as X
 
 import Arkham.Ability
@@ -9,6 +9,8 @@ import Arkham.Action qualified as Action
 import Arkham.Asset.Types qualified as Field
 import Arkham.Calculation
 import Arkham.Card
+import Arkham.ChaosBag.Base (chaosBagChaosTokens)
+import Arkham.ChaosBag.RevealStrategy
 import Arkham.ChaosToken
 import Arkham.ClassSymbol
 import Arkham.Classes.HasChaosTokenValue
@@ -19,7 +21,7 @@ import Arkham.Classes.Query qualified as Query
 import Arkham.CommitRestriction
 import Arkham.Constants
 import Arkham.Enemy.Types (Field (..))
-import {-# SOURCE #-} Arkham.GameEnv
+import Arkham.GameEnv
 import Arkham.Helpers.Action
 import Arkham.Helpers.Calculation
 import Arkham.Helpers.Card
@@ -29,6 +31,7 @@ import Arkham.Helpers.GameValue
 import Arkham.Helpers.Investigator hiding (investigator)
 import Arkham.Helpers.Modifiers
 import Arkham.Helpers.Ref (sourceToCard)
+import Arkham.Helpers.Scenario (scenarioFieldMaybe)
 import Arkham.Helpers.Source
 import Arkham.Helpers.Target
 import Arkham.Id
@@ -46,9 +49,11 @@ import Arkham.Message (
   pattern SkillTestEnds,
  )
 import Arkham.Modifier
+import Arkham.ModifierData (ChaosTokenValueEntry (..), SkillTestValueBreakdown (..))
 import Arkham.Name
 import Arkham.Prelude
 import Arkham.Projection
+import Arkham.Scenario.Types (Field (ScenarioChaosBag))
 import Arkham.SkillTest.Base
 import Arkham.SkillTest.Type
 import Arkham.SkillTestResult
@@ -56,7 +61,6 @@ import Arkham.SkillType
 import Arkham.Source
 import Arkham.Stats
 import Arkham.Target
-import Arkham.Tracing
 import Arkham.Treachery.Types (Field (..))
 import Arkham.Window (Window (..))
 import Arkham.Window qualified as Window
@@ -66,18 +70,18 @@ import Data.Map.Monoidal.Strict (MonoidalMap (..))
 import Data.Map.Strict qualified as Map
 
 getBaseValueDifferenceForSkillTest
-  :: (HasGame m, Tracing m) => InvestigatorId -> SkillTest -> m Int
+  :: HasGame m => InvestigatorId -> SkillTest -> m Int
 getBaseValueDifferenceForSkillTest iid st = do
   base <- getBaseValueForSkillTest iid st
   difficulty <- getModifiedSkillTestDifficulty st
   pure $ difficulty - base
 
 getBaseValueForSkillTest
-  :: (HasGame m, Tracing m) => InvestigatorId -> SkillTest -> m Int
+  :: HasGame m => InvestigatorId -> SkillTest -> m Int
 getBaseValueForSkillTest iid st = getBaseValueForSkillTestType iid st.action st.kind
 
 getBaseValueForSkillTestType
-  :: (HasGame m, Tracing m) => InvestigatorId -> Maybe Action -> SkillTestType -> m Int
+  :: HasGame m => InvestigatorId -> Maybe Action -> SkillTestType -> m Int
 getBaseValueForSkillTestType iid mAction = \case
   SkillSkillTest skillType -> baseSkillValueFor skillType mAction iid
   AndSkillTest types -> sum <$> traverse (\skillType -> baseSkillValueFor skillType mAction iid) types
@@ -127,12 +131,9 @@ getSkillTestAbilitySource = runMaybeT do
 
 isSkillTestSource :: (HasGame m, Sourceable source) => source -> m Bool
 isSkillTestSource source = maybe False (isSource source) <$> getSkillTestSource
-getSkillTestBaseSkillForSkillTest :: (HasGame m, Tracing m) => InvestigatorId -> SkillTest -> m Int
+getSkillTestBaseSkillForSkillTest :: HasGame m => InvestigatorId -> SkillTest -> m Int
 getSkillTestBaseSkillForSkillTest iid sTest =
   getBaseValueForSkillTestType iid (skillTestAction sTest) (skillTestType sTest)
-
-getsSkillTest :: HasGame m => (SkillTest -> a) -> m (Maybe a)
-getsSkillTest f = fmap f <$> getSkillTest
 
 getSkillTestAction :: HasGame m => m (Maybe Action)
 getSkillTestAction = join <$> getsSkillTest skillTestAction
@@ -172,24 +173,24 @@ isBasicInvestigation = runValidT do
   AbilitySource (LocationSource _) AbilityInvestigate <- MaybeT getSkillTestAbilitySource
   pure ()
 
-isInvestigationOf :: (HasGame m, Tracing m) => LocationMatcher -> m Bool
+isInvestigationOf :: HasGame m => LocationMatcher -> m Bool
 isInvestigationOf matcher = runValidT do
   Action.Investigate <- MaybeT getSkillTestAction
   lid <- MaybeT getSkillTestTargetedLocation
   liftGuardM $ lid <=~> matcher
 
-isSkillTestAt :: (HasGame m, Tracing m, ToId location LocationId) => location -> m Bool
+isSkillTestAt :: (HasGame m, ToId location LocationId) => location -> m Bool
 isSkillTestAt location = runValidT do
   iid <- MaybeT getSkillTestInvestigator
   liftGuardM $ asId location <=~> locationWithInvestigator iid
 
-isFightWith :: (HasGame m, Tracing m) => EnemyMatcher -> m Bool
+isFightWith :: HasGame m => EnemyMatcher -> m Bool
 isFightWith matcher = runValidT do
   Action.Fight <- MaybeT getSkillTestAction
   eid <- hoistMaybe . (.enemy) =<< MaybeT getSkillTestTarget
   liftGuardM $ eid <=~> matcher
 
-isEvadeWith :: (HasGame m, Tracing m) => EnemyMatcher -> m Bool
+isEvadeWith :: HasGame m => EnemyMatcher -> m Bool
 isEvadeWith matcher = runValidT do
   Action.Evade <- MaybeT getSkillTestAction
   eid <- hoistMaybe . (.enemy) =<< MaybeT getSkillTestTarget
@@ -207,7 +208,7 @@ isFighting enemy = runValidT do
   eid <- hoistMaybe . (.enemy) =<< MaybeT getSkillTestTarget
   guard $ asId enemy == eid
 
-isParley :: (HasGame m, Tracing m) => m Bool
+isParley :: HasGame m => m Bool
 isParley =
   orM
     [ (== Just #parley) <$> getSkillTestAction
@@ -321,7 +322,7 @@ investigate sid iid (toSource -> source) (toTarget -> target) sType n =
       }
 
 -- NOTE: 100 and 102 are the range for the basic abilities
-getIsScenarioAbility :: (HasGame m, Tracing m) => m Bool
+getIsScenarioAbility :: HasGame m => m Bool
 getIsScenarioAbility = do
   source <- fromJustNote "damage outside skill test" <$> getSkillTestSource
   go source
@@ -371,11 +372,12 @@ inAttackSkillTest = (== Just #fight) <$> getSkillTestAction
 inEvasionSkillTest :: HasGame m => m Bool
 inEvasionSkillTest = (== Just #evade) <$> getSkillTestAction
 
--- | The 'skillTestResult' stored on the skill test does not include
--- 'SkillTestResultValueModifier' effects; those are only folded in when the
--- Pass/Fail messages are emitted (see 'Arkham.SkillTest.Runner'). Cards that
--- inspect the succeeded/failed-by margin during the resolution window need this
--- modifier-adjusted value instead of the raw field.
+{- | The 'skillTestResult' stored on the skill test does not include
+'SkillTestResultValueModifier' effects; those are only folded in when the
+Pass/Fail messages are emitted (see 'Arkham.SkillTest.Runner'). Cards that
+inspect the succeeded/failed-by margin during the resolution window need this
+modifier-adjusted value instead of the raw field.
+-}
 getSkillTestResultWithResultModifiers :: HasGame m => m (Maybe SkillTestResult)
 getSkillTestResultWithResultModifiers = runMaybeT do
   st <- MaybeT getSkillTest
@@ -388,7 +390,20 @@ getSkillTestResultWithResultModifiers = runMaybeT do
     apply r _ = r
   pure $ foldl' apply (skillTestResult st) modifiers'
 
-getIsPerilous :: (HasGame m, Tracing m) => SkillTest -> m Bool
+{- | How many times the ST.7 results of the current skill test are resolved.
+Double or Nothing (02026) grants 'DoubleSuccess', which resolves the determined
+results twice; the determination itself (riders registering their options and
+their bonus damage/clue modifiers) still happens exactly once.
+-}
+getSkillTestResolveTimes :: HasGame m => m Int
+getSkillTestResolveTimes =
+  getSkillTest >>= \case
+    Just st | SucceededBy {} <- skillTestResult st -> do
+      modifiers' <- getModifiers (SkillTestTarget st.id)
+      pure $ if DoubleSuccess `elem` modifiers' then 2 else 1
+    _ -> pure 1
+
+getIsPerilous :: HasGame m => SkillTest -> m Bool
 getIsPerilous skillTest = case skillTestSource skillTest of
   TreacherySource tid -> do
     keywords <- fromMaybe mempty <$> fieldMay TreacheryKeywords tid
@@ -398,36 +413,42 @@ getIsPerilous skillTest = case skillTestSource skillTest of
     pure $ Peril `elem` keywords
   _ -> pure False
 
+-- | Net contribution of committed icons, negated under @SkillIconsSubtract@.
+signedSkillIconCount :: HasGame m => SkillTest -> m Int
+signedSkillIconCount st = do
+  modifiers' <- getModifiers (SkillTestTarget st.id)
+  if any (`elem` modifiers') [CancelSkills, CancelEachCommittedCard]
+    then pure 0
+    else do
+      iconCount <- skillIconCount st
+      subtractIconCount <- subtractSkillIconCount st
+      let sign = if SkillIconsSubtract `elem` modifiers' then negate . abs else id
+      pure $ sign iconCount - subtractIconCount
+
 -- should likely only be used by `calculateSkillTestResultsData`
-getSkillTestModifiedSkillValue :: (HasGame m, Tracing m) => m Int
+getSkillTestModifiedSkillValue :: HasGame m => m Int
 getSkillTestModifiedSkillValue = do
   st <- getJustSkillTest
-  modifiers' <- getModifiers (SkillTestTarget st.id)
-  let cancelSkills = any (`elem` modifiers') [CancelSkills, CancelEachCommittedCard]
   currentSkillValue <- getCurrentSkillValue st
-  iconCount <- if cancelSkills then pure 0 else skillIconCount st
-  subtractIconCount <- if cancelSkills then pure 0 else subtractSkillIconCount st
-  pure $ max 0 (currentSkillValue + iconCount - subtractIconCount)
+  iconValue <- signedSkillIconCount st
+  pure $ max 0 (currentSkillValue + iconValue)
 
-getModifiedSkillValue :: (HasGame m, Tracing m) => m Int
+getModifiedSkillValue :: HasGame m => m Int
 getModifiedSkillValue = do
   st <- getJustSkillTest
-  modifiers' <- getModifiers (SkillTestTarget st.id)
-  let cancelSkills = any (`elem` modifiers') [CancelSkills, CancelEachCommittedCard]
   currentSkillValue <- getCurrentSkillValue st
-  iconCount <- if cancelSkills then pure 0 else skillIconCount st
-  subtractIconCount <- if cancelSkills then pure 0 else subtractSkillIconCount st
+  iconValue <- signedSkillIconCount st
   chaosTokenValues <- totalChaosTokenValues st
-  pure $ max 0 (currentSkillValue + iconCount - subtractIconCount + chaosTokenValues)
+  pure $ max 0 (currentSkillValue + iconValue + chaosTokenValues)
 
-getSkillTestDifficulty :: (HasCallStack, HasGame m, Tracing m) => m (Maybe Int)
+getSkillTestDifficulty :: (HasCallStack, HasGame m) => m (Maybe Int)
 getSkillTestDifficulty = do
   mSkillTest <- getSkillTest
   case mSkillTest of
     Nothing -> pure Nothing
     Just st -> Just <$> getModifiedSkillTestDifficulty st
 
-getTotalModifiedSkillValue :: (HasGame m, Tracing m) => m Int
+getTotalModifiedSkillValue :: HasGame m => m Int
 getTotalModifiedSkillValue = do
   s <- getJustSkillTest
   results <- calculateSkillTestResultsData s
@@ -438,19 +459,39 @@ getTotalModifiedSkillValue = do
       0
       (skillTestResultsSkillValue results + chaosTokenValues + skillTestResultsIconValue results)
 
-totalChaosTokenValues :: (HasGame m, Tracing m) => SkillTest -> m Int
+totalChaosTokenValues :: HasGame m => SkillTest -> m Int
 totalChaosTokenValues s = do
   x <- sum <$> for (skillTestSetAsideChaosTokens s) (getModifiedChaosTokenValue s)
   y <- getAdditionalChaosTokenValues s
   pure $ x + y
 
-calculateSkillTestResultsData :: (HasGame m, Tracing m) => SkillTest -> m SkillTestResultsData
+calculateSkillTestResultsData :: HasGame m => SkillTest -> m SkillTestResultsData
 calculateSkillTestResultsData s = do
   modifiers' <- getModifiers (SkillTestTarget s.id)
+  results <- calculateRawSkillTestResultsData s
+  let
+    modifiedSkillValue' =
+      max
+        0
+        ( skillTestResultsSkillValue results
+            + skillTestResultsChaosTokensValue results
+            + skillTestResultsIconValue results
+        )
+    succeedByAmount = modifiedSkillValue' - skillTestResultsDifficulty results
+    autoFailThresholds = [t | AutomaticallyFailIfSucceedByAtLeast t <- modifiers']
+  if any (succeedByAmount >=) autoFailThresholds
+    then autoFailSkillTestResultsData s
+    else pure results
+
+{- | The tested values without the @AutomaticallyFailIfSucceedByAtLeast@
+short-circuit. A forced result (@PassSkillTestBy@) reports the real numbers
+it is overriding, so it must not be turned into an auto-fail here.
+-}
+calculateRawSkillTestResultsData :: HasGame m => SkillTest -> m SkillTestResultsData
+calculateRawSkillTestResultsData s = do
+  modifiers' <- getModifiers (SkillTestTarget s.id)
   modifiedSkillTestDifficulty <- getModifiedSkillTestDifficulty s
-  let cancelSkills = any (`elem` modifiers') [CancelSkills, CancelEachCommittedCard]
-  iconCount <- if cancelSkills then pure 0 else skillIconCount s
-  subtractIconCount <- if cancelSkills then pure 0 else subtractSkillIconCount s
+  iconValue <- signedSkillIconCount s
   currentSkillValue <- getCurrentSkillValue s
   chaosTokenValues <- totalChaosTokenValues s
   let
@@ -458,31 +499,26 @@ calculateSkillTestResultsData s = do
     addResultModifier n _ = n
     resultValueModifiers = foldl' addResultModifier 0 modifiers'
     modifiedSkillValue' =
-      max 0 (currentSkillValue + chaosTokenValues + iconCount - subtractIconCount)
+      max 0 (currentSkillValue + chaosTokenValues + iconValue)
     op = if FailTies `elem` modifiers' then (>) else (>=)
     baseSuccess = modifiedSkillValue' `op` modifiedSkillTestDifficulty
-    succeedByAmount = modifiedSkillValue' - modifiedSkillTestDifficulty
-    autoFailThresholds = [t | AutomaticallyFailIfSucceedByAtLeast t <- modifiers']
-  if any (succeedByAmount >=) autoFailThresholds
-    then autoFailSkillTestResultsData s
-    else
-      pure
-        $ SkillTestResultsData
-          currentSkillValue
-          ((if SkillIconsSubtract `elem` modifiers' then negate . abs else id) iconCount - subtractIconCount)
-          chaosTokenValues
-          modifiedSkillTestDifficulty
-          (resultValueModifiers <$ guard (resultValueModifiers /= 0))
-          baseSuccess
+  pure
+    $ SkillTestResultsData
+      currentSkillValue
+      iconValue
+      chaosTokenValues
+      modifiedSkillTestDifficulty
+      (resultValueModifiers <$ guard (resultValueModifiers /= 0))
+      baseSuccess
 
-autoFailSkillTestResultsData :: (HasGame m, Tracing m) => SkillTest -> m SkillTestResultsData
+autoFailSkillTestResultsData :: HasGame m => SkillTest -> m SkillTestResultsData
 autoFailSkillTestResultsData s = do
   modifiedSkillTestDifficulty <- getModifiedSkillTestDifficulty s
   mods <- getModifiers s
   let x = getSum $ mconcat [Sum n | SkillTestResultValueModifier n <- mods]
   pure $ SkillTestResultsData 0 0 0 modifiedSkillTestDifficulty (guard (x /= 0) $> x) False
 
-getCurrentSkillValue :: (HasGame m, Tracing m) => SkillTest -> m Int
+getCurrentSkillValue :: HasGame m => SkillTest -> m Int
 getCurrentSkillValue st = do
   mods <- getModifiers st.investigator
   let
@@ -553,19 +589,24 @@ getAlternateSkill st sType = do
   applyModifier (UseSkillInsteadOf original replacement) a | original == a = replacement
   applyModifier _ a = a
 
-getModifiedSkillTestDifficulty :: (HasCallStack, HasGame m, Tracing m) => SkillTest -> m Int
-getModifiedSkillTestDifficulty s = do
-  -- difficulty can be on the investigator, see: @Despoiled@
-  let
-    forSkillTest = \case
-      Difficulty {} -> True
-      _ -> False
-  imods <- filter forSkillTest <$> getModifiers s.investigator
-  modifiers' <- (imods <>) <$> getModifiers (SkillTestTarget s.id)
-  baseDifficulty <- getBaseSkillTestDifficulty s
-  let preModifiedDifficulty = foldr applyPreModifier baseDifficulty modifiers'
-  let doubledDifficulty = foldr applyDoubler preModifiedDifficulty modifiers'
-  max 0 <$> foldrM applyModifier doubledDifficulty modifiers'
+getModifiedSkillTestDifficulty :: (HasCallStack, HasGame m) => SkillTest -> m Int
+getModifiedSkillTestDifficulty s = case skillTestResult s of
+  -- RR "Automatic Failure/Success": the total difficulty of an automatically
+  -- successful test is 0. Zeroing the base in @Do PassSkillTest@ is not enough,
+  -- a SetDifficulty modifier (Unearth the Ancients, Sixth Sense) replaces it.
+  SucceededBy Automatic _ -> pure 0
+  _ -> do
+    -- difficulty can be on the investigator, see: @Despoiled@
+    let
+      forSkillTest = \case
+        Difficulty {} -> True
+        _ -> False
+    imods <- filter forSkillTest <$> getModifiers s.investigator
+    modifiers' <- (imods <>) <$> getModifiers (SkillTestTarget s.id)
+    baseDifficulty <- getBaseSkillTestDifficulty s
+    let preModifiedDifficulty = foldr applyPreModifier baseDifficulty modifiers' + s.difficultyIncrease
+    let doubledDifficulty = foldr applyDoubler preModifiedDifficulty modifiers'
+    max 0 <$> foldrM applyModifier doubledDifficulty modifiers'
  where
   applyModifier (Difficulty m) n = pure $ n + m
   applyModifier (CalculatedDifficulty calc) n = do
@@ -577,7 +618,7 @@ getModifiedSkillTestDifficulty s = do
   applyPreModifier (SetDifficulty m) _ = m
   applyPreModifier _ n = n
 
-getBaseSkillTestDifficulty :: (HasGame m, Tracing m, HasCallStack) => SkillTest -> m Int
+getBaseSkillTestDifficulty :: (HasGame m, HasCallStack) => SkillTest -> m Int
 getBaseSkillTestDifficulty s = go (skillTestDifficulty s)
  where
   go (SkillTestDifficulty c) = calculate c
@@ -586,7 +627,7 @@ pushAfterSkillTest = pushAfter \case
   SkillTestEnds {} -> True
   _ -> False
 
-getIsCommittable :: (Tracing m, HasGame m) => InvestigatorId -> Card -> m Bool
+getIsCommittable :: HasGame m => InvestigatorId -> Card -> m Bool
 getIsCommittable a c = runValidT do
   skillTest <- MaybeT getSkillTest
   let iid = skillTest.investigator
@@ -648,7 +689,9 @@ getIsCommittable a c = runValidT do
           OnlyYourTest -> pure $ iid == a
           OnlyTestDuringYourTurn -> iid <=~> TurnInvestigator
           OnlyNotYourTest -> pure $ iid /= a
-          MustBeCommittedToYourTest -> pure $ iid == a
+          -- a compulsion to commit to your own eligible tests, not a restriction
+          -- on which tests it may be committed to
+          MustBeCommittedToYourTest -> pure True
           OnlyIfYourLocationHasClues -> maybe (pure False) (fieldMap LocationClues (> 0)) mlid
           OnlyTestWithActions as -> pure $ maybe False (`elem` as) (skillTestAction skillTest)
           ScenarioAbility -> getIsScenarioAbility
@@ -680,15 +723,24 @@ getIsCommittable a c = runValidT do
           pure $ fold [cst | AdditionalCostToCommit iid' cst <- mods, iid' == a]
       cmods <- getModifiers (CardIdTarget $ toCardId c)
       let costToCommit = fold [cst | AdditionalCostToCommit iid' cst <- cmods, iid' == a]
-      liftGuardM $ getCanAffordCost a (toSource a) [] [] (costToCommit <> otherAdditionalCosts)
+      -- The card's own additional cost (e.g. Justify the Means (3)'s curse tokens) is
+      -- only reachable via the card def here; the skill entity that carries it isn't
+      -- created until CommitCard, by which point failing to pay is a hard error. Only a
+      -- skill pays it on commit, for an asset or event it is a cost of playing the card.
+      let ownAdditionalCost =
+            if NoAdditionalCosts `elem` cmods || toCardType card /= SkillType
+              then mempty
+              else fold (cdAdditionalCost $ toCardDef card)
+      liftGuardM
+        $ getCanAffordCost a (toSource a) [] [] (costToCommit <> otherAdditionalCosts <> ownAdditionalCost)
       liftGuardM $ allM passesCommitRestriction (cdCommitRestrictions $ toCardDef card)
     EncounterCard card -> guard $ CommittableTreachery `elem` cdCommitRestrictions (toCardDef card)
     VengeanceCard _ -> error "vengeance card"
 
-getMustBeCommittableCards :: (Tracing m, HasGame m) => InvestigatorId -> m [Card]
+getMustBeCommittableCards :: HasGame m => InvestigatorId -> m [Card]
 getMustBeCommittableCards = filterM (`hasModifier` MustBeCommitted) <=< getCommittableCards
 
-getCommittableCards :: (Tracing m, HasGame m) => InvestigatorId -> m [Card]
+getCommittableCards :: HasGame m => InvestigatorId -> m [Card]
 getCommittableCards iid = do
   modifiers' <- getModifiers iid
   let asIfInHandForCommit = mapMaybe (preview _CanCommitToSkillTestsAsIfInHand) modifiers'
@@ -697,7 +749,7 @@ getCommittableCards iid = do
   treacheryCards <- traverse (field TreacheryCard) committableTreacheries
   filterM (getIsCommittable iid) (asIfInHandForCommit <> hand <> treacheryCards)
 
-getCommittedCards :: (HasGame m, Tracing m) => InvestigatorId -> m [Card]
+getCommittedCards :: HasGame m => InvestigatorId -> m [Card]
 getCommittedCards = field InvestigatorCommittedCards
 
 cancelTokenDraw :: HasQueue Message m => m ()
@@ -719,7 +771,7 @@ cancelTokenDraw = do
     _ -> False
 
 getSkillTestDifficultyDifferenceFromBaseValue
-  :: (HasGame m, Tracing m) => InvestigatorId -> SkillTest -> m Int
+  :: HasGame m => InvestigatorId -> SkillTest -> m Int
 getSkillTestDifficultyDifferenceFromBaseValue iid skillTest = do
   skillDifficulty <- getModifiedSkillTestDifficulty skillTest
   case skillTestType skillTest of
@@ -747,7 +799,7 @@ getCanCancelSkillTestEffects = do
     Just target -> withoutModifier target EffectsCannotBeCanceled
 
 skillTestMatches
-  :: (HasCallStack, Tracing m, HasGame m)
+  :: (HasCallStack, HasGame m)
   => InvestigatorId
   -> Source
   -> SkillTest
@@ -766,6 +818,15 @@ skillTestMatches iid source st mtchr = case Matcher.replaceYouMatcher iid mtchr 
   Matcher.NotSkillTest matcher ->
     not <$> skillTestMatches iid source st matcher
   Matcher.AnySkillTest -> pure True
+  Matcher.SkillTestWithResult resultMatcher -> do
+    result <- fromMaybe (skillTestResult st) <$> getSkillTestResultWithResultModifiers
+    case (result, resultMatcher) of
+      (SucceededBy _ n, Matcher.SuccessResult vm) -> gameValueMatches n vm
+      (FailedBy _ n, Matcher.FailureResult vm) -> gameValueMatches n vm
+      (_, Matcher.AnyResult) -> pure True
+      (_, Matcher.ResultOneOf ms) ->
+        anyM (skillTestMatches iid source st . Matcher.SkillTestWithResult) ms
+      _ -> pure False
   Matcher.SkillTestWasFailed -> pure $ case skillTestResult st of
     FailedBy _ _ -> True
     _ -> False
@@ -798,8 +859,20 @@ skillTestMatches iid source st mtchr = case Matcher.replaceYouMatcher iid mtchr 
       <$> countM
         (`Query.matches` Matcher.IncludeSealed matcher)
         (skillTestRevealedChaosTokens st <> skillTestAdditionalRevealedChaosTokens st)
-  Matcher.SkillTestOnCardWithTrait t -> elem t <$> sourceTraits (skillTestSource st)
-  Matcher.SkillTestOnCard match -> (`cardMatch` match) <$> sourceToCard (skillTestSource st)
+  -- The source may leave play mid-test (an event that shuffles itself back, for
+  -- example), so fall back to the card id captured when the test began.
+  Matcher.SkillTestOnCardWithTrait t
+    | isBasicAbilitySource (skillTestSource st) -> pure False
+    | otherwise -> do
+        traits <- sourceTraits (skillTestSource st)
+        if t `elem` traits
+          then pure True
+          else case st.sourceCard of
+            Nothing -> pure False
+            Just cid -> maybe False (`cardMatch` Matcher.CardWithTrait t) <$> getCardMaybe cid
+  Matcher.SkillTestOnCard match
+    | isBasicAbilitySource (skillTestSource st) -> pure False
+    | otherwise -> (`cardMatch` match) <$> sourceToCard (skillTestSource st)
   Matcher.SkillTestOnLocation match -> case skillTestSource st of
     AbilitySource s n | n < 100 -> case s.location of
       Just lid -> lid <=~> match
@@ -874,14 +947,18 @@ skillTestMatches iid source st mtchr = case Matcher.replaceYouMatcher iid mtchr 
         , Matcher.SkillTestOfInvestigator $ mapOneOf InvestigatorWithModifier $ AddSkillValue sType
             : map (AddSkillToOtherSkill sType) (skillTestSkillTypes st)
         ]
+  -- N.B. purely a location predicate. It used to also require
+  -- 'CannotAffectOtherPlayersWithPlayerEffectsExceptDamage' to be absent, which silenced cards
+  -- whose effect never touches the performing investigator: Self-Centered in Luke's threat area
+  -- hid Control Variable ("discover 1 clue at your location") on another investigator's test
+  -- (#5738). Cards that really do affect the performer carry
+  -- @SkillTestOfInvestigator (affectsOthers Anyone)@ alongside this.
   Matcher.SkillTestAtYourLocation -> do
-    canAffectOthers <- withoutModifier iid CannotAffectOtherPlayersWithPlayerEffectsExceptDamage
     mlid1 <- field InvestigatorLocation iid
     mlid2 <- field InvestigatorLocation st.investigator
-    case (mlid1, mlid2) of
-      (Just lid1, Just lid2) ->
-        pure $ lid1 == lid2 && (canAffectOthers || iid == st.investigator)
-      _ -> pure False
+    pure $ case (mlid1, mlid2) of
+      (Just lid1, Just lid2) -> lid1 == lid2
+      _ -> False
   Matcher.SkillTestAt locationMatcher -> targetMatches st.target (Matcher.TargetAtLocation locationMatcher)
   Matcher.SkillTestOfInvestigator whoMatcher -> st.investigator <=~> whoMatcher
   Matcher.SkillTestMatches ms -> allM (skillTestMatches iid source st) ms
@@ -895,7 +972,7 @@ skillTestSkillTypes st = case skillTestType st of
   BaseValueSkillTest {} -> []
 
 skillTestValueMatches
-  :: (HasGame m, Tracing m)
+  :: HasGame m
   => InvestigatorId
   -> Maybe Action
   -> SkillTestType
@@ -951,7 +1028,6 @@ onNextTurnEffect source investigator msgs = CreateOnNextTurnEffect (toSource sou
 maybeModifyThisSkillTest
   :: ( Sourceable source
      , HasGame m
-     , Tracing m
      , MonadWriter (MonoidalMap Target [Modifier]) m
      )
   => source
@@ -966,7 +1042,7 @@ maybeModifyThisSkillTest a body = do
 
 -- per the FAQ the double negative modifier ceases to be active
 -- when Sure Gamble is used so we overwrite both Negative and DoubleNegative
-getModifiedChaosTokenValue :: (HasGame m, Tracing m) => SkillTest -> ChaosToken -> m Int
+getModifiedChaosTokenValue :: HasGame m => SkillTest -> ChaosToken -> m Int
 getModifiedChaosTokenValue _ t | t.cancelled = pure 0
 getModifiedChaosTokenValue s t = do
   tokenModifiers' <- getModifiers (ChaosTokenTarget t)
@@ -1001,7 +1077,60 @@ getModifiedChaosTokenValue s t = do
     ChaosTokenValue token (NegativeModifier (max 0 (n - m)))
   applyModifier _ currentChaosTokenValue = currentChaosTokenValue
 
-getAdditionalChaosTokenValues :: (HasGame m, Tracing m) => SkillTest -> m Int
+getSkillTestValueBreakdown :: HasGame m => SkillTest -> m (Maybe SkillTestValueBreakdown)
+getSkillTestValueBreakdown s = do
+  mBag <- scenarioFieldMaybe ScenarioChaosBag
+  for mBag \bag -> do
+    let tokens = chaosBagChaosTokens bag
+    entries <- for tokens.uniqueByFace \tok -> do
+      value <- getModifiedChaosTokenValue s tok
+      ChaosTokenValue _ tokenModifier <- getChaosTokenValue s.investigator tok.face ()
+      -- TODO: need some way for homebrew to  hook into these
+      let autoFail = tokenModifier == AutoFailModifier
+          autoSuccess = tokenModifier == AutoSuccessModifier
+          revealsAnother = tok.face `elem` [#curse, #bless, #frost]
+      pure
+        $ ChaosTokenValueEntry
+          { ctveFace = tok.face
+          , ctveCount = count ((== tok.face) . (.face)) tokens
+          , ctveValue = value <$ guard (not $ autoFail || autoSuccess)
+          , ctveAutoFail = autoFail
+          , ctveAutoSuccess = autoSuccess
+          , ctveRevealsAnother = revealsAnother
+          }
+
+    modifiers' <- getModifiers (SkillTestTarget s.id)
+    skillValue <- getSkillTestModifiedSkillValue
+    difficulty <- getModifiedSkillTestDifficulty s
+    pure
+      $ SkillTestValueBreakdown
+        { stvbTokens = entries
+        , stvbSkillValue = skillValue
+        , stvbDifficulty = difficulty
+        , stvbFailTies = FailTies `elem` modifiers'
+        , stvbAutoFailIfSucceedByAtLeast = [n | AutomaticallyFailIfSucceedByAtLeast n <- modifiers']
+        }
+
+{- | The reveal strategy the test would use right now, folded from the same
+modifiers 'TriggerSkillTest' reads. Read before the reveal step it is a
+prediction; after it, it is what was used.
+-}
+getSkillTestRevealStrategy :: HasGame m => SkillTest -> m RevealStrategy
+getSkillTestRevealStrategy s = do
+  investigatorModifiers <- getModifiers s.investigator
+  testModifiers <- getModifiers (SkillTestTarget s.id)
+  pure $ foldl' applyRevealStrategyModifier (Reveal 1) (investigatorModifiers <> testModifiers)
+ where
+  applyRevealStrategyModifier (MultiReveal _ b) (ChangeRevealStrategy n) = MultiReveal n b
+  applyRevealStrategyModifier _ (ChangeRevealStrategy n) = n
+  applyRevealStrategyModifier n RevealAnotherChaosToken = MultiReveal n (Reveal 1)
+  applyRevealStrategyModifier n (DrawAdditionalChaosTokens m) = case n of
+    Reveal x -> RevealAndChoose (x + m) 1
+    RevealAndChoose x z -> RevealAndChoose (x + m) z
+    other -> other
+  applyRevealStrategyModifier n _ = n
+
+getAdditionalChaosTokenValues :: HasGame m => SkillTest -> m Int
 getAdditionalChaosTokenValues s = do
   mods <- getModifiers s
   let vs = [v | AddChaosTokenValue v <- mods]

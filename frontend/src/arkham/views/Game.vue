@@ -1,58 +1,181 @@
 <script lang="ts" setup>
-import { computed, markRaw, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute } from 'vue-router'
-import { useI18n } from 'vue-i18n'
+import {
+  computed,
+  markRaw,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import { useToast } from 'vue-toastification'
+import { storeToRefs } from 'pinia'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import confetti from '@/effects/confetti'
+import { useWebSocket, useResizeObserver } from '@vueuse/core'
+import { MenuItem } from '@headlessui/vue'
 import {
   AdjustmentsHorizontalIcon,
+  ArrowPathIcon,
+  ArrowUturnLeftIcon,
+  BackwardIcon,
+  BeakerIcon,
+  BoltIcon,
+  BugAntIcon,
   ClockIcon,
+  DocumentArrowDownIcon,
+  DocumentTextIcon,
+  EyeIcon,
   ExclamationTriangleIcon,
+  FlagIcon,
+  RectangleStackIcon,
+  TableCellsIcon,
 } from '@heroicons/vue/20/solid'
 import { LottieAnimation } from 'lottie-web-vue'
-import { useResizeObserver } from '@vueuse/core'
+import * as JsonDecoder from 'ts.data.json'
 import processingJSON from '@/assets/processing.json'
-import { eventTimeUp, markEventReady } from '@/arkham/api'
+import api from '@/api'
+import {
+  fetchGame,
+  buildWebsocketUrl,
+  undoChoice,
+  undoScenarioChoice,
+  undoAction,
+  undoTurn,
+  undoPhase,
+  undoRound,
+  undoToStep,
+  markEventReady,
+  eventTimeUp,
+} from '@/arkham/api'
+import * as Api from '@/arkham/api'
 import { useCardStore } from '@/stores/cards'
 import { useSettings } from '@/stores/settings'
+import { useUserStore } from '@/stores/user'
 import { useEventStore } from '@/arkham/stores/event'
-import { awaitingOrganizer } from '@/arkham/types/EpicEvent'
-import { useMenu } from '@/composable/menu'
+import { useEventTimer } from '@/arkham/composables/useEventTimer'
+import { useStepPoller } from '@/arkham/composables/useStepPoller'
+import { awaitingOrganizer, type SharedEventState } from '@/arkham/types/EpicEvent'
+import { useMenu, type MenuEntry } from '@/composable/menu'
+import { useKeybindings, type HoverAction } from '@/arkham/keybindings'
+import {
+  assetTarget,
+  enemyTarget,
+  investigatorTarget,
+  locationTarget,
+  placeTokensOn,
+  type PlaceableToken,
+  type SealTarget,
+} from '@/arkham/debugCardDrop'
 import useEmitter from '@/composable/useEmitter'
 import { useDebug } from '@/arkham/debug'
+import EntityBrowser from '@/arkham/components/debug/EntityBrowser.vue'
+import { cardImg, imgsrc, isTypingTarget } from '@/arkham/helpers'
+import { cardFaceImages, cardHasDistinctBack } from '@/arkham/cardImages'
+import { handleEmbeddedI18n } from '@/arkham/i18n'
 import { getGameLocalStorageItem, setGameLocalStorageItem } from '@/arkham/localStorage'
-import { useGameModals } from '@/arkham/composables/useGameModals'
-import { useGameSocket } from '@/arkham/composables/useGameSocket'
-import { provideGameContext } from '@/arkham/composables/provideGameContext'
-import { useGameUndo } from '@/arkham/composables/useGameUndo'
-import { useGameKeyboard } from '@/arkham/composables/useGameKeyboard'
-import { useBugReport } from '@/arkham/composables/useBugReport'
-import { useTurnNotification } from '@/arkham/composables/useTurnNotification'
-import { remotePushEnabled } from '@/pushNotifications'
-import { useAiDriver } from '@/arkham/composables/useAiDriver'
-import { useEventTimer } from '@/arkham/composables/useEventTimer'
+import * as Arkham from '@/arkham/types/Game'
+import * as ArkhamGame from '@/arkham/types/Game'
+import {
+  choicesByPlayerKey,
+  choicesSourceByPlayerKey,
+  choicesTooltipByPlayerKey,
+} from '@/arkham/composables/useGameChoices'
+import { buildGameIndexes, gameIndexesKey } from '@/arkham/composables/useGameIndexes'
+import { Card, asCardCode, cardDecoder, toCardContents } from '@/arkham/types/Card'
+import { isDevBuild } from '@/arkham/displayRules'
+import {
+  CARD_FLIGHT_ATTR,
+  CARD_FLIGHT_STATE,
+  CARD_FLIGHT_TRANSITION_CLASS,
+  cardFlightTransitionName,
+} from '@/arkham/cardFlight'
+import { customCardDef, isCustomCardCode } from '@/arkham/customCards'
+import * as Message from '@/arkham/types/Message'
+import type { Phase } from '@/arkham/types/Phase'
+import { type Question } from '@/arkham/types/Question'
+import type { Source } from '@/arkham/types/Source'
+import { TarotCard, tarotCardDecoder, tarotCardImage } from '@/arkham/types/TarotCard'
+import Campaign from '@/arkham/components/Campaign.vue'
 import CampaignLog from '@/arkham/components/CampaignLog.vue'
+import CampaignSettings from '@/arkham/components/CampaignSettings.vue'
 import CardOverlay from '@/arkham/components/CardOverlay.vue'
 import CardActionSheet from '@/arkham/components/CardActionSheet.vue'
+import MobilePlayLayout from '@/arkham/components/MobilePlayLayout.vue'
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
 import { useCardTapSheet } from '@/arkham/composables/useCardTapSheet'
-import ActiveGameModals from '@/arkham/components/ActiveGameModals.vue'
+import { useTurnNotification } from '@/arkham/composables/useTurnNotification'
+import { remotePushEnabled } from '@/pushNotifications'
+import CardView from '@/arkham/components/Card.vue'
 import MultiplayerLobby from '@/arkham/components/MultiplayerLobby.vue'
 import GameLog from '@/arkham/components/GameLog.vue'
+import type { LogEntry, LogRow } from '@/arkham/types/GameLog'
+import {
+  legacyLogEntry,
+  logRowsToEntries,
+  type LegacyLocationLookup,
+} from '@/arkham/legacyLogParse'
 import HistoryPanel from '@/arkham/components/HistoryPanel.vue'
+import ScenarioSettings from '@/arkham/components/ScenarioSettings.vue'
 import Settings from '@/arkham/components/Settings.vue'
 import OrganizerBar from '@/arkham/components/OrganizerBar.vue'
 import PlayerEventBar from '@/arkham/components/PlayerEventBar.vue'
 import EventStartBarrier from '@/arkham/components/EventStartBarrier.vue'
 import EventActAdvanceBarrier from '@/arkham/components/EventActAdvanceBarrier.vue'
+import StandaloneScenario from '@/arkham/components/StandaloneScenario.vue'
+import StoryQuestion from '@/arkham/components/StoryQuestion.vue'
 import AchievementToast from '@/arkham/components/AchievementToast.vue'
-import AiControlPanel from '@/arkham/components/AiControlPanel.vue'
+import { achievementEntryScope } from '@/arkham/achievements'
+import DrawSpotlight from '@/arkham/components/DrawSpotlight.vue'
 import Draggable from '@/components/Draggable.vue'
-import GameBar from '@/arkham/components/GameBar.vue'
-import BugReportForm from '@/arkham/components/BugReportForm.vue'
-import ShortcutsModal from '@/arkham/components/ShortcutsModal.vue'
-import PlayabilityModal, { type PlayabilityInfo } from '@/arkham/components/PlayabilityModal.vue'
-import GameMain from '@/arkham/components/GameMain.vue'
-import MobilePlayLayout from '@/arkham/components/MobilePlayLayout.vue'
+import Menu from '@/components/Menu.vue'
+import Prompt from '@/components/Prompt.vue'
+
+interface GameCard {
+  title: string
+  card: Card
+}
+
+interface GameCardOnly {
+  player: string
+  title: string
+  card: Card
+}
+
+interface GameDrewCards {
+  player: string
+  title: string
+  cards: Card[]
+  // 'upkeep' | 'action' | 'card' | 'opening' -- kept loose so an unknown kind
+  // from a newer server degrades to "not upkeep" instead of failing to decode.
+  kind: string
+}
+
+// TODO: contents should not be string
+type ServerResult =
+  | { tag: 'GameError'; contents: string }
+  | { tag: 'GameMessage'; contents: string }
+  | { tag: 'GameTarot'; contents: string }
+  | { tag: 'GameAchievement'; contents: string }
+  | { tag: 'GameCard'; contents: string }
+  | { tag: 'GameCardOnly'; contents: string }
+  | { tag: 'GameDrewCards'; contents: string }
+  | { tag: 'GameUpdate'; contents: string }
+  | { tag: 'PhaseChanged'; contents: Phase }
+  | { tag: 'GameShowDiscard'; contents: string }
+  | { tag: 'GameShowUnder'; contents: string }
+  | { tag: 'GameUI'; contents: string }
+  | { tag: 'GameAudio'; contents: string }
+  | { tag: 'SharedStateUpdate'; contents: SharedEventState }
+  | { tag: 'EventChanged' }
+  /* The room is gone -- the game was deleted, or an admin dropped it. The server
+   * closes the socket right behind this, and `autoReconnect` would otherwise
+   * recreate the very room that was just removed, so this leaves rather than
+   * retries. */
+  | { tag: 'RoomClosed'; contents: string }
 
 export interface Props {
   gameId: string
@@ -62,113 +185,41 @@ export interface Props {
 const props = withDefaults(defineProps<Props>(), { spectate: false })
 
 const debug = useDebug()
+const showEntityBrowser = ref(false)
 const emitter = useEmitter()
+const router = useRouter()
 const route = useRoute()
 const store = useCardStore()
+const userStore = useUserStore()
 const settings = useSettings()
+const { inlineModals } = storeToRefs(settings)
 const eventStore = useEventStore()
 const { addEntry, menuItems } = useMenu()
-const { t } = useI18n()
-const toast = useToast()
-const aiDevEnabled = computed(() => settings.aiInvestigatorsEnabled)
-const flashlightX = ref(0)
-const flashlightY = ref(0)
-const focusLightX = ref(-1000)
-const focusLightY = ref(-1000)
-let focusLightObserver: MutationObserver | null = null
-let focusLightAnimationFrame: number | null = null
-
-store.fetchCards()
-
-const showAchievement = (tag: string) => {
-  toast(
-    {
-      component: markRaw(AchievementToast),
-      props: {
-        title: t('achievements.toastTitle'),
-        name: t(`achievements.entries.${tag}.name`),
-        text: t(`achievements.entries.${tag}.text`),
-      },
-    },
-    { timeout: 8000, icon: false, closeButton: false, toastClassName: 'achievement-toast' },
-  )
-}
-
-const modals = useGameModals()
-const socket = useGameSocket({
-  gameId: () => props.gameId,
-  spectate: props.spectate,
-  modals,
-  emitter,
-  onSharedStateUpdate: (state) => eventStore.applySharedState(state),
-  onAchievement: showAchievement,
-})
-// send/choose* 等其余字段经 provideGameContext 注入给子组件，这里只解构 Game.vue 自用的
 const {
-  game,
-  gameLog,
-  playerId,
-  eventId: gamePayloadEventId,
-  ready,
-  solo,
-  error,
-  socketError,
-  processing,
-  close,
-  choose,
-  setGameQuestion,
-  clearResultQueue,
-} = socket
-const playabilityInfo = ref<PlayabilityInfo | null>(null)
-const showLog = ref(false)
-const showShortcuts = ref(false)
-const { isTouch, size, shell } = useDeviceLayout()
-const phoneShell = computed(() => shell.value === 'phone')
-const isMobileViewport = () => size.value === 'phone'
-const showSidebar = ref(
-  isMobileViewport() ? false : JSON.parse(getGameLocalStorageItem(props.gameId, 'showSidebar') ?? 'true'),
-)
-const showOtherPlayersHands = ref(getGameLocalStorageItem(props.gameId, 'showOtherPlayersHands') === 'true')
-watch(showOtherPlayersHands, (v) => {
-  setGameLocalStorageItem(props.gameId, 'showOtherPlayersHands', v ? 'true' : 'false')
-})
-const showSettings = ref(false)
-const showHistory = ref(false)
-const { sheetTap, confirmSheetAction, closeSheet } = useCardTapSheet({
-  isTouch: () => isTouch.value,
-  game,
-})
+  is: isKey,
+  isHover: isHoverKey,
+  boundHoverActions,
+  anyBindingMatches,
+  keys: shortcutKeys,
+  profile: keybindingProfile,
+} = useKeybindings()
+const toast = useToast()
 
-addEntry({
-  id: 'viewSettings',
-  icon: AdjustmentsHorizontalIcon,
-  content: t('gameBar.viewSettings'),
-  shortcut: 'S',
-  nested: 'view',
-  action: () => (showSettings.value = !showSettings.value),
-})
-
-addEntry({
-  id: 'viewHistory',
-  icon: ClockIcon,
-  content: t('gameBar.viewHistory'),
-  shortcut: 'H',
-  nested: 'view',
-  action: () => (showHistory.value = !showHistory.value),
-})
-
-const { choicesByPlayer } = provideGameContext(socket, showOtherPlayersHands)
-const { aiSeatIds, aiStuckSeats } = useAiDriver({
-  game,
-  spectate: () => props.spectate,
-  aiDevEnabled,
-  send: socket.send,
-})
-
+// "Epic Multiplayer": a group's game can be entered two ways — via the dashboard's
+// per-group links (which carry an ?event=<id> query param) OR via the plain
+// join / "take a seat" path (which does NOT). To engage the event on EITHER path
+// we resolve the event id from the URL first, then fall back to the `eventId` the
+// game-fetch response now carries (resolved server-side). Everything that needs to
+// know "which event is this game a group of" keys off `resolvedEventId`; only true
+// navigation/links keep using the raw `eventQueryId`.
 const eventQueryId = computed(() => {
   const q = route.query.event
   return typeof q === 'string' && q !== '' ? q : null
 })
+
+// Set from the fetchGame payload's `eventId` (null for ordinary games). Lets a
+// group game engage its event even when the URL is missing ?event.
+const gamePayloadEventId = ref<string | null>(null)
 
 const resolvedEventId = computed(() => eventQueryId.value ?? gamePayloadEventId.value)
 
@@ -179,6 +230,12 @@ const organizerEventId = computed(() => {
   return ev && ev.id === eid && ev.role === 'organizer' ? eid : null
 })
 
+// Player-facing counterpart: any seated MEMBER (not the organizer) of an Epic
+// event may switch to / spectate the sibling groups. NOT gated on the local dev
+// flag — invited players don't have it set, but their game is still part of the
+// event server-side. Engages purely on the loaded event containing this gameId
+// (mirrors organizerEventId). Events can only be CREATED with the dev flag, so
+// there are no event games in production regardless. Organizer keeps OrganizerBar.
 const playerEventId = computed(() => {
   const eid = resolvedEventId.value
   if (!eid) return null
@@ -197,6 +254,26 @@ watch(
   { immediate: true },
 )
 
+// Main Street can transfer this player's complete investigator state to a
+// sibling game. EventChanged refreshes the roster; follow that authoritative
+// membership so the old websocket is replaced by the destination game's room.
+watch(
+  [() => eventStore.event, () => userStore.currentUser?.username],
+  ([event, username]) => {
+    if (!event || !username || event.role === 'organizer' || props.spectate) return
+    const currentGroup = event.groups.find((group) => group.gameId === props.gameId)
+    if (currentGroup?.players.some((player) => player.username === username)) return
+    const destination = event.groups.find((group) => group.players.some((player) => player.username === username))
+    if (!destination?.gameId) return
+    void router.replace({ name: 'Game', params: { gameId: destination.gameId }, query: { event: event.id } })
+  },
+)
+
+// "Epic Multiplayer" time limit. The event id this game view actively
+// PARTICIPATES in for the timer: a seated player (or an organizer playing a
+// seat), never the organizer's spectate/non-playing view. NOT gated on the local
+// dev flag (invited players don't have it) — engages purely on the loaded event
+// containing this game as a group, so ordinary games never engage.
 const timerEventId = computed(() => {
   if (props.spectate) return null
   const eid = resolvedEventId.value
@@ -207,60 +284,67 @@ const timerEventId = computed(() => {
 })
 
 const { hasTimeLimit, barrierPending, timerStartedAt, timeUp } = useEventTimer()
+
+// Whether an epic bar (organizer or player) is mounted above the board.
 const hasEventBar = computed(() => !!organizerEventId.value || !!playerEventId.value)
+
+// Reserve the epic bar's height in the board layout. `.game-main` is sized off a
+// hardcoded `calc(100vh - 80px)`; the bar adds height ABOVE it, so without this
+// the board's bottom (player area) is pushed past the viewport and clipped.
+// Measured (not a fixed constant) so it stays correct if the bar wraps/changes,
+// and it defaults to 0 for ordinary, non-event games — no layout shift for them.
 const epicBarRef = ref<HTMLElement | null>(null)
 const epicBarHeight = ref(0)
-
 useResizeObserver(epicBarRef, () => {
   epicBarHeight.value = epicBarRef.value?.offsetHeight ?? 0
 })
-
 watch(hasEventBar, (present) => {
   if (!present) epicBarHeight.value = 0
 })
 
-const undoApi = useGameUndo({
-  gameId: () => props.gameId,
+const preloaded = new Set<string>()
+const preloading = new Set<string>()
+let mouseX = 0
+let mouseY = 0
+let focusLightObserver: MutationObserver | null = null
+let focusLightAnimationFrame: number | null = null
+const flashlightX = ref(0)
+const flashlightY = ref(0)
+const focusLightX = ref(-1000)
+const focusLightY = ref(-1000)
+
+store.fetchCards()
+store.fetchCustomCards(props.gameId)
+
+interface PlayabilityInfo {
+  cardId: string
+  cardCode: string
+  checks: [string, string | null][]
+}
+
+const game = shallowRef<Arkham.Game | null>(null)
+const { isTouch, shell } = useDeviceLayout()
+const phoneShell = computed(() => shell.value === 'phone')
+const { sheetTap, confirmSheetAction, closeSheet } = useCardTapSheet({
+  isTouch: () => isTouch.value,
   game,
-  processing,
-  setGameQuestion,
-  clearResultQueue,
-  modals,
-  debugActive: () => debug.active,
-})
-const {
-  undo, undoScenario, undoActionStart, undoTurnStart, undoPhaseStart, undoRoundStart,
-  canUndoScenario, canUndoAction, canUndoTurn, canUndoPhase, canUndoRound,
-} = undoApi
-
-// Computed
-const cards = computed(() => store.cards)
-const choices = computed(() => {
-  if (!playerId.value) return []
-  return choicesByPlayer.value.get(playerId.value) ?? []
-})
-useTurnNotification({
-  pendingChoices: computed(() => choices.value.length),
-  remotePushEnabled,
 })
 
-const realityAcidLightActive = computed(() => {
-  const scenario = game.value?.scenario
-  return scenario?.id === 'c85001' && scenario.meta?.lightActive === true
+/* A custom card someone else created shows up in the game payload before this
+ * client has its def; refetch the game's custom cards when an unknown one
+ * appears. */
+watch(game, (g) => {
+  if (!g) return
+  const missing = (code: string) => isCustomCardCode(code) && !customCardDef(code)
+  // A custom investigator never appears in `cards`; it is only a seat.
+  const unknown =
+    Object.values(g.cards).some((c) => missing(asCardCode(c)))
+    || Object.values(g.investigators).some((i) => missing(i.cardCode))
+  if (unknown) store.fetchCustomCards(props.gameId)
 })
 
-const currentActStage = computed<number | null>(() => {
-  const acts = game.value ? Object.values(game.value.acts) : []
-  return acts.length > 0 ? acts[0].sequence.number : null
-})
-
-const showActAdvanceWait = computed(
-  () =>
-    !!timerEventId.value &&
-    currentActStage.value !== null &&
-    awaitingOrganizer(eventStore.sharedState, currentActStage.value) > 0,
-)
-
+// "Ready to play": the group has reached the first investigation phase of an
+// active, started scenario. Cleanest signal we have off the existing game state.
 const reachedInvestigation = computed(() => {
   const g = game.value
   return (
@@ -271,10 +355,37 @@ const reachedInvestigation = computed(() => {
   )
 })
 
+// Show the blocking start-barrier overlay only once this group has finished its own
+// setup (reached investigation) and is waiting on the other groups. Gating on
+// reachedInvestigation is essential: blocking the board during deck selection /
+// mulligan would stop the player from ever reaching investigation -> deadlock.
 const showStartBarrier = computed(
   () => !!timerEventId.value && barrierPending.value && reachedInvestigation.value,
 )
 
+// Stage (1/2/3) of the act currently in play for this group, fed to the epic bars'
+// shared-pool readout. The Blob has a single act deck, so the lone act in
+// `game.acts` is the current one; its sequence number is the stage.
+const currentActStage = computed<number | null>(() => {
+  const acts = game.value ? Object.values(game.value.acts) : []
+  return acts.length > 0 ? acts[0].sequence.number : null
+})
+
+// Park an actively-playing member of this event's group behind a wait overlay while
+// the shared act advance for their current stage awaits the organizer's allocation.
+// Lifts as soon as the `awaiting-organizer:<stage>` gate clears (the backend pushes
+// the cleared shared state over the ws), surfacing the group's parked "Continue"
+// question for the player to click — mirrors EventStartBarrier's release.
+const showActAdvanceWait = computed(
+  () =>
+    !!timerEventId.value &&
+    currentActStage.value !== null &&
+    awaitingOrganizer(eventStore.sharedState, currentActStage.value) > 0,
+)
+
+// Mark this group ready at the start barrier exactly once per load. Guarded with a
+// local flag (the endpoint is idempotent server-side regardless). Immediate so a
+// reconnect mid-investigation still signals readiness.
 let markedReady = false
 watch(
   [timerEventId, reachedInvestigation, barrierPending],
@@ -291,6 +402,9 @@ watch(
   { immediate: true },
 )
 
+// When the countdown hits 0, force the time-up resolution once. Fires from any
+// loaded event game (player or spectating organizer); the endpoint is idempotent
+// across clients.
 let timeUpFired = false
 watch(
   timeUp,
@@ -304,42 +418,1594 @@ watch(
   { immediate: true },
 )
 
-const undoScenarioDialog = useTemplateRef<HTMLDialogElement>('undoScenarioDialog')
-
-const actionMap = computed<Map<string, () => void>>(() => {
-  const map = new Map<string, () => void>()
-  for (const item of menuItems.value) {
-    if (item.shortcut) map.set(item.shortcut, item.action)
+const gameCard = ref<GameCard | null>(null)
+const cthulhuDeckCardCodes = new Set([
+  '11705',
+  '11706',
+  '11707',
+  '11708',
+  '11709',
+  '11710',
+  '11711',
+  '11712',
+  '11713',
+  '11714',
+  '11715',
+])
+const isCthulhuDeckReveal = computed(() => {
+  const focusedCard = gameCard.value
+  return focusedCard !== null && cthulhuDeckCardCodes.has(toCardContents(focusedCard.card).cardCode.replace(/^c/, ''))
+})
+const showTheSilenceModal = ref(false)
+const playabilityInfo = ref<PlayabilityInfo | null>(null)
+/* Append-only. Replaced wholesale only when a full game payload arrives; the
+   socket appends. The previous shape copied and froze the entire history on
+   every update and again on every appended line, which is O(n) per line and
+   O(n^2) across a scenario setup. */
+const gameLog = shallowRef<readonly LogEntry[]>(Object.freeze([]))
+const playerId = ref<string | null>(null)
+const ready = ref(false)
+const resultQueue = ref<any>([])
+const showLog = ref(false)
+const showShortcuts = ref(false)
+const isMobileViewport = () =>
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 800px)').matches
+const showSidebar = ref(
+  isMobileViewport() ? false : JSON.parse(getGameLocalStorageItem(props.gameId, 'showSidebar') ?? 'true'),
+)
+const socketError = ref(false)
+const error = ref<string | null>(null)
+const solo = ref(false)
+const soundsDisabled = ref(localStorage.getItem('arkhamSoundsDisabled') === 'true')
+const showOtherPlayersHands = ref(getGameLocalStorageItem(props.gameId, 'showOtherPlayersHands') === 'true')
+watch(showOtherPlayersHands, (v) => {
+  setGameLocalStorageItem(props.gameId, 'showOtherPlayersHands', v ? 'true' : 'false')
+})
+const tarotCards = ref<TarotCard[]>([])
+const uiLock = ref<boolean>(false)
+const showSettings = ref(false)
+const showHistory = ref(false)
+const processing = ref(false)
+// The spinner is only worth showing for a wait a player would otherwise wonder
+// about. Most answers round-trip in well under this, so gating it behind a delay
+// keeps a plain "continue" click from flickering an animation on every press.
+const showProcessing = ref(false)
+let processingTimer: ReturnType<typeof setTimeout> | null = null
+watch(processing, (busy) => {
+  if (processingTimer) {
+    clearTimeout(processingTimer)
+    processingTimer = null
   }
-  return map
+  if (!busy) {
+    showProcessing.value = false
+    return
+  }
+  processingTimer = setTimeout(() => {
+    showProcessing.value = true
+  }, 400)
+})
+// Set while a story/interlude answer is in flight. Those screens keep their text
+// on display for the round-trip instead of blanking their question, so this is
+// what stops the passage from being answered a second time meanwhile.
+const storyAnswerPending = ref(false)
+const oldQuestion = ref<Record<string, Question> | null>(null)
+const skipAllPending = ref<Set<string>>(new Set())
+const { t } = useI18n()
+const phaseNotification = ref<Phase | null>(null)
+const phaseNotificationQueue = ref<Phase[]>([])
+const phaseNotificationPlaying = ref(false)
+const phaseNotificationColor = computed(() => ({
+  MythosPhase: '#7b4b91',
+  InvestigationPhase: '#a87532',
+  EnemyPhase: '#9f2929',
+  UpkeepPhase: '#315b70',
+  CampaignPhase: '#5b5b5b',
+}[phaseNotification.value ?? 'CampaignPhase']))
+
+function showPhaseNotification(phase: Phase) {
+  if (!userStore.currentUser?.phaseTransitionNotifications) return
+
+  // The server sends one PhaseChanged per phase actually entered, so announce
+  // exactly what arrives. Extrapolating forward from it invented phases the
+  // game had not reached, and ran backwards undos through the cycle.
+  if (phaseNotification.value === phase || phaseNotificationQueue.value.includes(phase)) return
+  phaseNotificationQueue.value.push(phase)
+  if (!uiLock.value) void drainPhaseNotificationQueue()
+}
+
+const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+async function drainPhaseNotificationQueue() {
+  if (phaseNotificationPlaying.value) return
+  phaseNotificationPlaying.value = true
+  try {
+    while (phaseNotificationQueue.value.length > 0) {
+      phaseNotification.value = phaseNotificationQueue.value.shift() ?? null
+      await wait(1300)
+      phaseNotification.value = null
+      await nextTick()
+    }
+  } finally {
+    phaseNotificationPlaying.value = false
+  }
+}
+
+/* ---- Card flight -------------------------------------------------------
+ *
+ * Both full-screen reveals -- the encounter revelation and the draw spotlight --
+ * hand their card off to wherever it actually ended up when you dismiss them:
+ * into your hand, into the threat area, onto a location, into play. The board
+ * behind the lock is already up to date (#4817), so the destination is mounted
+ * and only needs to take the transition name over at the right instant.
+ */
+type DrawSpotlightEntry = { title: string; cards: Card[] }
+
+const drawSpotlight = ref<DrawSpotlightEntry | null>(null)
+/* Cards an overlay is showing full-screen right now. Their board copies hide so
+ * that a card is never on screen twice, and a placeholder holds the slot. */
+const previewedCardIds = ref<ReadonlySet<string>>(new Set())
+const flyingCardIds = ref<ReadonlySet<string>>(new Set())
+
+/* Returns whether the overlay actually opened, so a caller holding the lock on
+ * its behalf knows to let go again. */
+function showDrawSpotlight(entry: DrawSpotlightEntry): boolean {
+  if (entry.cards.length === 0) return false
+  drawSpotlight.value = entry
+  uiLock.value = true
+  return true
+}
+
+type TransitionDocument = Document & {
+  startViewTransition?: (callback: () => Promise<void>) => { finished: Promise<void> }
+}
+
+/* The on-screen element a card would fly to, or null if it has none.
+ *
+ * Asked of the DOM rather than of game state: the precondition for a view
+ * transition is that a laid-out element carrying the name exists afterwards,
+ * and only the DOM knows that. A treachery may have resolved and gone; a card
+ * held by another seat is in a hand that is not on screen.
+ *
+ * It must be the *visible* one. A card is rendered more than once -- Player.vue
+ * lays out a desktop hand and a mobile one and hides the wrong one, and an
+ * inactive investigator tab keeps its whole board in the DOM at
+ * `display: none`. `querySelector` cheerfully returns the hidden copy, whose
+ * box is 0x0, and a view transition to a 0x0 target does not fail: it shrinks
+ * the card to a point and vanishes. So take the first candidate that actually
+ * occupies space. (The hidden copies carry the same name during the flight,
+ * which would normally be a fatal duplicate -- they get away with it only
+ * because an unrendered element's `view-transition-name` is ignored.) */
+function laidOutDestination(id: string): Element | null {
+  const candidates = document.querySelectorAll(`[${CARD_FLIGHT_ATTR}="${CSS.escape(id)}"]`)
+  for (const el of candidates) {
+    const r = el.getBoundingClientRect()
+    if (r.width && r.height) return el
+  }
+  return null
+}
+
+function cardsWithADestination(cards: Card[]): string[] {
+  return cards.map((c) => toCardContents(c).id).filter((id) => laidOutDestination(id))
+}
+
+/* A card-shaped hole left where a flying card is going to land.
+ *
+ * A view transition promotes the destination element out of the page for the
+ * duration -- one element cannot be in two places -- so the slot the card was
+ * already sitting in goes empty until the flight arrives, which reads as the
+ * card blinking out. These sit in the page (no transition name, so they are
+ * part of the root snapshot) and hold the space until the card is really back.
+ */
+const flightPlaceholders = ref<{ id: string; style: Record<string, string> }[]>([])
+
+function measureDestinations(ids: string[]) {
+  return ids.flatMap((id) => {
+    const el = laidOutDestination(id)
+    if (!el) return []
+    const r = el.getBoundingClientRect()
+    return [
+      {
+        id,
+        style: {
+          top: `${r.top}px`,
+          left: `${r.left}px`,
+          width: `${r.width}px`,
+          height: `${r.height}px`,
+        },
+      },
+    ]
+  })
+}
+
+/* Tear down a reveal, flying its cards home if they have anywhere to go.
+ * `hide` clears the overlay's own state and must NOT release `uiLock`: doing
+ * that inside the callback replays the queued GameUpdate mid-transition and
+ * re-renders the board out from under the cards being morphed. */
+function flyThenDismiss(cards: Card[], hide: () => void) {
+  const settle = () => {
+    flyingCardIds.value = new Set()
+    flightPlaceholders.value = []
+    uiLock.value = false
+  }
+
+  const release = () => {
+    hide()
+    settle()
+  }
+
+  const transitionDocument = document as TransitionDocument
+  const flying = cardsWithADestination(cards)
+  if (!transitionDocument.startViewTransition || settings.prefersReducedMotion || !flying.length) {
+    release()
+    return
+  }
+
+  // Measured before the transition starts, while the destinations are still
+  // laid out and unpromoted.
+  const placeholders = measureDestinations(flying)
+
+  try {
+    const transition = transitionDocument.startViewTransition(async () => {
+      // `hide` clears the overlay, which clears `previewedCardIds` and so
+      // un-hides the board copy -- it has to be visible in this new state or it
+      // captures an empty snapshot and flies as nothing. Naming it in the same
+      // render is what makes it the other end of the flight.
+      flyingCardIds.value = new Set(flying)
+      flightPlaceholders.value = placeholders
+      hide()
+      await nextTick()
+    })
+    // `finished` rejects when the transition is skipped. Either way the overlay
+    // is already gone and the lock has to come off, or the board stays frozen.
+    transition.finished.then(settle, settle)
+  } catch (e) {
+    console.error(e)
+    release()
+  }
+}
+
+/* Whatever an overlay is currently showing. Derived rather than set at each call
+ * site so every entry point is covered -- the encounter revelation, the draw
+ * spotlight, and the dev demo alike -- and so it clears itself the moment the
+ * overlay does, which is exactly when the flight needs the board copy back. */
+watch(
+  [drawSpotlight, gameCard],
+  () => {
+    const cards = drawSpotlight.value?.cards ?? (gameCard.value ? [gameCard.value.card] : [])
+    previewedCardIds.value = new Set(cards.map((c) => toCardContents(c).id))
+  },
+  { immediate: true },
+)
+
+/* The slot is measured while the overlay is up, not when the flight starts.
+ *
+ * It has to be re-measured when the board changes: the client message announcing
+ * the draw arrives before the GameUpdate that actually puts the card in hand, so
+ * at the moment the overlay opens the destination often does not exist yet, and
+ * the hand reflows as it arrives. Placeholders are never cleared here -- they
+ * must outlive `previewedCardIds` to cover the flight -- only in `settle`. */
+watch(
+  [previewedCardIds, game],
+  async () => {
+    if (previewedCardIds.value.size === 0) return
+    await nextTick()
+    flightPlaceholders.value = measureDestinations([...previewedCardIds.value])
+  },
+  { immediate: true },
+)
+
+/* Built here rather than inline in the template: `view-transition-class` is not
+ * in Vue's CSSProperties, and a style literal in a template is checked against
+ * it strictly. */
+const revelationCardStyle = computed(() =>
+  gameCard.value
+    ? {
+        viewTransitionName: cardFlightTransitionName(gameCard.value.card),
+        viewTransitionClass: CARD_FLIGHT_TRANSITION_CLASS,
+      }
+    : undefined,
+)
+
+function dismissDrawSpotlight() {
+  const entry = drawSpotlight.value
+  if (!entry) return
+  flyThenDismiss(entry.cards, () => {
+    drawSpotlight.value = null
+  })
+}
+
+/* Undo rewinds past the draw or reveal, so it goes with it. */
+function clearDrawSpotlight() {
+  drawSpotlight.value = null
+  previewedCardIds.value = new Set()
+  flyingCardIds.value = new Set()
+  flightPlaceholders.value = []
+}
+
+const format = (str: string) => {
+  return handleEmbeddedI18n(str, t)
+}
+
+function handleSettingChange(event: Event) {
+  const detail = (event as CustomEvent<{ key?: string; value?: string }>).detail
+  if (detail?.key === 'arkhamSoundsDisabled') {
+    soundsDisabled.value = detail.value === 'true'
+  }
+}
+
+/* What the legacy parser needs to tell a revealed location from an unrevealed
+   one. Only legacy rows consult it; structured refs carry faceDown already. */
+function legacyLocations(): LegacyLocationLookup {
+  const locations = game.value?.locations ?? {}
+  const lookup: LegacyLocationLookup = {}
+  for (const [id, location] of Object.entries(locations)) {
+    lookup[id] = { cardCode: location.cardCode, revealed: location.revealed }
+  }
+  return lookup
+}
+
+/* Scrollback: fetch the page before what we hold and prepend it.
+ *
+ * Replaces rather than merges, because `updateGameLog` would otherwise discard
+ * the older rows on the next GameUpdate -- the payload carries only the tail,
+ * so a live update must not be allowed to truncate what the reader has paged
+ * back to. `loadedOlder` keeps them. */
+const loadedOlder = shallowRef<readonly LogEntry[]>(Object.freeze([]))
+
+async function loadOlderLog(beforeSeq: number) {
+  try {
+    const rows = await Api.fetchLogBefore(props.gameId, beforeSeq)
+    if (rows.length === 0) return
+    const older = logRowsToEntries(rows, legacyLocations())
+    loadedOlder.value = Object.freeze([...older, ...loadedOlder.value])
+    gameLog.value = Object.freeze([...older, ...gameLog.value])
+  } catch (e) {
+    console.log(e)
+  }
+}
+
+function updateGameLog(nextLog: readonly LogRow[]) {
+  /* The payload carries a bounded tail and the log is append-only, so comparing
+     the ends is enough to skip a no-op rebuild without walking the rows. */
+  const current = gameLog.value
+  const last = nextLog[nextLog.length - 1]
+  if (
+    current.length === nextLog.length &&
+    last?.tag === 'LogRowStructured' &&
+    last.contents.seq > 0 &&
+    current[current.length - 1]?.seq === last.contents.seq
+  ) {
+    return
+  }
+
+  /* Anything paged back to stays in front of the tail: the payload only carries
+     the newest rows, so rebuilding from it alone would throw the scrollback
+     away every time the game moved. */
+  gameLog.value = Object.freeze([
+    ...loadedOlder.value,
+    ...logRowsToEntries(nextLog, legacyLocations()),
+  ])
+}
+
+addEntry({
+  id: 'viewSettings',
+  icon: AdjustmentsHorizontalIcon,
+  content: t('gameBar.viewSettings'),
+  binding: 'viewSettings',
+  nested: 'view',
+  action: () => (showSettings.value = !showSettings.value),
 })
 
-const { filingBug, submittingBug, bugInitialDescription, openBugReport, fileBug } = useBugReport({
+addEntry({
+  id: 'viewHistory',
+  icon: ClockIcon,
+  content: t('gameBar.viewHistory'),
+  binding: 'viewHistory',
+  nested: 'view',
+  action: () => (showHistory.value = !showHistory.value),
+})
+
+// Computed
+const cards = computed(() => store.cards)
+const choicesByPlayer = computed(() => {
+  const currentGame = game.value
+  if (!currentGame) return new Map<string, readonly Message.Message[]>()
+
+  return new Map(
+    Object.keys(currentGame.question).map((pid) => [pid, ArkhamGame.choices(currentGame, pid)]),
+  )
+})
+const choicesSourceByPlayer = computed(() => {
+  const currentGame = game.value
+  if (!currentGame) return new Map<string, Source | null>()
+
+  return new Map(
+    Object.keys(currentGame.question).map((pid) => [pid, ArkhamGame.choicesSource(currentGame, pid)]),
+  )
+})
+const choicesTooltipByPlayer = computed(() => {
+  const currentGame = game.value
+  if (!currentGame) return new Map<string, string | null>()
+
+  return new Map(
+    Object.keys(currentGame.question).map((pid) => [pid, ArkhamGame.choicesTooltip(currentGame, pid)]),
+  )
+})
+const gameIndexes = computed(() => buildGameIndexes(game.value))
+const choices = computed(() => {
+  if (!playerId.value) return []
+  return choicesByPlayer.value.get(playerId.value) ?? []
+})
+const gameOver = computed(() => game.value?.gameState.tag === 'IsOver')
+const questionPlayerId = computed(() => {
+  const currentGame = game.value
+  if (!currentGame) return playerId.value
+  if (playerId.value && currentGame.question[playerId.value]) return playerId.value
+  if (solo.value && currentGame.gameState.tag === 'IsChooseDecks') {
+    return Object.keys(currentGame.question)[0] ?? playerId.value
+  }
+  return playerId.value
+})
+const question = computed(() => {
+  const owner = questionPlayerId.value
+  return owner ? game.value?.question[owner] : null
+})
+
+watch(questionPlayerId, (owner) => {
+  if (owner && owner !== playerId.value) playerId.value = owner
+})
+
+// Replacing a killed or insane investigator is a chain of setup questions
+// (deck, trauma, lead investigator, scenario setup). Some transitions can occur
+// after the upgrade component has unmounted, so its local waiting poll cannot
+// carry the UI through the whole chain. Keep the game view synchronized until
+// the engine leaves IsChooseDecks.
+const chooseDecksPoll = useStepPoller({
   gameId: () => props.gameId,
-  onFail: () => alert(t('gameBar.bugSubmittingFail')),
+  onChange: async () => {
+    const latest = await fetchGame(props.gameId, props.spectate)
+    game.value = latest.game
+    if (latest.playerId && !latest.game.question[playerId.value ?? '']) {
+      playerId.value = latest.playerId
+    }
+    followPendingUpgradeQuestion(latest.game)
+  },
+  shouldContinue: () => game.value?.gameState.tag === 'IsChooseDecks',
 })
 
-const { undoChordArmed } = useGameKeyboard({
-  enabled: () => !filingBug.value,
-  game,
-  playerId,
-  choices,
-  choose,
-  actionMap,
-  undo,
-  undoActionStart,
-  undoTurnStart,
-  undoPhaseStart,
-  undoRoundStart,
-  canUndoAction,
-  canUndoTurn,
-  canUndoPhase,
-  canUndoRound,
-  canUndoScenario,
-  openUndoScenarioDialog: () => undoScenarioDialog.value?.showModal(),
-  toggleShortcuts: () => (showShortcuts.value = !showShortcuts.value),
-  toggleDebug: () => debug.toggle(),
+watch(
+  () => game.value?.gameState.tag,
+  (tag) => {
+    if (tag === 'IsChooseDecks') chooseDecksPoll.start()
+    else chooseDecksPoll.stop()
+  },
+)
+
+function questionTag(q: Question | null | undefined): string | null {
+  if (!q) return null
+  if (q.tag === 'QuestionLabel') return q.question.tag
+  return q.tag
+}
+
+// PlayerTabs (the in-scenario seat switcher) is mounted only inside Scenario.vue,
+// which Campaign.vue renders under exactly this condition. Read off an explicit
+// game rather than game.value: applyGameUpdate can defer the game.value swap into
+// a view transition, so an incoming update must be inspected directly.
+function followPendingUpgradeQuestion(g: Arkham.Game) {
+  if (!solo.value || g.gameState.tag !== 'IsChooseDecks') return
+  const currentPlayerId = playerId.value
+  if (currentPlayerId && g.question[currentPlayerId]) return
+
+  // Replacement investigators can produce follow-up trauma and setup questions
+  // after ChooseUpgradeDeck has been answered. Keep following whichever solo
+  // investigator owns the continuation instead of remaining on the answered tab.
+  const pendingPlayer = Object.keys(g.question)[0]
+  if (pendingPlayer) playerId.value = pendingPlayer
+}
+
+watch([game, playerId, solo], ([currentGame]) => {
+  if (currentGame) followPendingUpgradeQuestion(currentGame)
 })
+
+function scenarioBoardMounted(g: Arkham.Game) {
+  const scenario = g.scenario
+  if (!scenario) return false
+  if (g.gameState.tag !== 'IsActive' && g.gameState.tag !== 'IsOver') return false
+  if (scenario.campaignStep) return false
+  if (!scenario.started) return false
+  return Object.keys(g.investigators).length > 0
+}
+
+const isActualScenarioView = computed(() => {
+  const g = game.value
+  if (!g?.scenario) return false
+  if (g.gameState.tag !== 'IsActive' && g.gameState.tag !== 'IsOver') return false
+  if (!g.scenario.started || g.scenario.campaignStep) return false
+  if (Object.entries(g.investigators).length === 0) return false
+
+  const activeQuestionTag = questionTag(question.value)
+  return activeQuestionTag !== 'ChooseUpgradeDeck'
+    && activeQuestionTag !== 'ChooseDeck'
+    && activeQuestionTag !== 'ChooseJoinDeck'
+    && activeQuestionTag !== 'PickScenarioSettings'
+    && activeQuestionTag !== 'PickCampaignSettings'
+    && activeQuestionTag !== 'ContinueCampaign'
+})
+
+const realityAcidLightOverride = ref<boolean | null>(null)
+const realityAcidLightMetaActive = computed(() => {
+  const scenario = game.value?.scenario
+  return scenario?.id === 'c85001' && scenario.meta?.lightActive === true
+})
+
+const realityAcidLightActive = computed(() => realityAcidLightOverride.value ?? realityAcidLightMetaActive.value)
+
+watch(realityAcidLightMetaActive, () => {
+  realityAcidLightOverride.value = null
+})
+
+watch(question, async () => {
+  await nextTick()
+  updateFocusLight()
+})
+
+const realityAcidLightDevoured = computed(() => {
+  const scenario = game.value?.scenario
+  if (scenario?.id !== 'c85001') return false
+  return realityAcidLightMetaActive.value || scenario.meta?.lightDevoured === true || realityAcidLightOverride.value !== null
+})
+
+const toggleRealityAcidLight = () => {
+  const gameId = game.value?.id
+  if (!gameId) return
+  const active = !realityAcidLightActive.value
+  realityAcidLightOverride.value = active
+  debug.send(gameId, {
+    tag: 'ScenarioSpecific',
+    contents: ['blobSetLightActive', active],
+  })
+}
+
+const activePlayerId = computed(() => game.value?.activePlayerId ?? null)
+
+function activePlayerBelongsToCurrentPlayer(g: Arkham.Game, currentPlayerId: string) {
+  if (g.activePlayerId === currentPlayerId) return true
+  return Object.values(g.investigators).some(
+    (investigator) => investigator.id === g.activePlayerId && investigator.playerId === currentPlayerId,
+  )
+}
+
+watch(activePlayerId, (newActivePlayerId, oldActivePlayerId) => {
+  if (!newActivePlayerId || !oldActivePlayerId || newActivePlayerId === oldActivePlayerId) return
+  if (props.spectate || solo.value) return
+  if (!game.value || game.value.playerCount < 2 || !playerId.value) return
+  if (!activePlayerBelongsToCurrentPlayer(game.value, playerId.value)) return
+
+  playAudioFile('turnIndicator.ogg')
+})
+
+type SkipTriggerEntry = { playerId: string; choiceIdx: number; investigatorId: string }
+
+function skipTriggerEntries(g: Arkham.Game): SkipTriggerEntry[] {
+  const result: SkipTriggerEntry[] = []
+  for (const pid of Object.keys(g.question)) {
+    const cs = ArkhamGame.choices(g, pid)
+    const idx = cs.findIndex((c) => c.tag === Message.MessageType.SKIP_TRIGGERS_BUTTON)
+    const choice = idx === -1 ? null : cs[idx]
+    if (choice?.tag === Message.MessageType.SKIP_TRIGGERS_BUTTON) {
+      result.push({ playerId: pid, choiceIdx: idx, investigatorId: choice.investigatorId })
+    }
+  }
+  return result
+}
+
+function investigatorBelongsToPlayer(g: Arkham.Game, investigatorId: string, targetPlayerId: string) {
+  return g.investigators[investigatorId]?.playerId === targetPlayerId
+}
+
+function isInvestigatorTurn(g: Arkham.Game) {
+  return g.phaseStep?.tag === 'InvestigationPhaseStep'
+    && [
+      'NextInvestigatorsTurnBeginsStep',
+      'NextInvestigatorsTurnBeginsWindow',
+      'InvestigatorTakesActionStep',
+      'InvestigatorsTurnEndsStep',
+    ].includes(g.phaseStep.contents)
+}
+
+function canCurrentPlayerSkipAllWindows(g: Arkham.Game, currentPlayerId: string) {
+  if (solo.value) return true
+
+  if (g.skillTest) {
+    return investigatorBelongsToPlayer(g, g.skillTest.investigator, currentPlayerId)
+  }
+
+  if (isInvestigatorTurn(g)) {
+    return investigatorBelongsToPlayer(g, g.activeInvestigatorId, currentPlayerId)
+  }
+
+  return true
+}
+
+function authorizedSkipTriggerEntries(g: Arkham.Game): SkipTriggerEntry[] {
+  if (!playerId.value) return []
+  if (!canCurrentPlayerSkipAllWindows(g, playerId.value)) return []
+  return skipTriggerEntries(g)
+}
+
+const skipAllAvailable = computed(() => {
+  if (!game.value) return false
+  if (skipAllPending.value.size > 0) return true
+
+  const entries = authorizedSkipTriggerEntries(game.value)
+  const distinct = new Set(entries.map((entry) => entry.playerId))
+  if (distinct.size > 1) return true
+  // The authorized player (e.g. the skill-test owner) may be waiting on a
+  // single other player's fast trigger with no window of their own to skip;
+  // let them skip that lone window too. Solo keeps the stricter rule.
+  return !solo.value && distinct.size === 1 && !distinct.has(playerId.value ?? '')
+})
+
+const skipAllInProgress = computed(() => skipAllPending.value.size > 0)
+
+function setGameQuestion(question: Record<string, Question>) {
+  if (!game.value) return
+  game.value = { ...game.value, question }
+}
+
+const websocketUrl = computed(() => {
+  const spectatePrefix = props.spectate ? '/spectate' : ''
+  return buildWebsocketUrl(`/api/v1/arkham/games/${props.gameId}${spectatePrefix}`, userStore.token)
+})
+
+watch(
+  // Also react to `spectate`: the same Game.vue instance is reused when an
+  // organizer toggles between the Spectate (organizer) and Game (play-my-seat)
+  // routes for one gameId, so we must re-fetch in the new mode to pick up the
+  // player's seat/question (or drop them when spectating again).
+  () => [props.gameId, props.spectate] as const,
+  async (newVals, oldVals) => {
+    const [newId] = newVals
+    if (!newId) return
+    if (oldVals && newId === oldVals[0] && newVals[1] === oldVals[1]) return
+    await fetchGame(props.gameId, props.spectate).then(
+      async ({ game: newGame, playerId: newPlayerId, multiplayerMode, eventId }) => {
+        preloadImages(newGame)
+        ;(window as Window & { g?: Arkham.Game }).g = newGame
+        game.value = newGame
+        solo.value = multiplayerMode === 'Solo'
+        // Engage the Epic event this game belongs to even when the URL lacks
+        // ?event (e.g. entered via the join / take-a-seat path).
+        gamePayloadEventId.value = eventId
+        updateGameLog(newGame.log)
+        playerId.value = newPlayerId
+        ready.value = true
+      },
+    )
+  },
+  { immediate: true },
+)
+
+// Local Decoders
+const gameCardDecoder = JsonDecoder.object<GameCard>(
+  {
+    title: JsonDecoder.string(),
+    card: cardDecoder,
+  },
+  'GameCard',
+)
+
+const gameCardOnlyDecoder = JsonDecoder.object<GameCardOnly>(
+  {
+    player: JsonDecoder.string(),
+    title: JsonDecoder.string(),
+    card: cardDecoder,
+  },
+  'GameCard',
+)
+
+const gameDrewCardsDecoder = JsonDecoder.object<GameDrewCards>(
+  {
+    player: JsonDecoder.string(),
+    title: JsonDecoder.string(),
+    cards: JsonDecoder.array<Card>(cardDecoder, 'Card[]'),
+    kind: JsonDecoder.string(),
+  },
+  'GameDrewCards',
+)
+
+// Socket Handling
+const onError = () => {
+  processing.value = false
+  storyAnswerPending.value = false
+  if (game.value && oldQuestion.value) {
+    setGameQuestion(oldQuestion.value)
+  }
+  socketError.value = true
+  /* The socket carries the token too, so a refused connection is often a dead
+   * sign-in rather than a lost network. One cheap authenticated call tells them
+   * apart: a 401 goes through the interceptor in main.ts and lands them on the
+   * sign-in form, anything else is left alone. Reconnects retry on a timer, so
+   * this is rate limited rather than one-shot -- a network blip must not spend
+   * the only probe, and this must not become a request storm. whoami only. */
+  if (Date.now() - lastAuthProbe > 30000) {
+    lastAuthProbe = Date.now()
+    void api.get('whoami').catch(() => {})
+  }
+}
+let hasConnectedOnce = false
+let lastAuthProbe = 0
+
+const onConnected = () => {
+  socketError.value = false
+  processing.value = false
+  // Anything published while the socket was down is gone -- the server drops
+  // updates for rooms with no subscriber rather than buffering them. On a
+  // RECONNECT (not the initial connect, which the page load already fetched
+  // for) pull the current state so we can't sit on a stale board.
+  if (hasConnectedOnce) void resyncGame()
+  hasConnectedOnce = true
+}
+
+const onMessage = (_ws: WebSocket, event: MessageEvent) => {
+  const result = JSON.parse(event.data)
+  handleResult(result)
+  oldQuestion.value = null
+}
+
+let qHead = 0
+const qPush = (x: any) => {
+  resultQueue.value.push(x)
+}
+const qPop = () => {
+  if (qHead >= resultQueue.value.length) {
+    resultQueue.value = []
+    qHead = 0
+    return undefined
+  }
+  return resultQueue.value[qHead++]
+}
+let decoding = false
+let pendingUpdate: { payload: string; queued: boolean } | null = null
+
+function entitiesMoved(previous: Arkham.Game, current: Arkham.Game) {
+  const placementChanged = (
+    previousEntities: Record<string, { placement: unknown }>,
+    currentEntities: Record<string, { placement: unknown }>,
+  ) => Object.entries(currentEntities).some(([id, entity]) => {
+    const previousEntity = previousEntities[id]
+    return previousEntity && JSON.stringify(previousEntity.placement) !== JSON.stringify(entity.placement)
+  })
+
+  return placementChanged(previous.investigators, current.investigators)
+    || placementChanged(previous.enemies, current.enemies)
+}
+
+function applyGameUpdate(updatedGame: Arkham.Game, locked: boolean) {
+  const nextGame = locked ? { ...updatedGame, question: {} } : updatedGame
+  const previousGame = game.value
+  const apply = async () => {
+    game.value = nextGame
+    storyAnswerPending.value = false
+    await nextTick()
+  }
+  const transitionDocument = document as Document & {
+    startViewTransition?: (callback: () => Promise<void>) => unknown
+  }
+
+  if (previousGame && entitiesMoved(previousGame, nextGame) && transitionDocument.startViewTransition) {
+    transitionDocument.startViewTransition(apply)
+  } else {
+    void apply()
+  }
+}
+
+/* `queued` says whether the caller already put this update on the replay queue,
+ * which it does when the lock was held the moment the update arrived.
+ *
+ * The distinction matters because the lock is sampled again below, after the
+ * decode: an overlay can take it in between -- the draw spotlight does exactly
+ * that, from its own decode callback -- and then an update that arrived unlocked,
+ * and so was never queued, gets its question blanked with nothing left to restore
+ * it. That is a board that cannot be clicked, with no error, until a refetch. So
+ * when the lock is found to have been taken meanwhile, the update is queued here
+ * instead. */
+function scheduleApplyUpdate(payload: string, queued: boolean) {
+  if (decoding) {
+    pendingUpdate = { payload, queued }
+    return
+  }
+  decoding = true
+  Arkham.gameDecoder
+    .decodePromise(payload)
+    .then((updatedGame) => {
+      const locked = uiLock.value
+      if (locked && !queued) qPush({ tag: 'GameUpdate', contents: payload })
+      // Behind a revelation: refresh the board but keep the question hidden so the
+      // player can't act until they dismiss it. On unlock the queued GameUpdate is
+      // replayed (locked === false) and restores the real question + side effects.
+      applyGameUpdate(updatedGame, locked)
+      updateGameLog(updatedGame.log)
+      preloadImages(updatedGame)
+      if (!locked) {
+        // PlayerTabs owns in-scenario perspective changes so tab routing and
+        // return navigation remain coordinated. Campaign/setup screens do not
+        // mount PlayerTabs, though, so follow another pending question when the
+        // current seat has finished answering. Some sequential group stories
+        // keep an empty Read question parked for every seat, so presence alone
+        // does not mean the current seat still has an answer to give.
+        const questionPlayers = Object.keys(updatedGame.question)
+        const actionableQuestionPlayers = questionPlayers.filter(
+          (pid) => ArkhamGame.choices(updatedGame, pid).length > 0,
+        )
+        const currentPlayer = playerId.value ?? ''
+        const currentQuestion = updatedGame.question[currentPlayer]
+        const currentReadIsWaiting =
+          questionTag(currentQuestion) === 'Read' &&
+          ArkhamGame.choices(updatedGame, currentPlayer).length === 0 &&
+          actionableQuestionPlayers.length > 0
+        const nextQuestionPlayer = !questionPlayers.includes(currentPlayer)
+          ? questionPlayers[0]
+          : currentReadIsWaiting
+            ? actionableQuestionPlayers[0]
+            : null
+
+        if (
+          solo.value &&
+          !props.spectate &&
+          nextQuestionPlayer &&
+          !scenarioBoardMounted(updatedGame)
+        ) {
+          playerId.value = nextQuestionPlayer
+        }
+        continueSkipAll()
+      }
+    })
+    .catch(async (err) => {
+      // A dropped update used to be an unhandled rejection: the board silently stayed on
+      // the previous state, which looks exactly like "the server ignored me" and invites
+      // the player to submit the same action again (#5256). Re-fetch instead.
+      console.error('Failed to decode game update, refetching', err)
+      await fetchGame(props.gameId, props.spectate)
+        .then(({ game: refetched }) => {
+          applyGameUpdate(refetched, uiLock.value)
+          updateGameLog(refetched.log)
+        })
+        .catch(() => {
+          socketError.value = true
+        })
+    })
+    .finally(() => {
+      decoding = false
+      if (pendingUpdate) {
+        const p = pendingUpdate
+        pendingUpdate = null
+        scheduleApplyUpdate(p.payload, p.queued)
+      }
+    })
+}
+
+function playAudioFile(fileName: string) {
+  if (soundsDisabled.value) return
+  // Only allow simple filenames from the server; audio files live under public/audio.
+  if (!/^[a-zA-Z0-9_.-]+\.(ogg|mp3|wav)$/i.test(fileName)) return
+
+  const audio = new Audio(`/audio/${fileName}`)
+  audio.play().catch((error) => console.warn(`Unable to play audio file: ${fileName}`, error))
+}
+
+function continueSkipAll() {
+  if (skipAllPending.value.size === 0) return
+  if (!game.value) return
+  const next = authorizedSkipTriggerEntries(game.value).find((e) => skipAllPending.value.has(e.playerId))
+  if (!next) {
+    skipAllPending.value = new Set()
+    return
+  }
+  sendSkipFor(next.playerId, next.choiceIdx)
+}
+
+function sendSkipFor(targetPlayerId: string, choiceIdx: number) {
+  if (!game.value || props.spectate) return
+  oldQuestion.value = game.value.question
+  const questionVersion = game.value.scenarioSteps
+  setGameQuestion({})
+  sendAnswer(
+    JSON.stringify({
+      tag: 'Answer',
+      contents: { choice: choiceIdx, playerId: targetPlayerId, questionVersion },
+    }),
+  )
+}
+
+function skipAllTriggers() {
+  if (!game.value || props.spectate) return
+  if (skipAllPending.value.size > 0) {
+    if (!processing.value) continueSkipAll()
+    return
+  }
+
+  const entries = authorizedSkipTriggerEntries(game.value)
+  if (entries.length === 0) return
+  skipAllPending.value = new Set(entries.map((e) => e.playerId))
+  const first = entries[0]
+  sendSkipFor(first.playerId, first.choiceIdx)
+}
+
+const { send, close } = useWebSocket(websocketUrl, {
+  autoReconnect: true,
+  onError,
+  onConnected,
+  onMessage,
+})
+
+/* The room was deleted. Close before navigating: `autoReconnect` would
+ * otherwise bring the socket straight back up against a room the server has
+ * just removed, and recreate it. Going home rather than showing a dead board,
+ * because there is nothing left here to look at. */
+function roomClosed() {
+  close()
+  toast.info(t('gameClosed'), { timeout: 6000 })
+  router.push({ name: 'Home' })
+}
+
+/*
+ * A GameUpdate is the only message carrying new board state, and it reaches us
+ * over a different path than the log lines do: the server broadcasts log lines
+ * in-process, but publishes GameUpdate through Redis pub/sub so it can reach
+ * other pods. When that path breaks, the failure is silent and deeply
+ * confusing -- log lines keep scrolling while the board freezes, so it reads
+ * as "the server ignored my click" and invites the player to click again.
+ *
+ * We resync on RECONNECT ONLY. There is deliberately no timer here.
+ *
+ * There used to be one: every answer armed a watchdog that refetched over REST
+ * if no GameUpdate arrived in time. Do not reintroduce it. It is a retry storm
+ * with a trigger threshold, and on 2026-08-15 it took the site down.
+ *
+ * The mechanism: the timer fired a full fetchGame -- the most expensive endpoint
+ * we have, the entire game plus log -- per client, per answer, up to four times.
+ * Actions hold a transaction and a FOR UPDATE lock on the game row for all of
+ * runMessages, so those refetches compete for the very connection pool the
+ * stalled actions are occupying. Once latency crossed the threshold, every
+ * waiting client ADDED load, which pushed latency higher, which fired more
+ * watchdogs. Positive feedback, ending in 30s RunMessagesTimeouts.
+ *
+ * Note the shape of that failure: below the threshold nothing fires and
+ * everything is healthy, so it presents as a cliff rather than a slope. It
+ * looked like a regression that "started at 10pm" when it was really a capacity
+ * ceiling finally letting normal latency cross 5s. Raising the threshold only
+ * moves the cliff; it does not remove it.
+ *
+ * And the timer was largely redundant anyway. The silent-dead-subscriber case it
+ * was written for is detected and repaired server-side by the pub/sub heartbeat
+ * on arkham:pubsub:health (see pubSubSupervisor in Api.Arkham.Helpers), which
+ * tears down and resubscribes a connection that stops delivering. A client-side
+ * timer second-guessing that buys little and costs a stampede.
+ *
+ * If a future silent-loss bug does need client cover, make it cheap and
+ * self-limiting -- probe a few bytes of current step and only fetch the whole
+ * game when it actually advanced, with jitter so clients cannot synchronise.
+ */
+let resyncing = false
+
+/*
+ * Pull current state over REST and apply it. Called on reconnect, where whatever
+ * the server currently holds is authoritative: anything published while the
+ * socket was down is gone, because the server drops updates for rooms with no
+ * subscriber rather than buffering them.
+ */
+async function resyncGame() {
+  if (resyncing) return
+  resyncing = true
+  try {
+    const { game: refetched } = await fetchGame(props.gameId, props.spectate)
+    applyGameUpdate(refetched, uiLock.value)
+    updateGameLog(refetched.log)
+    processing.value = false
+    storyAnswerPending.value = false
+  } catch (e) {
+    console.error('Resync after reconnect failed', e)
+  } finally {
+    resyncing = false
+  }
+}
+
+// Every path that answers a question goes through here, so there is one place to
+// change if answering ever needs to do more than flip `processing`.
+function sendAnswer(payload: string) {
+  processing.value = true
+  send(payload)
+}
+
+const handleResult = (result: ServerResult) => {
+  processing.value = false
+  switch (result.tag) {
+    case 'RoomClosed':
+      roomClosed()
+      return
+    case 'GameError':
+      if (props.spectate) return
+      storyAnswerPending.value = false
+      error.value = result.contents
+      if (game.value && oldQuestion.value) {
+        setGameQuestion(oldQuestion.value)
+      }
+      return
+    case 'GameMessage':
+      /* A legacy flat line, parsed to parts once here rather than in a render
+         function. Structured entries do not come this way: they ride in the
+         game payload's log tail, so the log and the board move together. */
+      gameLog.value = Object.freeze([
+        ...gameLog.value,
+        legacyLogEntry(result.contents, 0, legacyLocations()),
+      ])
+      return
+    case 'GameShowDiscard':
+      emitter.emit('showDiscards', result.contents)
+      return
+    case 'GameShowUnder':
+      emitter.emit('showUnder', result.contents)
+      return
+    case 'GameAudio':
+      playAudioFile(result.contents)
+      return
+    case 'GameUI':
+      if (result.contents.startsWith('theSilence:')) {
+        if (props.spectate) return
+        const targetPlayer = result.contents.slice('theSilence:'.length)
+        if (!(solo.value === true || targetPlayer === playerId.value)) return
+        if (uiLock.value) {
+          qPush(result)
+          return
+        }
+        document.dispatchEvent(new CustomEvent('arkham:clear-card-overlay'))
+        showTheSilenceModal.value = true
+        uiLock.value = true
+        return
+      }
+      switch (result.contents) {
+        case 'confetti': {
+          setTimeout(() => {
+            var count = 500
+            var defaults = {
+              origin: { y: 0.7 },
+            }
+
+            function fire(particleRatio: number, opts: Parameters<typeof confetti>[0]) {
+              confetti({
+                ...defaults,
+                ...opts,
+                particleCount: Math.floor(count * particleRatio),
+              })
+            }
+
+            fire(0.25, {
+              spread: 26,
+              startVelocity: 55,
+            })
+          }, 500)
+        }
+        default:
+          return
+      }
+    case 'GameTarot':
+      if (props.spectate) return
+      if (uiLock.value) {
+        qPush(result)
+        return
+      }
+
+      uiLock.value = true
+      JsonDecoder.array(tarotCardDecoder, 'tarotCards')
+        .decodePromise(result.contents)
+        .then((r) => {
+          tarotCards.value = r
+        })
+        .catch((e) => {
+          console.error(e)
+          uiLock.value = false
+        })
+      return
+
+    case 'GameAchievement': {
+      // Non-blocking gold toast; vue-toastification stacks multiple unlocks.
+      // Strings are translated here because the toast container has no i18n.
+      const tag = result.contents
+      toast(
+        {
+          component: markRaw(AchievementToast),
+          props: {
+            title: t('achievements.toastTitle'),
+            name: t(`${achievementEntryScope(tag)}.name`),
+            text: t(`${achievementEntryScope(tag)}.text`),
+          },
+        },
+        { timeout: 8000, icon: false, closeButton: false, toastClassName: 'achievement-toast' },
+      )
+      return
+    }
+
+    case 'GameCard':
+      if (props.spectate) return
+      if (uiLock.value) {
+        qPush(result)
+        return
+      }
+
+      uiLock.value = true
+      gameCardDecoder
+        .decodePromise(result as any)
+        .then((r) => {
+          gameCard.value = r
+        })
+        .catch((e) => {
+          console.error(e)
+          uiLock.value = false
+        })
+      return
+
+    case 'GameCardOnly':
+      if (props.spectate) return
+      if (uiLock.value) {
+        qPush(result)
+        return
+      }
+
+      uiLock.value = true
+      gameCardOnlyDecoder
+        .decodePromise(result as any)
+        .then((r) => {
+          // if it isn't for us, immediately unlock and continue draining
+          if (!(solo.value === true || r.player === playerId.value)) {
+            uiLock.value = false
+            return
+          }
+          gameCard.value = r
+        })
+        .catch((e) => {
+          console.error(e)
+          uiLock.value = false
+        })
+      return
+    case 'GameDrewCards': {
+      if (props.spectate) return
+      /* The one preference that costs nothing is read BEFORE the lock is taken: a
+       * draw nobody asked to see must not stall this client's queue even for the
+       * length of a decode. */
+      if (settings.drawSpotlight === 'off') return
+      if (uiLock.value) {
+        qPush(result)
+        return
+      }
+      /* Everything past here takes the lock FIRST and releases it on the paths
+       * that turn out not to open the spotlight, exactly as GameCardOnly does.
+       * Deferring the lock to the decode callback left a window in which this
+       * client looked unlocked while a spotlight was already on its way: another
+       * result popped off the replay queue could take the lock for its own overlay,
+       * and a GameUpdate handled in that window blanked its question against a lock
+       * that was not held when it arrived. */
+      uiLock.value = true
+      gameDrewCardsDecoder
+        .decodePromise(result as any)
+        .then((r) => {
+          if (!(solo.value === true || r.player === playerId.value)) {
+            uiLock.value = false
+            return
+          }
+          if (settings.drawSpotlight === 'upkeep' && r.kind !== 'upkeep') {
+            uiLock.value = false
+            return
+          }
+          // Re-takes the lock, and leaves it alone if it has nothing to show.
+          if (!showDrawSpotlight({ title: format(r.title), cards: r.cards })) {
+            uiLock.value = false
+          }
+        })
+        .catch((e) => {
+          console.error(e)
+          uiLock.value = false
+        })
+      return
+    }
+    case 'SharedStateUpdate':
+      // "Epic Multiplayer" shared-state feed riding on this group's game ws.
+      // Forward it to the event store so the organizer bar's shared counters stay
+      // live; harmless no-op for ordinary games that never receive this tag.
+      eventStore.applySharedState(result.contents)
+      return
+    case 'EventChanged': {
+      const eid = resolvedEventId.value
+      if (eid) void eventStore.load(eid).catch((e) => console.error(e))
+      return
+    }
+    case 'PhaseChanged':
+      showPhaseNotification(result.contents as Phase)
+      return
+    case 'GameUpdate': {
+      // Flush the latest state onto the board even while a revelation/modal holds
+      // the UI lock, so the table behind it reflects the current situation instead
+      // of freezing on the pre-revelation state (issue #4817). Keep it queued so
+      // the pending question is only restored once every revelation is dismissed.
+      const queued = uiLock.value
+      if (queued) qPush(result)
+      scheduleApplyUpdate(result.contents, queued)
+      return
+    }
+  }
+}
+
+watch(uiLock, async () => {
+  if (uiLock.value) return
+  // Drain queued revelation/effect results first. Phase notifications start only
+  // after the last blocking result has finished, so they cannot race the overlay.
+  for (;;) {
+    const r = qPop()
+    if (!r) break
+    handleResult(r)
+    if (uiLock.value) break
+  }
+  if (!uiLock.value) void drainPhaseNotificationQueue()
+})
+
+const confirmingUndoScenario = ref(false)
+
+/* "Undo back to here", picked off a log entry. Holds the game step the entry
+   was written under plus a flat rendering of it, so the confirmation can name
+   what is about to be thrown away. */
+const confirmingUndoStep = ref<{ step: number; label: string } | null>(null)
+
+/* A menu entry names its shortcut so it follows the active keybinding profile;
+ * `shortcut` remains the raw-key escape hatch for keys no profile remaps. */
+const runMenuShortcut = (event: KeyboardEvent): boolean => {
+  for (const item of menuItems.value) {
+    if (item.binding ? isKey(item.binding, event) : item.shortcut === event.key) {
+      item.action()
+      return true
+    }
+  }
+  return false
+}
+
+const menuShortcutKeys = (item: MenuEntry): string[] => {
+  if (item.binding) return shortcutKeys(item.binding)
+  return item.shortcut ? [item.shortcut] : []
+}
+
+/* The card under the cursor as a debug target. `data-id` sits on the card image for
+ * assets, enemies and locations, and on the two wrappers an investigator renders as
+ * -- the same four kinds `debugCardDrop` can aim at with a drag.
+ *
+ * `closest` rather than the element itself, because these keys are pressed while
+ * pointing at whatever happens to be on top: a status badge, a token pool, the
+ * action pips over a portrait. The nearest ancestor wins, so an asset in a player
+ * area still resolves to the asset and not to the investigator behind it. */
+const hoveredCardTarget = (): SealTarget | null => {
+  const id = document
+    .elementFromPoint(mouseX, mouseY)
+    ?.closest('[data-id]')
+    ?.getAttribute('data-id')
+  const currentGame = game.value
+  if (!id || !currentGame) return null
+  if (currentGame.assets[id]) return assetTarget(id)
+  if (currentGame.enemies[id]) return enemyTarget(id)
+  if (currentGame.locations[id]) return locationTarget(id)
+  if (currentGame.investigators[id]) return investigatorTarget(id)
+  return null
+}
+
+const HOVER_TOKENS: Record<Exclude<HoverAction, 'exhaustHovered'>, PlaceableToken> = {
+  placeDamage: 'Damage',
+  placeHorror: 'Horror',
+  placeDoom: 'Doom',
+  placeClue: 'Clue',
+  placeResource: 'Resource',
+}
+
+/* Runs before the board-level shortcuts, and only when a card is really under the
+ * cursor, which is what lets one press place a resource on the card you are pointing
+ * at and take resources from the pool otherwise -- the way SCE's numpad 9 does.
+ *
+ * Debug-only, because placing a token is not a player action here: the engine owns
+ * every token on the table. */
+const runHoverShortcut = (event: KeyboardEvent): boolean => {
+  if (!debug.active) return false
+  const currentGame = game.value
+  if (!currentGame) return false
+
+  const target = hoveredCardTarget()
+  if (!target) return false
+
+  if (isHoverKey('exhaustHovered', event)) {
+    if (target.tag !== 'AssetTarget') return false
+    const exhausted = currentGame.assets[target.contents]?.exhausted
+    debug.send(currentGame.id, { tag: exhausted ? 'Ready' : 'Exhaust', contents: target })
+    return true
+  }
+
+  for (const [action, token] of Object.entries(HOVER_TOKENS)) {
+    if (!isHoverKey(action as HoverAction, event)) continue
+    // Same convention as dragging a token out of the debug panel: shift places five.
+    placeTokensOn(currentGame.id, target, token, event.shiftKey ? 5 : 1)
+    return true
+  }
+
+  return false
+}
+
+const canUndoScenario = computed(() => {
+  if (!game.value) return false
+  return game.value.scenarioSteps > 1
+})
+
+const canUndoBoundary = (boundary: number | null): boolean => {
+  if (!game.value) return false
+  if (boundary === null) return false
+  return game.value.scenarioSteps > boundary
+}
+
+const canUndoAction = computed(() => canUndoBoundary(game.value?.undoActionStep ?? null))
+const canUndoTurn = computed(() => canUndoBoundary(game.value?.undoTurnStep ?? null))
+const canUndoPhase = computed(() => canUndoBoundary(game.value?.undoPhaseStep ?? null))
+const canUndoRound = computed(() => canUndoBoundary(game.value?.undoRoundStep ?? null))
+
+// Chord state for U + <key> shortcuts (T/R/P/S/A)
+const undoChordArmed = ref(false)
+let undoChordTimer: number | null = null
+const UNDO_CHORD_TIMEOUT_MS = 1500
+
+const armUndoChord = () => {
+  undoChordArmed.value = true
+  if (undoChordTimer) clearTimeout(undoChordTimer)
+  undoChordTimer = window.setTimeout(() => {
+    undoChordArmed.value = false
+    undoChordTimer = null
+  }, UNDO_CHORD_TIMEOUT_MS)
+}
+
+const clearUndoChord = () => {
+  undoChordArmed.value = false
+  if (undoChordTimer) {
+    clearTimeout(undoChordTimer)
+    undoChordTimer = null
+  }
+}
+
+// --- Konami Code support ---
+const KONAMI_SEQ = [
+  'ArrowUp',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowLeft',
+  'ArrowRight',
+  'b',
+  'a',
+] as const
+
+let konamiIndex = 0
+let konamiTimer: number | null = null
+const KONAMI_TIMEOUT_MS = 5000 // reset if user pauses too long
+
+const onKonami = () => {
+  if (!game.value) return
+  debug.send(game.value.id, { tag: 'KonamiCode', contents: playerId.value })
+}
+
+const feedKonami = (rawKey: string): boolean => {
+  const key = rawKey.length === 1 ? rawKey.toLowerCase() : rawKey
+
+  // match current step
+  if (key === KONAMI_SEQ[konamiIndex]) {
+    konamiIndex++
+    if (konamiIndex === KONAMI_SEQ.length) {
+      // success!
+      konamiIndex = 0
+      if (konamiTimer) {
+        clearTimeout(konamiTimer)
+        konamiTimer = null
+      }
+      onKonami()
+      return true
+    }
+    // keep a rolling timeout while the user is entering
+    if (konamiTimer) clearTimeout(konamiTimer)
+    konamiTimer = window.setTimeout(() => {
+      konamiIndex = 0
+      konamiTimer = null
+    }, KONAMI_TIMEOUT_MS)
+    return false
+  }
+
+  // mismatch: allow overlap if this key is the first symbol of the sequence
+  if (key === KONAMI_SEQ[0]) {
+    konamiIndex = 1
+    if (konamiTimer) clearTimeout(konamiTimer)
+    konamiTimer = window.setTimeout(() => {
+      konamiIndex = 0
+      konamiTimer = null
+    }, KONAMI_TIMEOUT_MS)
+  } else {
+    konamiIndex = 0
+    if (konamiTimer) {
+      clearTimeout(konamiTimer)
+      konamiTimer = null
+    }
+  }
+
+  return false
+}
+
+// Keyboard Shortcuts
+const handleKeyPress = (event: KeyboardEvent) => {
+  if (filingBug.value) return
+  if (isTypingTarget(event.target)) return
+  if (event.altKey) return
+  /* Ctrl/Cmd chords stay the browser's unless the active profile actually asked
+   * for one -- the TTS profile puts undo on Ctrl+Z. */
+  if ((event.ctrlKey || event.metaKey) && !anyBindingMatches(event)) return
+
+  if (feedKonami(event.key)) return
+
+  // Chord: when U is armed, the next key chooses the undo level
+  if (undoChordArmed.value) {
+    const k = event.key.toLowerCase()
+    if (k === 'a' && canUndoAction.value) {
+      clearUndoChord()
+      undoActionStart()
+      return
+    }
+    if (k === 't' && canUndoTurn.value) {
+      clearUndoChord()
+      undoTurnStart()
+      return
+    }
+    if (k === 'p' && canUndoPhase.value) {
+      clearUndoChord()
+      undoPhaseStart()
+      return
+    }
+    if (k === 'r' && canUndoRound.value) {
+      clearUndoChord()
+      undoRoundStart()
+      return
+    }
+    if (k === 's' && canUndoScenario.value) {
+      clearUndoChord()
+      confirmingUndoScenario.value = true
+      return
+    }
+    // Pressing the prefix again while armed = single undo
+    if (isKey('undo', event) || isKey('undoChord', event)) {
+      clearUndoChord()
+      event.preventDefault()
+      undo()
+      return
+    }
+    // Any other key cancels the chord and falls through
+    clearUndoChord()
+  }
+
+  if (isKey('undo', event)) {
+    event.preventDefault()
+    undo()
+    return
+  }
+
+  if (isKey('undoChord', event)) {
+    armUndoChord()
+    return
+  }
+
+  if (isKey('toggleDebug', event)) {
+    debug.toggle()
+    return
+  }
+
+  if (isKey('showShortcuts', event)) {
+    showShortcuts.value = !showShortcuts.value
+    return
+  }
+
+  if (runHoverShortcut(event)) return
+
+  if (isKey('continue', event) || event.code === 'Space') {
+    event.preventDefault()
+
+    // Dismissing the draw spotlight runs the flight to the hand, so it cannot go
+    // through continueUI's blunt teardown.
+    if (drawSpotlight.value) {
+      dismissDrawSpotlight()
+      return
+    }
+
+    if (gameCard.value || tarotCards.value.length > 0) {
+      continueUI()
+      return
+    }
+
+    const skipTriggers = choices.value.findIndex(
+      (c) => c.tag === Message.MessageType.SKIP_TRIGGERS_BUTTON,
+    )
+    if (skipTriggers !== -1) {
+      choose(skipTriggers)
+      return
+    }
+
+    const doneCommitting = choices.value.findIndex((c) => {
+      if (c.tag === Message.MessageType.START_SKILL_TEST_BUTTON) return true
+      if (c.tag !== Message.MessageType.LABEL && c.tag !== Message.MessageType.DONE) return false
+      return c.label === '$label.doneCommitting' || c.label.endsWith('doneCommitting')
+    })
+    if (doneCommitting !== -1) {
+      choose(doneCommitting)
+      return
+    }
+
+    const validIndices = choices.value
+      .map((c, i) =>
+        ![Message.MessageType.INVALID_LABEL, Message.MessageType.INFO].includes(c.tag) ? i : -1,
+      )
+      .filter((i) => i !== -1)
+
+    if (validIndices.length === 1) {
+      choose(validIndices[0])
+      return
+    }
+
+    if (choices.value.length === 1) {
+      choose(0)
+      return
+    }
+    return
+  }
+
+  if (isKey('draw', event)) {
+    const draw = choices.value.findIndex((c) => {
+      if (c.tag !== Message.MessageType.COMPONENT_LABEL) return false
+      if (c.component.tag !== 'InvestigatorDeckComponent') return false
+      if (!playerId.value) return false
+      return game.value?.investigators[c.component.investigatorId]?.playerId === playerId.value
+    })
+    if (draw !== -1) {
+      choose(draw)
+    } else {
+      const drawEncounter = choices.value.findIndex((c) => {
+        if (c.tag !== Message.MessageType.TARGET_LABEL) return false
+        return c.target.tag === 'EncounterDeckTarget'
+      })
+
+      if (drawEncounter !== -1) choose(drawEncounter)
+    }
+    return
+  }
+
+  if (isKey('takeResources', event)) {
+    const resource = choices.value.findIndex((c) => {
+      if (c.tag !== Message.MessageType.COMPONENT_LABEL) return false
+      if (c.component.tag !== 'InvestigatorComponent') return false
+      if (c.component.tokenType !== 'ResourceToken') return false
+      if (!playerId.value) return false
+      return game.value?.investigators[c.component.investigatorId]?.playerId === playerId.value
+    })
+    if (resource !== -1) choose(resource)
+    return
+  }
+
+  if (isKey('endTurn', event)) {
+    if (!game.value || !playerId.value) return
+    const endTurn = choices.value.findIndex((c) => {
+      if (c.tag !== Message.MessageType.END_TURN_BUTTON) return false
+      return game.value?.investigators[c.investigatorId]?.playerId === playerId.value
+    })
+    if (endTurn !== -1) choose(endTurn)
+    return
+  }
+
+  runMenuShortcut(event)
+}
 
 // Sidebar
 const toggleSidebar = function () {
@@ -349,18 +2015,398 @@ const toggleSidebar = function () {
   }
 }
 
-function confirmUndoScenario() {
-  undoScenarioDialog.value?.close()
-  undoScenario()
+// Undo
+const undoLock = ref(false)
+
+/*
+ * Every undo goes through here so the lock is taken BEFORE any UI state is
+ * touched and released in `finally`.
+ *
+ * Both halves matter. Guarding after the state wipe meant a press that lost the
+ * race still blanked the question and then returned without sending anything --
+ * the board went empty and stayed empty. And releasing only on the happy path
+ * meant a single request that never settled left `undoLock` true for the life of
+ * the page, after which every press was a silent no-op: no request, no error,
+ * nothing in the console, just a dead Undo button. The undo calls carry their own
+ * timeout (see api.ts) so the promise always settles and this `finally` can run.
+ */
+async function runUndo(call: (gameId: string) => Promise<void>) {
+  if (undoLock.value) return
+  undoLock.value = true
+  processing.value = true
+  const oldQuestion = game.value?.question
+  if (game.value) setGameQuestion({})
+  resultQueue.value = []
+  gameCard.value = null
+  tarotCards.value = []
+  clearDrawSpotlight()
+  uiLock.value = false
+  try {
+    await call(props.gameId)
+  } catch (e) {
+    processing.value = false
+    if (game.value && oldQuestion) setGameQuestion(oldQuestion)
+    console.log(e)
+  } finally {
+    undoLock.value = false
+  }
 }
+
+async function undo() {
+  await runUndo((gameId) => undoChoice(gameId, debug.active))
+}
+
+async function undoScenario() {
+  confirmingUndoScenario.value = false
+  await runUndo(undoScenarioChoice)
+}
+
+/* Who a typed line is attributed to: this client's own seat, falling back to
+   whoever is active (a multihanded-solo player holds several seats, and any of
+   them is a truthful attribution). */
+const chatInvestigatorId = computed(() => {
+  const g = game.value
+  if (!g) return null
+  const mine = Object.values(g.investigators).find((i) => i.playerId === playerId.value)
+  return mine?.id ?? g.activeInvestigatorId ?? null
+})
+
+async function say(text: string) {
+  const iid = chatInvestigatorId.value
+  if (!iid) return
+  try {
+    await Api.sayInLog(props.gameId, iid, text)
+  } catch (e) {
+    console.log(e)
+  }
+}
+
+function requestUndoToStep(step: number, label: string) {
+  confirmingUndoStep.value = { step, label }
+}
+
+async function undoToStepConfirmed() {
+  const pending = confirmingUndoStep.value
+  confirmingUndoStep.value = null
+  if (!pending) return
+  await runUndo((gameId) => undoToStep(gameId, pending.step))
+}
+
+const undoActionStart = () => runUndo(undoAction)
+const undoTurnStart = () => runUndo(undoTurn)
+const undoPhaseStart = () => runUndo(undoPhase)
+const undoRoundStart = () => runUndo(undoRound)
+
+const mobileUndoApi = {
+  undo, undoScenario, undoActionStart, undoTurnStart, undoPhaseStart, undoRoundStart,
+  canUndoScenario, canUndoAction, canUndoTurn, canUndoPhase, canUndoRound,
+}
+useTurnNotification({ pendingChoices: computed(() => choices.value.length), remotePushEnabled })
+
+const filingBug = ref(false)
+const submittingBug = ref(false)
+const bugTitle = ref('')
+const bugDescription = ref('')
 
 function fileBugFromError() {
-  const description = error.value ?? ''
+  bugDescription.value = error.value ?? ''
   error.value = null
-  openBugReport(description)
+  filingBug.value = true
 }
 
+async function fileBug() {
+  submittingBug.value = true
+  filingBug.value = false
+  Api.fileBug(props.gameId)
+    .then((response) => {
+      const title = encodeURIComponent(bugTitle.value)
+      const body = encodeURIComponent(
+        `${bugDescription.value}\n\ngame: ${window.location.href}\nfile: ${response.data}`,
+      )
+      window.open(
+        `https://github.com/halogenandtoast/ArkhamHorror/issues/new?labels=bug&title=${title}&body=${body}&assignee=halogenandtoast&projects=halogenandtoast/2`,
+        '_blank',
+      )
+      submittingBug.value = false
+    })
+    .catch(() => {
+      alert(t('gameBar.bugSubmittingFail'))
+      submittingBug.value = false
+    })
+}
+
+const clearRevealState = () => {
+  gameCard.value = null
+  showTheSilenceModal.value = false
+  tarotCards.value = []
+  drawSpotlight.value = null
+}
+
+/* The revealed card flies to whatever it became -- the enemy that spawned, the
+ * treachery in the threat area, the location placed on the map. Tarot and The
+ * Silence carry no card, so they fall through to a plain dismissal. */
+const continueUI = () => {
+  const card = gameCard.value?.card
+  flyThenDismiss(card ? [card] : [], clearRevealState)
+}
+
+function preloadImages(game: Arkham.Game): void {
+  void loadAllImages(game).catch((e: unknown) => {
+    console.error(e)
+  })
+}
+
+async function loadAllImages(game: Arkham.Game): Promise<void> {
+  const cards = Object.values(game.cards)
+  const visibleImages = cards.map((card) => {
+    const { cardCode, isFlipped } = toCardContents(card)
+    return cardImg(`${cardCode.replace(/^c/, '')}${isFlipped ? 'b' : ''}`)
+  })
+
+  // Start visible art immediately; card definitions may still be loading.
+  const visibleLoad = loadImages(visibleImages)
+  const cardDefs = store.loaded ? store.cards : await store.fetchCards()
+
+  if (cardDefs) {
+    const defsByCode = new Map<string, (typeof cardDefs)[number]>()
+    for (const cardDef of cardDefs) {
+      defsByCode.set(cardDef.cardCode.replace(/^c/, ''), cardDef)
+      defsByCode.set(cardDef.art.replace(/^c/, ''), cardDef)
+    }
+
+    const reverseImages = cards.flatMap((card) => {
+      const cardDef = defsByCode.get(toCardContents(card).cardCode.replace(/^c/, ''))
+      if (!cardDef || !cardHasDistinctBack(cardDef)) return []
+
+      const { front, back } = cardFaceImages(cardDef)
+      return back ? [front, back] : [front]
+    })
+    await Promise.all([visibleLoad, loadImages(reverseImages)])
+    return
+  }
+
+  await visibleLoad
+}
+
+async function loadImages(urls: string[]): Promise<void> {
+  const pending = [...new Set(urls)].filter(
+    (url) => !preloaded.has(url) && !preloading.has(url),
+  )
+  if (pending.length === 0) return
+  pending.forEach((url) => preloading.add(url))
+
+  await Promise.all(
+    pending.map(
+      (url) =>
+        new Promise<void>((resolve) => {
+          const img = new Image()
+          img.onload = () => {
+            preloaded.add(url)
+            preloading.delete(url)
+            resolve()
+          }
+          img.onerror = () => {
+            preloaded.add(url)
+            preloading.delete(url)
+            console.warn(`Could not preload ${url}`)
+            resolve()
+          }
+          img.src = url
+        }),
+    ),
+  )
+}
+
+// Keep a multi-token reveal mounted while its per-token reaction windows advance.
+// Clearing the question here would tear down and recreate the same modal and
+// token components after every skip, replaying all of their reveal animations.
+function shouldPreserveFocusedChaosWindow() {
+  if (!game.value || !playerId.value || game.value.focusedChaosTokens.length === 0) return false
+  const currentQuestion = game.value.question[playerId.value]
+  return currentQuestion?.tag === 'ChooseOne' && currentQuestion.isWindow === true
+}
+
+// Keep focused-card modals mounted between one-at-a-time choices. The server
+// returns a new question after each card, and clearing the old one eagerly makes
+// the modal disappear and reappear between those responses.
+function shouldPreserveFocusedCardChoice() {
+  if (!game.value || !playerId.value) return false
+  // Not just `focusedCards`: a look that leaves its cards in the search results
+  // (putting them back in any order) is the same one-at-a-time modal.
+  if (ArkhamGame.revealedCards(game.value, playerId.value).length === 0) return false
+  return Boolean(game.value.question[playerId.value])
+}
+
+// Read questions (story passages, interludes, resolutions) render as a full-page
+// spread rather than a widget over the board.
+function isStoryQuestion(question: Question | null | undefined): boolean {
+  if (!question) return false
+  const inner = question.tag === 'QuestionLabel' ? question.question : question
+  return inner?.tag === 'Read'
+}
+
+// Callbacks
+async function choose(idx: number) {
+  if (processing.value) return
+  if (idx !== -1 && game.value && !props.spectate) {
+    oldQuestion.value = game.value.question
+    const questionVersion = game.value.scenarioSteps
+    if (!shouldPreserveFocusedChaosWindow() && !shouldPreserveFocusedCardChoice()) {
+      // A story screen is the whole page. Blanking its question empties the view
+      // for the round-trip and the next passage pops in from nothing, so hold the
+      // text and mark its choices spent instead.
+      if (isStoryQuestion(game.value.question[playerId.value ?? ''])) {
+        storyAnswerPending.value = true
+      } else {
+        setGameQuestion({})
+      }
+    }
+    sendAnswer(
+      JSON.stringify({
+        tag: 'Answer',
+        contents: { choice: idx, playerId: playerId.value, questionVersion },
+      }),
+    )
+  }
+}
+
+/* Answer a one-at-a-time question in one go, in the order given. The engine
+ * resolves every choice in a single pass, so the whole sequence is one action
+ * and one undo step -- answering them one at a time leaves a step per choice,
+ * and undoing into the middle of a sequence strands the rest of it. Provided
+ * rather than emitted: the components between here and the panel that needs it
+ * would otherwise each have to relay an event they have no use for. */
+async function chooseOrdered(choices: number[]) {
+  if (processing.value || choices.length === 0) return
+  if (!game.value || props.spectate) return
+
+  oldQuestion.value = game.value.question
+  const questionVersion = game.value.scenarioSteps
+  if (!shouldPreserveFocusedChaosWindow() && !shouldPreserveFocusedCardChoice()) {
+    setGameQuestion({})
+  }
+  sendAnswer(
+    JSON.stringify({
+      tag: 'OrderedAnswer',
+      contents: { choices, playerId: playerId.value, questionVersion },
+    }),
+  )
+}
+
+/* An overlay chosen at deck selection applies to this game only -- it is sent
+ * with the answer rather than saved to the deck. */
+async function chooseDeck(deckId: string, overlay: any = null): Promise<void> {
+  if (game.value && !props.spectate) {
+    oldQuestion.value = game.value.question
+    setGameQuestion({})
+    sendAnswer(JSON.stringify({ tag: 'DeckAnswer', deckId, playerId: playerId.value, overlay }))
+  }
+}
+
+async function chooseDeckList(deckList: object): Promise<void> {
+  if (game.value && !props.spectate) {
+    oldQuestion.value = game.value.question
+    setGameQuestion({})
+    sendAnswer(JSON.stringify({ tag: 'DeckListAnswer', deckList, playerId: playerId.value }))
+  }
+}
+
+async function choosePaymentAmounts(amounts: Record<string, number>): Promise<void> {
+  if (game.value && !props.spectate) {
+    oldQuestion.value = game.value.question
+    const questionVersion = game.value.scenarioSteps
+    setGameQuestion({})
+    sendAnswer(
+      JSON.stringify({
+        tag: 'PaymentAmountsAnswer',
+        contents: { amounts, questionVersion, playerId: playerId.value },
+      }),
+    )
+  }
+}
+
+async function scenarioSpecificAnswer(key: string, value: unknown): Promise<void> {
+  if (game.value && !props.spectate) {
+    oldQuestion.value = game.value.question
+    setGameQuestion({})
+    sendAnswer(JSON.stringify({ tag: 'ScenarioSpecificAnswer', contents: [key, value] }))
+  }
+}
+
+async function chooseAmounts(amounts: Record<string, number>): Promise<void> {
+  if (game.value && !props.spectate) {
+    oldQuestion.value = game.value.question
+    const questionVersion = game.value.scenarioSteps
+    setGameQuestion({})
+    sendAnswer(
+      JSON.stringify({
+        tag: 'AmountsAnswer',
+        contents: { amounts, questionVersion, playerId: playerId.value },
+      }),
+    )
+  }
+}
+
+async function update(state: Arkham.Game) {
+  game.value = state
+  followPendingUpgradeQuestion(state)
+}
+
+function switchInvestigator(newPlayerId: string) {
+  playerId.value = newPlayerId
+}
+type ExportType = 'basic' | 'full' | 'scenario'
+function debugExport(exportType: ExportType) {
+  const isFullExport = exportType === 'full'
+  api
+    .get(
+      `arkham/games/${props.gameId}/${isFullExport ? 'full-' : exportType == 'scenario' ? 'scenario-' : ''}export`,
+      { responseType: 'blob', params: isFullExport ? { gzip: true } : undefined },
+    )
+    .then((resp) => {
+      const url = window.URL.createObjectURL(resp.data)
+      const a = document.createElement('a')
+      a.style.display = 'none'
+      a.href = url
+      // the filename you want
+      a.download = isFullExport ? 'arkham-debug.json.gz' : 'arkham-debug.json'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+    })
+    .catch((e) => {
+      console.log(e)
+      alert(t('game.unableToDownloadExport'))
+    })
+}
+
+// provides
+provide(choicesByPlayerKey, choicesByPlayer)
+provide(choicesSourceByPlayerKey, choicesSourceByPlayer)
+provide(choicesTooltipByPlayerKey, choicesTooltipByPlayer)
+provide(gameIndexesKey, gameIndexes)
+provide('chooseDeck', chooseDeck)
+provide('chooseDeckList', chooseDeckList)
+provide('send', send)
+provide('choosePaymentAmounts', choosePaymentAmounts)
+provide('chooseAmounts', chooseAmounts)
+provide('scenarioSpecificAnswer', scenarioSpecificAnswer)
+provide('switchInvestigator', switchInvestigator)
+provide('solo', solo)
+provide('spectate', computed(() => props.spectate))
+provide('processing', processing)
+provide('chooseOrdered', chooseOrdered)
+provide('storyAnswerPending', storyAnswerPending)
+provide('uiLock', uiLock)
+provide(CARD_FLIGHT_STATE, { previewed: previewedCardIds, flying: flyingCardIds })
+provide('skipAllTriggers', skipAllTriggers)
+provide('skipAllAvailable', skipAllAvailable)
+provide('skipAllInProgress', skipAllInProgress)
+provide('showOtherPlayersHands', showOtherPlayersHands)
+
 function updateFocusLight() {
+  if (!realityAcidLightActive.value) return
+
   const highlighted = [...document.querySelectorAll<HTMLElement>(
     '.source-highlight, .ability-target, .card-frame-inner.highlighted, .cards-under-indicator--highlighted',
   )].find((el) => {
@@ -382,6 +2428,7 @@ function updateFocusLight() {
 }
 
 function scheduleFocusLightUpdate() {
+  if (!realityAcidLightActive.value) return
   if (focusLightAnimationFrame !== null) return
   focusLightAnimationFrame = requestAnimationFrame(() => {
     focusLightAnimationFrame = null
@@ -389,15 +2436,36 @@ function scheduleFocusLightUpdate() {
   })
 }
 
-watch(
-  () => game.value?.question,
-  async () => {
-    await nextTick()
-    updateFocusLight()
-  },
-)
+// One scenario renders this light, but the observer is a body-wide subtree
+// watch on every class change and the sweep it schedules reads a rect per
+// match. Arm it only when something is actually drawing from it.
+function connectFocusLightObserver() {
+  if (focusLightObserver) return
+  focusLightObserver = new MutationObserver(scheduleFocusLightUpdate)
+  focusLightObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true })
+  scheduleFocusLightUpdate()
+}
+
+function disconnectFocusLightObserver() {
+  focusLightObserver?.disconnect()
+  focusLightObserver = null
+  if (focusLightAnimationFrame !== null) {
+    cancelAnimationFrame(focusLightAnimationFrame)
+    focusLightAnimationFrame = null
+  }
+  focusLightX.value = -1000
+  focusLightY.value = -1000
+}
+
+watch(realityAcidLightActive, (active) => {
+  if (active) connectFocusLightObserver()
+  else disconnectFocusLightObserver()
+})
 
 const onMove = (event: MouseEvent) => {
+  mouseX = event.clientX
+  mouseY = event.clientY
+  if (!realityAcidLightActive.value) return
   flashlightX.value = event.clientX
   flashlightY.value = event.clientY
   scheduleFocusLightUpdate()
@@ -422,21 +2490,73 @@ onMounted(() => {
   }
   ;(window as any).undo = undo
   ;(window as any).debugChoose = choose
+  /* Lets a dev build fire each draw-spotlight treatment against a real board
+   * without an engine change behind it, so the look can be chosen before the
+   * wiring exists. Dev only: it fabricates a reveal the game never had. */
+  if (isDevBuild()) {
+    ;(window as any).__drawSpotlightDemo = (opts: { count?: number } = {}) => {
+      const g = game.value
+      if (!g) return 'no game loaded'
+      /* Cards whose hand slot is actually on screen, so the flight on dismiss
+       * lands somewhere real -- the whole point of looking at it. An inactive
+       * investigator tab keeps its board in the DOM at `display: none`, so
+       * "in hand" is not the same as "visible", and the seat that owns this
+       * playerId is not necessarily the tab being shown. */
+      const onScreen = (cards: Card[]) =>
+        cards.filter((c) => laidOutDestination(toCardContents(c).id))
+      let investigator = Object.values(g.investigators).find(
+        (i) => i.playerId === playerId.value,
+      )
+      let pool = onScreen(investigator?.hand ?? [])
+      if (pool.length === 0) {
+        const shown = Object.values(g.investigators).find((i) => onScreen(i.hand ?? []).length)
+        if (shown) {
+          investigator = shown
+          pool = onScreen(shown.hand)
+        }
+      }
+      if (pool.length === 0) return 'no hand cards are visible to fly to'
+      const cards = pool.slice(0, Math.max(1, opts.count ?? 1))
+      // Built as the embedded-i18n string the server actually sends, and run
+      // through the same `format`, so the demo cannot drift from the real thing.
+      const name = investigator?.name.title ?? 'Someone'
+      const key = cards.length > 1 ? 'drewCards' : 'drewCard'
+      const title = format(`$${key} iname=s:"${name}" count=i:${cards.length}`)
+      showDrawSpotlight({ cards, title })
+      return { count: cards.length }
+    }
+    /* Feed a raw server result straight into the socket handler, so the decode
+     * and the preference gating can be exercised without a server that emits it
+     * yet. Takes the same JSON the websocket carries. */
+    ;(window as any).__feedServerResult = (payload: any) => {
+      handleResult(typeof payload === 'string' ? JSON.parse(payload) : payload)
+    }
+    ;(window as any).__drawSpotlightClear = () => {
+      clearDrawSpotlight()
+      uiLock.value = false
+    }
+  }
   document.addEventListener('mousemove', onMove, { passive: true })
-  focusLightObserver = new MutationObserver(scheduleFocusLightUpdate)
-  focusLightObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true })
-  scheduleFocusLightUpdate()
+  if (realityAcidLightActive.value) connectFocusLightObserver()
+  document.addEventListener('keydown', handleKeyPress)
+  window.addEventListener('arkham-setting-change', handleSettingChange)
 })
 
 onBeforeRouteLeave(() => close())
 onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyPress)
   document.removeEventListener('mousemove', onMove)
   focusLightObserver?.disconnect()
   focusLightObserver = null
   if (focusLightAnimationFrame !== null) cancelAnimationFrame(focusLightAnimationFrame)
+  window.removeEventListener('arkham-setting-change', handleSettingChange)
+  if (processingTimer !== null) clearTimeout(processingTimer)
   delete (window as any).sendDebug
   delete (window as any).undo
   delete (window as any).debugChoose
+  delete (window as any).__drawSpotlightDemo
+  delete (window as any).__drawSpotlightClear
+  delete (window as any).__feedServerResult
   emitter.off('playabilityResult', onPlayabilityResult)
   close()
 })
@@ -451,12 +2571,7 @@ onUnmounted(() => {
       </section>
     </div>
   </div>
-  <div id="game" v-else-if="ready && game && playerId" :style="{ '--epic-bar-height': `${epicBarHeight}px` }">
-    <AiControlPanel
-      v-if="aiDevEnabled && aiSeatIds.length > 0"
-      :game="game"
-      :stuck-seats="aiStuckSeats"
-    />
+  <div id="game" v-else-if="ready && game && playerId" :class="{ 'game--inline-modals': inlineModals }" :style="{ '--epic-bar-height': epicBarHeight + 'px' }">
     <dialog v-if="error" class="error-dialog">
       <h2>{{ $t('error') }}</h2>
       <p class="error-message">{{ error }}</p>
@@ -468,7 +2583,18 @@ onUnmounted(() => {
         <button @click="error = null">{{ $t('close') }}</button>
       </div>
     </dialog>
-    <div v-if="processing" class="processing">
+    <Transition name="phase-notification">
+      <div
+        v-if="phaseNotification"
+        class="phase-notification"
+        :style="{ '--phase-color': phaseNotificationColor }"
+        role="status"
+        aria-live="polite"
+      >
+        <span :key="phaseNotification" class="phase-notification__name">{{ $t(`phaseTransition.${phaseNotification}`) }}</span>
+      </div>
+    </Transition>
+    <div v-if="showProcessing" class="processing">
       <LottieAnimation
         :animation-data="processingJSON"
         :auto-play="true"
@@ -497,49 +2623,315 @@ onUnmounted(() => {
       :style="{ '--focus-light-x': `${focusLightX}px`, '--focus-light-y': `${focusLightY}px` }"
       aria-hidden="true"
     ></div>
-    <ShortcutsModal v-if="showShortcuts" @close="showShortcuts = false" />
-    <HistoryPanel
-      v-if="showHistory && game && playerId"
-      :game="game"
-      :playerId="playerId"
-      @close="showHistory = false"
-    />
-    <PlayabilityModal
-      v-if="playabilityInfo && debug.active"
-      :info="playabilityInfo"
-      @close="playabilityInfo = null"
-    />
-    <BugReportForm
-      v-if="filingBug"
-      :initial-description="bugInitialDescription"
-      @submit="fileBug"
-      @cancel="filingBug = false"
-    />
+    <Draggable v-if="showShortcuts">
+      <div class="shortcuts-modal">
+        <div class="shortcuts-header">
+          <h2 class="shortcuts-title">{{ $t('gameBar.shortcutsTitle') }}</h2>
+          <p class="shortcuts-profile">{{ $t(`gameBar.settings.keybindingProfile.${keybindingProfile}`) }}</p>
+        </div>
+
+        <div class="shortcuts-body">
+          <section class="shortcuts-section">
+            <h3 class="section-title">{{ $t('game.shortcutSection.game') }}</h3>
+            <div class="shortcut-list">
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutSkipTriggers') }}</div>
+                <div class="shortcut-keys"><kbd>{{ shortcutKeys('continue').join('+') }}</kbd></div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutEndTurn') }}</div>
+                <div class="shortcut-keys"><kbd>{{ shortcutKeys('endTurn').join('+') }}</kbd></div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutDraw') }}</div>
+                <div class="shortcut-keys"><kbd>{{ shortcutKeys('draw').join('+') }}</kbd></div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutTakeResources') }}</div>
+                <div class="shortcut-keys"><kbd>{{ shortcutKeys('takeResources').join('+') }}</kbd></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="shortcuts-section">
+            <h3 class="section-title">{{ $t('game.shortcutSection.undo') }}</h3>
+            <div class="shortcut-list">
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutUndo') }}</div>
+                <div class="shortcut-keys"><kbd>{{ shortcutKeys('undo').join('+') }}</kbd></div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('game.shortcutUndoActionStart') }}</div>
+                <div class="shortcut-keys">
+                  <kbd>{{ shortcutKeys('undoChord').join('+') }}</kbd><span class="chord-arrow">+</span><kbd>A</kbd>
+                </div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('game.shortcutUndoTurnStart') }}</div>
+                <div class="shortcut-keys">
+                  <kbd>{{ shortcutKeys('undoChord').join('+') }}</kbd><span class="chord-arrow">+</span><kbd>T</kbd>
+                </div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('game.shortcutUndoPhaseStart') }}</div>
+                <div class="shortcut-keys">
+                  <kbd>{{ shortcutKeys('undoChord').join('+') }}</kbd><span class="chord-arrow">+</span><kbd>P</kbd>
+                </div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('game.shortcutUndoRoundStart') }}</div>
+                <div class="shortcut-keys">
+                  <kbd>{{ shortcutKeys('undoChord').join('+') }}</kbd><span class="chord-arrow">+</span><kbd>R</kbd>
+                </div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutRestartScenario') }}</div>
+                <div class="shortcut-keys">
+                  <kbd>{{ shortcutKeys('undoChord').join('+') }}</kbd><span class="chord-arrow">+</span><kbd>S</kbd>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Debug-only: placing a token is not a player action, the engine owns them. -->
+          <section v-if="debug.active" class="shortcuts-section">
+            <h3 class="section-title">{{ $t('game.shortcutSection.hovered') }}</h3>
+            <p class="section-hint">{{ $t('game.shortcutHover.hint') }}</p>
+            <div class="shortcut-list">
+              <div v-for="[action, binding] in boundHoverActions" :key="action" class="shortcut-row">
+                <div class="shortcut-name">{{ $t(`game.shortcutHover.${action}`) }}</div>
+                <div class="shortcut-keys"><kbd>{{ binding.display.join('+') }}</kbd></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="shortcuts-section">
+            <h3 class="section-title">{{ $t('game.shortcutSection.view') }}</h3>
+            <div class="shortcut-list">
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutShowOrHideShortcuts') }}</div>
+                <div class="shortcut-keys"><kbd>{{ shortcutKeys('showShortcuts').join('+') }}</kbd></div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutToggleDebug') }}</div>
+                <div class="shortcut-keys"><kbd>{{ shortcutKeys('toggleDebug').join('+') }}</kbd></div>
+              </div>
+              <div class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutSelectInvestigator') }}</div>
+                <div class="shortcut-keys"><kbd>1</kbd><span class="chord-arrow">…</span><kbd>4</kbd></div>
+              </div>
+              <div v-if="solo" class="shortcut-row">
+                <div class="shortcut-name">{{ $t('gameBar.shortcutSwitchPerspective') }}</div>
+                <div class="shortcut-keys">
+                  <kbd>Shift</kbd><span class="chord-arrow">+</span><kbd>1</kbd><span class="chord-arrow">…</span><kbd>4</kbd>
+                </div>
+              </div>
+              <template v-for="item in menuItems" :key="item.id">
+                <div v-if="menuShortcutKeys(item).length" class="shortcut-row">
+                  <div class="shortcut-name">{{ item.content }}</div>
+                  <div class="shortcut-keys">
+                    <kbd>{{ menuShortcutKeys(item).join('+') }}</kbd>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+        </div>
+
+        <button class="shortcuts-footer" @click="showShortcuts = false">{{ $t('close') }}</button>
+      </div>
+    </Draggable>
+    <Draggable v-if="filingBug">
+      <template #handle>
+        <header>
+          <h2>{{ $t('gameBar.fileABug') }}</h2>
+        </header>
+      </template>
+      <form @submit.prevent="fileBug" class="column bug-form box">
+        <p>{{ $t('gameBar.fileBugPart1') }}</p>
+        <p class="info">{{ $t('gameBar.fileBugPart2') }}</p>
+        <p class="warning">{{ $t('gameBar.fileBugPart3') }}</p>
+        <input
+          required
+          type="text"
+          v-model="bugTitle"
+          v-bind:placeholder="$t('gameBar.bugTitleholder')"
+        />
+        <textarea
+          required
+          v-model="bugDescription"
+          v-bind:placeholder="$t('gameBar.bugDescriptionholder')"
+        ></textarea>
+        <div class="buttons">
+          <button type="submit">{{ $t('submit') }}</button>
+          <button @click="filingBug = false">{{ $t('cancel') }}</button>
+        </div>
+      </form>
+    </Draggable>
     <div v-if="socketError" class="socketWarning">
       <!-- frontend/src/locales/en/gameBoard/base.json -->
       <p>{{ $t('outOfSyncHint') }}</p>
     </div>
-    <GameBar
-      v-if="!phoneShell"
-      :game-id="gameId"
-      :show-log="showLog"
-      :undo-chord-armed="undoChordArmed"
-      :can-undo-action="canUndoAction"
-      :can-undo-turn="canUndoTurn"
-      :can-undo-phase="canUndoPhase"
-      :can-undo-round="canUndoRound"
-      :can-undo-scenario="canUndoScenario"
-      @toggle-shortcuts="showShortcuts = !showShortcuts"
-      @toggle-log="showLog = !showLog"
-      @undo="undo"
-      @undo-action="undoActionStart"
-      @undo-turn="undoTurnStart"
-      @undo-phase="undoPhaseStart"
-      @undo-round="undoRoundStart"
-      @undo-scenario="undoScenarioDialog?.showModal()"
-      @file-bug="openBugReport()"
-      @toggle-sidebar="toggleSidebar"
-    />
+    <div v-if="!phoneShell" class="game-bar">
+      <div class="game-bar-item">
+        <div>
+          <button @click="showLog = !showLog">
+            <DocumentTextIcon aria-hidden="true" />
+            {{ showLog ? $t('gameBar.closeLog') : $t('gameBar.viewLog') }}
+          </button>
+        </div>
+      </div>
+      <div>
+        <Menu>
+          <EyeIcon aria-hidden="true" />
+          {{ $t('gameBar.view') }}
+          <template #items>
+            <MenuItem v-slot="{ active }">
+              <button :class="{ active }" @click="showShortcuts = !showShortcuts">
+                <BoltIcon aria-hidden="true" /> {{ $t('gameBar.shortcuts') }}
+                <span class="shortcut">{{ shortcutKeys('showShortcuts').join('+') }}</span>
+              </button>
+            </MenuItem>
+            <template v-for="item in menuItems" :key="item.id">
+              <MenuItem v-if="item.nested === 'view'" v-slot="{ active }">
+                <button :class="{ active }" @click="item.action">
+                  <component v-if="item.icon" v-bind:is="item.icon"></component>
+                  {{ item.content }}
+                  <span v-if="menuShortcutKeys(item).length" class="shortcut">{{ menuShortcutKeys(item).join('+') }}</span>
+                </button>
+              </MenuItem>
+            </template>
+          </template>
+        </Menu>
+      </div>
+      <div>
+        <Menu>
+          <BeakerIcon aria-hidden="true" />
+          {{ $t('gameBar.debug') }}
+          <template #items>
+            <MenuItem v-slot="{ active }">
+              <button :class="{ active }" @click="debug.toggle">
+                <BugAntIcon aria-hidden="true" /> {{ $t('gameBar.toggleDebug') }}
+                <span class="shortcut">{{ shortcutKeys('toggleDebug').join('+') }}</span>
+              </button>
+            </MenuItem>
+            <MenuItem v-slot="{ active }">
+              <button :class="{ active }" @click="debugExport('basic')">
+                <DocumentArrowDownIcon aria-hidden="true" /> {{ $t('gameBar.debugExport') }}
+              </button>
+            </MenuItem>
+            <MenuItem v-if="userStore.isAdmin" v-slot="{ active }">
+              <button :class="{ active }" @click="debugExport('scenario')">
+                <DocumentArrowDownIcon aria-hidden="true" /> {{ $t('gameBar.debugExportScenario') }}
+              </button>
+            </MenuItem>
+            <MenuItem v-if="userStore.isAdmin" v-slot="{ active }">
+              <button :class="{ active }" @click="debugExport('full')">
+                <DocumentArrowDownIcon aria-hidden="true" /> {{ $t('gameBar.debugExportFull') }}
+              </button>
+            </MenuItem>
+            <MenuItem v-slot="{ active }">
+              <button :class="{ active }" @click="showEntityBrowser = true">
+                <TableCellsIcon aria-hidden="true" /> {{ $t('gameBar.debugEntities') }}
+              </button>
+            </MenuItem>
+          </template>
+        </Menu>
+      </div>
+      <div>
+        <Menu>
+          <BackwardIcon aria-hidden="true" />
+          {{ $t('gameBar.undo') }}
+          <template #items>
+            <MenuItem v-slot="{ active }">
+              <button :class="{ active }" @click="undo">
+                <BackwardIcon aria-hidden="true" /> {{ $t('gameBar.undo') }}
+                <span class="shortcut">{{ shortcutKeys('undo').join('+') }}</span>
+              </button>
+            </MenuItem>
+            <div
+              v-if="canUndoAction || canUndoTurn || canUndoPhase || canUndoRound || canUndoScenario"
+              class="undo-jump-group"
+              :class="{ armed: undoChordArmed }"
+            >
+              <div class="undo-jump-header">
+                <span>{{ $t('game.undoTo') }}</span>
+                <span class="chord-prefix"><kbd>{{ shortcutKeys('undoChord').join('+') }}</kbd> + <span class="chord-hint">…</span></span>
+              </div>
+              <MenuItem v-if="canUndoAction" v-slot="{ active }">
+                <button class="undo-jump scope-action" :class="{ active }" @click="undoActionStart">
+                  <ArrowUturnLeftIcon aria-hidden="true" />
+                  <span class="undo-jump-label">{{ $t('game.startOfAction') }}</span>
+                  <kbd class="chord-key">A</kbd>
+                </button>
+              </MenuItem>
+              <MenuItem v-if="canUndoTurn" v-slot="{ active }">
+                <button class="undo-jump scope-turn" :class="{ active }" @click="undoTurnStart">
+                  <ClockIcon aria-hidden="true" />
+                  <span class="undo-jump-label">{{ $t('game.startOfTurn') }}</span>
+                  <kbd class="chord-key">T</kbd>
+                </button>
+              </MenuItem>
+              <MenuItem v-if="canUndoPhase" v-slot="{ active }">
+                <button class="undo-jump scope-phase" :class="{ active }" @click="undoPhaseStart">
+                  <RectangleStackIcon aria-hidden="true" />
+                  <span class="undo-jump-label">{{ $t('game.startOfPhase') }}</span>
+                  <kbd class="chord-key">P</kbd>
+                </button>
+              </MenuItem>
+              <MenuItem v-if="canUndoRound" v-slot="{ active }">
+                <button class="undo-jump scope-round" :class="{ active }" @click="undoRoundStart">
+                  <ArrowPathIcon aria-hidden="true" />
+                  <span class="undo-jump-label">{{ $t('game.startOfRound') }}</span>
+                  <kbd class="chord-key">R</kbd>
+                </button>
+              </MenuItem>
+              <MenuItem v-if="canUndoScenario" v-slot="{ active }">
+                <button
+                  class="undo-jump scope-scenario"
+                  :class="{ active }"
+                  @click="confirmingUndoScenario = true"
+                >
+                  <FlagIcon aria-hidden="true" />
+                  <span class="undo-jump-label">{{ $t('gameBar.restartScenario') }}</span>
+                  <kbd class="chord-key">S</kbd>
+                </button>
+              </MenuItem>
+            </div>
+          </template>
+        </Menu>
+      </div>
+      <div>
+        <button @click="filingBug = true">
+          <ExclamationTriangleIcon aria-hidden="true" /> {{ $t('fileBug') }}
+        </button>
+      </div>
+      <template v-for="item in menuItems" :key="item.id">
+        <div v-if="item.nested === null || item.nested === undefined">
+          <button @click="item.action">
+            <component v-if="item.icon" v-bind:is="item.icon"></component>
+            {{ item.content }}
+          </button>
+        </div>
+      </template>
+      <div v-if="isActualScenarioView" class="right">
+        <button
+          class="drawer-toggle"
+          :aria-label="$t('gameBar.toggleSidebar')"
+          :title="$t('gameBar.toggleSidebar')"
+          :aria-expanded="showSidebar"
+          aria-controls="game-log-sidebar"
+          @click="toggleSidebar"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M15 4v16" />
+            <path :d="showSidebar ? 'm8 9 3 3-3 3' : 'm11 9-3 3 3 3'" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="inline-modal-container" :class="{ 'inline-modal-container--active': inlineModals }" aria-live="polite"></div>
     <div v-if="hasEventBar" ref="epicBarRef" class="epic-bar-slot">
       <OrganizerBar
         v-if="organizerEventId"
@@ -565,7 +2957,11 @@ onUnmounted(() => {
       :player-id="playerId"
     />
     <template v-else>
-      <Draggable v-if="showSettings">
+      <!-- The panel is tabbed, so without these the window resizes and its header
+           walks up the screen every time you change tab: preserveWidth keeps the
+           widest tab's width, preservePosition pins the title bar and caps the
+           height instead of recentering. Same pair the chaos bag window uses. -->
+      <Draggable v-if="showSettings" preserveWidth preservePosition>
         <Settings
           :game="game"
           :playerId="playerId"
@@ -587,57 +2983,235 @@ onUnmounted(() => {
           </button>
         </template>
       </CampaignLog>
-      <MobilePlayLayout
-        v-else-if="phoneShell"
-        :game="game"
-        :game-id="gameId"
-        :player-id="playerId"
-        :game-log="gameLog"
-        :modals="modals"
-        :undo-api="undoApi"
+      <component
+        :is="phoneShell ? MobilePlayLayout : 'div'"
+        v-else
+        :class="{ 'game-main': !phoneShell }"
+        v-bind="phoneShell ? { game, gameId, playerId, gameLog, undoApi: mobileUndoApi, canUndo: !spectate, canChat: !spectate && !!chatInvestigatorId } : {}"
         @choose="choose"
-        @update="socket.setGame"
-        @file-bug="openBugReport()"
-        @undo-scenario="undoScenarioDialog?.showModal()"
-      />
-      <div v-else class="game-main">
-        <ActiveGameModals :game="game" :playerId="playerId" :modals="modals" />
-        <GameMain
+        @update="update"
+        @file-bug="filingBug = true"
+        @undo-scenario="confirmingUndoScenario = true"
+        @undo-log="requestUndoToStep"
+        @say="say"
+        @load-older="loadOlderLog"
+      >
+        <div v-if="showTheSilenceModal" class="the-silence-modal-backdrop">
+          <div class="the-silence-modal" role="dialog" aria-modal="true" aria-labelledby="the-silence-modal-title">
+            <img class="the-silence-modal__agenda no-overlay" :src="imgsrc('cards/10652.avif')" alt="The Silence" />
+            <div class="the-silence-modal__body">
+              <h2 id="the-silence-modal-title">The Silence</h2>
+              <p>If you look at the Cosmic Emissary enemy for more than 15 seconds at a time, you are <strong>driven insane</strong>.</p>
+              <div class="the-silence-modal__actions">
+                <button type="button" class="the-silence-modal__confirm" @click="continueUI">{{ $t('ok') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          v-else-if="gameCard"
+          class="revelation"
+          :class="{ 'cthulhu-revelation': isCthulhuDeckReveal }"
+        >
+          <div class="revelation-container">
+            <h2>{{ format(gameCard.title) }}</h2>
+            <div class="revelation-card-container">
+              <div
+                class="revelation-card"
+                :style="revelationCardStyle"
+                :class="{ 'cthulhu-revelation-card': isCthulhuDeckReveal }"
+                :role="isCthulhuDeckReveal ? 'button' : undefined"
+                :tabindex="isCthulhuDeckReveal ? 0 : undefined"
+                :aria-label="isCthulhuDeckReveal ? `${format(gameCard.title)}. Click to enact.` : undefined"
+                @click="isCthulhuDeckReveal && continueUI()"
+                @keydown.enter="isCthulhuDeckReveal && continueUI()"
+                @keydown.space.prevent="isCthulhuDeckReveal && continueUI()"
+              >
+                <CardView :game="game" :card="gameCard.card" :playerId="playerId" />
+                <img
+                  v-if="gameCard.card.tag === 'PlayerCard'"
+                  :src="imgsrc('backs/back_player.jpg')"
+                  class="card back"
+                />
+                <img v-else :src="imgsrc('backs/back_encounter.jpg')" class="card back" />
+              </div>
+              <span v-if="isCthulhuDeckReveal" class="cthulhu-revelation-hint">Click to enact</span>
+              <button v-else @click="continueUI">{{ $t('ok') }}</button>
+            </div>
+          </div>
+        </div>
+        <Teleport to="body">
+          <div
+            v-for="p in flightPlaceholders"
+            :key="p.id"
+            class="card-flight-placeholder"
+            :style="p.style"
+            aria-hidden="true"
+          />
+        </Teleport>
+        <DrawSpotlight
+          v-if="drawSpotlight && game && playerId"
           :game="game"
-          :game-id="gameId"
-          :player-id="playerId"
-          :game-log="gameLog"
-          @choose="choose"
-          @update="socket.setGame"
+          :playerId="playerId"
+          :title="drawSpotlight.title"
+          :cards="drawSpotlight.cards"
+          @dismiss="dismissDrawSpotlight"
+        />
+        <HistoryPanel
+          v-if="showHistory && game && playerId"
+          :game="game"
+          :playerId="playerId"
+          @close="showHistory = false"
         />
         <div
+          v-if="playabilityInfo && debug.active"
+          class="debug-modal-overlay"
+          @click.self="playabilityInfo = null"
+        >
+          <div class="debug-playability-modal">
+            <h3>{{ $t('game.playabilityChecks') }}</h3>
+            <div class="debug-playability-content">
+              <img
+                class="debug-card-image"
+                :src="cardImg(playabilityInfo.cardCode.replace('c', ''))"
+              />
+              <ul class="playability-checks">
+                <li
+                  v-for="[name, detail] in playabilityInfo.checks"
+                  :key="name"
+                  :class="detail === null ? 'check-passed' : 'check-failed'"
+                >
+                  <span class="check-icon">{{ detail === null ? '✓' : '✗' }}</span>
+                  <span class="check-name">{{ name }}</span>
+                  <span v-if="detail !== null" class="check-detail">{{ detail }}</span>
+                </li>
+              </ul>
+            </div>
+            <button @click="playabilityInfo = null">{{ $t('close') }}</button>
+          </div>
+        </div>
+        <div v-if="tarotCards.length > 0" class="revelation">
+          <div class="revelation-container">
+            <div class="revelation-card-container">
+              <div class="tarot-cards">
+                <div v-for="(tarotCard, idx) in tarotCards" :key="idx" class="tarot-card">
+                  <div class="card-container">
+                    <img
+                      :src="imgsrc(`tarot/${tarotCardImage(tarotCard)}`)"
+                      class="tarot"
+                      :class="tarotCard.facing"
+                    />
+                  </div>
+                  <img :src="imgsrc('tarot/back.jpg')" class="card back" />
+                </div>
+              </div>
+              <button @click="continueUI">{{ $t('ok') }}</button>
+            </div>
+          </div>
+        </div>
+        <CampaignSettings
+          v-if="game.campaign && !gameOver && question && question.tag === 'PickCampaignSettings'"
+          :game="game"
+          :campaign="game.campaign"
+          :playerId="playerId"
+        />
+        <Campaign
+          v-else-if="game.campaign"
+          :game="game"
+          :playerId="playerId"
+          :campaign="game.campaign"
+          :realityAcidLightDevoured="realityAcidLightDevoured"
+          :realityAcidLightActive="realityAcidLightActive"
+          @choose="choose"
+          @update="update"
+          @toggleRealityAcidLight="toggleRealityAcidLight"
+        />
+        <ScenarioSettings
+          v-else-if="
+            game.scenario && !gameOver && question && question.tag === 'PickScenarioSettings'
+          "
+          :game="game"
+          :scenario="game.scenario"
+          :playerId="playerId"
+        />
+        <StandaloneScenario
+          v-else-if="game.scenario && !gameOver"
+          :game="game"
+          :playerId="playerId"
+          :realityAcidLightDevoured="realityAcidLightDevoured"
+          :realityAcidLightActive="realityAcidLightActive"
+          @choose="choose"
+          @update="update"
+          @toggleRealityAcidLight="toggleRealityAcidLight"
+        />
+        <StoryQuestion
+          v-else-if="question"
+          :game="game"
+          :question="question"
+          :playerId="playerId"
+          @choose="choose"
+        />
+        <div
+          id="game-log-sidebar"
           class="sidebar"
+          :class="{ 'sidebar--empty-log': gameLog.length === 0 }"
           v-if="
-            showSidebar &&
-            game.scenario !== null &&
-            (game.gameState.tag === 'IsActive' || game.gameState.tag === 'IsOver')
+            !phoneShell && showSidebar &&
+            isActualScenarioView
           "
         >
-          <GameLog :game="game" :gameLog="gameLog" @undo="undo" />
+          <GameLog
+            :entries="gameLog"
+            :can-undo="!spectate"
+            :can-chat="!spectate && !!chatInvestigatorId"
+            :player-id="playerId"
+            @undo="requestUndoToStep"
+            @say="say"
+            @load-older="loadOlderLog"
+          />
         </div>
-        <div class="sidebar" v-if="showSidebar && game.scenario === null">
-          <GameLog :game="game" :gameLog="gameLog" @undo="undo" />
+        <div class="game-over" v-if="gameOver">
+          <p>{{ $t('gameOver') }}</p>
+          <button
+            class="replay-button"
+            @click="router.push({ name: 'ReplayGame', params: { gameId } })"
+          >
+            {{ $t('watchReplay') }}
+          </button>
+          <CampaignLog v-if="game !== null" :game="game" :cards="cards" :playerId="playerId" />
         </div>
         <div
-          v-if="showSidebar"
+          v-if="!phoneShell && showSidebar && isActualScenarioView"
           class="sidebar-backdrop"
           @click="toggleSidebar"
           aria-hidden="true"
         ></div>
-      </div>
+      </component>
     </template>
-    <dialog id="undoScenarioDialog" ref="undoScenarioDialog">
-      <p>{{ $t('game.areYouSureUndoScenario') }}</p>
-      <div class="buttons">
-        <button @click="confirmUndoScenario">{{ $t('Yes') }}</button>
-        <button @click="undoScenarioDialog?.close()">{{ $t('No') }}</button>
-      </div>
-    </dialog>
+    <Prompt
+      v-if="confirmingUndoScenario"
+      prompt="$game.areYouSureUndoScenario"
+      :yes="undoScenario"
+      :no="() => confirmingUndoScenario = false"
+    />
+    <Prompt
+      v-if="confirmingUndoStep"
+      :prompt="
+        confirmingUndoStep.label
+          ? $t('log.undoToHereConfirm', { entry: confirmingUndoStep.label })
+          : $t('log.undoToHereConfirmPlain')
+      "
+      :yes="undoToStepConfirmed"
+      :no="() => (confirmingUndoStep = null)"
+    />
+    <Teleport to="body">
+      <EntityBrowser
+        v-if="showEntityBrowser && game !== null && playerId !== null"
+        :game="game"
+        :playerId="playerId"
+        @close="showEntityBrowser = false"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -680,7 +3254,7 @@ onUnmounted(() => {
   --flashlight-y: 50vh;
   position: fixed;
   inset: 0;
-  z-index: 9998;
+  z-index: var(--z-index-9998);
   pointer-events: none;
   background: radial-gradient(
     circle 330px at var(--flashlight-x) var(--flashlight-y),
@@ -695,7 +3269,7 @@ onUnmounted(() => {
   --focus-light-y: -1000px;
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: calc(var(--z-index-9998) + 1);
   pointer-events: none;
   background: radial-gradient(
     circle 205px at var(--focus-light-x) var(--focus-light-y),
@@ -712,7 +3286,176 @@ onUnmounted(() => {
   border-radius: 15px;
 }
 
+.undo-jump-group {
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+  overflow: hidden;
+  transition:
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+
+  &.armed {
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(127, 184, 212, 0.6),
+      0 0 12px rgba(127, 184, 212, 0.35);
+  }
+}
+
+.game-bar div .undo-jump-header {
+  display: flex;
+}
+
+.undo-jump-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 8px 10px 6px 10px;
+  user-select: none;
+  pointer-events: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.chord-prefix {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  letter-spacing: normal;
+  text-transform: none;
+
+  kbd {
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: bold;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background-color: var(--box-background);
+    border: 1px solid var(--title);
+    color: white;
+    line-height: 1;
+  }
+
+  .chord-hint {
+    opacity: 0.6;
+  }
+}
+
+.undo-jump-group.armed .chord-prefix kbd {
+  background-color: var(--box-border);
+}
+
+.chord-key {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: bold;
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background-color: var(--box-background);
+  border: 1px solid var(--title);
+  color: white;
+  line-height: 1;
+}
+
+.undo-jump:hover .chord-key,
+.undo-jump.active .chord-key,
+.undo-jump-group.armed .chord-key {
+  background-color: var(--box-border);
+}
+
+.undo-jump {
+  position: relative;
+  width: 100%;
+  padding: 5px 10px 5px 18px !important;
+  background: rgba(0, 0, 0, 0.4);
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--undo-scope);
+    opacity: 0.55;
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  svg {
+    color: var(--undo-scope);
+  }
+
+  &.scope-action {
+    --undo-scope: #7fb8d4;
+  }
+  &.scope-turn {
+    --undo-scope: #6cc28d;
+  }
+  &.scope-phase {
+    --undo-scope: #e0b256;
+  }
+  &.scope-round {
+    --undo-scope: #c97aa8;
+  }
+  &.scope-scenario {
+    --undo-scope: #d96a6a;
+  }
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  &:hover::before,
+  &.active::before {
+    opacity: 1;
+    transform: scaleX(1.5);
+  }
+}
+
 #game {
+  &.game--inline-modals {
+    // Keep the board's viewport-sized height, then add the modal stack above it.
+    // The surrounding router container owns the page scroll instead of shrinking
+    // the board to make room for the dialogs.
+    flex: 0 0 auto;
+    min-height: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .inline-modal-container--active {
+    flex: 0 0 auto;
+    width: 100%;
+    max-height: min(70dvh, 720px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: max(8px, env(safe-area-inset-top)) 8px 8px;
+    scrollbar-gutter: stable;
+    background: color-mix(in srgb, var(--background-dark) 88%, transparent);
+    border-bottom: 1px solid var(--box-border);
+  }
+
+  .inline-modal-container--active:empty {
+    display: none;
+  }
+
+  @media (max-width: 600px) {
+    .inline-modal-container--active {
+      max-height: 65dvh;
+      padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right));
+    }
+  }
+
   width: 100vw;
   display: flex;
   flex-direction: column;
@@ -723,6 +3466,13 @@ onUnmounted(() => {
   }
 }
 
+/* Epic Multiplayer bar lives in normal flow above the board; reserve its measured
+   height so the board's player area stays within the viewport. Defaults to 0 for
+   ordinary games. */
+.epic-bar-slot {
+  flex: 0 0 auto;
+}
+
 .game-main {
   width: 100vw;
   display: flex;
@@ -730,7 +3480,7 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.epic-bar-slot {
+#game.game--inline-modals .game-main {
   flex: 0 0 auto;
 }
 
@@ -743,7 +3493,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   display: flex;
-  z-index: 100;
+  z-index: var(--z-index-100);
 
   justify-content: center;
   align-items: center;
@@ -773,15 +3523,18 @@ onUnmounted(() => {
     height: 100dvh;
     width: min(85vw, 360px);
     max-width: none;
-    z-index: 200;
+    z-index: var(--z-index-200);
     box-shadow: -2px 0 16px rgba(0, 0, 0, 0.45);
     animation: sidebar-slide-in 0.18s ease-out;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   @media (prefers-color-scheme: dark) {
     background: #1c1c1c;
   }
+}
+
+.sidebar--empty-log {
+  pointer-events: none;
 }
 
 .sidebar-backdrop {
@@ -792,7 +3545,7 @@ onUnmounted(() => {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 199;
+    z-index: var(--z-index-199);
     animation: sidebar-fade-in 0.18s ease-out;
   }
 }
@@ -845,6 +3598,11 @@ onUnmounted(() => {
   }
 }
 
+header {
+  display: flex;
+  flex-direction: column;
+}
+
 .invite-link {
   flex: 1;
   input {
@@ -864,7 +3622,7 @@ onUnmounted(() => {
       content: '';
       display: none;
       position: absolute;
-      z-index: 9998;
+      z-index: var(--z-index-9998);
       top: 35px;
       left: 15px;
       width: 0;
@@ -879,7 +3637,7 @@ onUnmounted(() => {
       content: 'Copied!';
       display: none;
       position: absolute;
-      z-index: 9999;
+      z-index: var(--z-index-9999);
       top: var(--nav-height);
       left: -37px;
       width: 114px;
@@ -920,10 +3678,790 @@ onUnmounted(() => {
   }
 }
 
+header {
+  font-family: Teutonic;
+  font-size: 2em;
+  text-align: center;
+}
+
+.game-over {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  p {
+    text-transform: uppercase;
+    background: rgba(0, 0, 0, 0.5);
+    width: 100%;
+    padding: 10px 20px;
+    color: white;
+    text-align: center;
+  }
+}
+
+@keyframes revelation {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+
+  65% {
+    transform: scale(1.3);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes anim {
+  0%,
+  100% {
+    border-radius: 30% 70% 70% 30% / 30% 52% 48% 70%;
+    /*box-shadow: 10px -2vmin 4vmin LightPink inset, 10px -4vmin 4vmin MediumPurple inset, 10px -2vmin 7vmin purple inset;*/
+  }
+
+  10% {
+    border-radius: 50% 50% 20% 80% / 25% 80% 20% 75%;
+  }
+
+  20% {
+    border-radius: 67% 33% 47% 53% / 37% 20% 80% 63%;
+  }
+
+  30% {
+    border-radius: 39% 61% 47% 53% / 37% 40% 60% 63%;
+    /*box-shadow: 20px -4vmin 8vmin hotpink inset, -1vmin -2vmin 6vmin LightPink inset, -1vmin -2vmin 4vmin MediumPurple inset, 1vmin 4vmin 8vmin purple inset;*/
+  }
+
+  40% {
+    border-radius: 39% 61% 82% 18% / 74% 40% 60% 26%;
+  }
+
+  50% {
+    border-radius: 100%;
+    /*box-shadow: 40px 4vmin 16vmin hotpink inset, 40px 2vmin 5vmin LightPink inset, 40px 4vmin 4vmin MediumPurple inset, 40px 6vmin 8vmin purple inset;*/
+  }
+
+  60% {
+    border-radius: 50% 50% 53% 47% / 72% 69% 31% 28%;
+  }
+
+  70% {
+    border-radius: 50% 50% 53% 47% / 26% 22% 78% 74%;
+    /*box-shadow: 1vmin 1vmin 8vmin LightPink inset, 2vmin -1vmin 4vmin MediumPurple inset, -1vmin -1vmin 16vmin purple inset;*/
+  }
+
+  80% {
+    border-radius: 50% 50% 53% 47% / 26% 69% 31% 74%;
+  }
+
+  90% {
+    border-radius: 20% 80% 20% 80% / 20% 80% 20% 80%;
+  }
+}
+
+@property --gradient-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotation {
+  0% {
+    --gradient-angle: 360deg;
+  }
+  100% {
+    --gradient-angle: 0deg;
+  }
+}
+
+@keyframes glow {
+  0% {
+    filter: drop-shadow(0 0 3vmin Indigo) drop-shadow(0 5vmin 4vmin Orchid)
+      drop-shadow(2vmin -2vmin 15vmin MediumSlateBlue) drop-shadow(0 0 7vmin MediumOrchid);
+  }
+  50% {
+    filter: drop-shadow(0 0 3vmin Indigo) drop-shadow(0 5vmin 4vmin Orchid)
+      drop-shadow(2vmin -2vmin 15vmin MediumSlateBlue) drop-shadow(0 0 7vmin Black);
+  }
+  100% {
+    filter: drop-shadow(0 0 3vmin Indigo) drop-shadow(0 5vmin 4vmin Orchid)
+      drop-shadow(2vmin -2vmin 15vmin MediumSlateBlue) drop-shadow(0 0 7vmin MediumOrchid);
+  }
+}
+
+.the-silence-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-30000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.the-silence-modal {
+  display: flex;
+  gap: 18px;
+  max-width: min(760px, 100%);
+  padding: 18px;
+  border: 1px solid rgba(79, 224, 214, 0.65);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(5, 29, 35, 0.98), rgba(12, 75, 82, 0.98));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7), 0 0 28px rgba(79, 224, 214, 0.38);
+  color: #d8fffb;
+}
+
+.the-silence-modal__agenda {
+  width: min(280px, 34vw);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+.the-silence-modal__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 360px;
+  font-family: Arial, sans-serif;
+  text-align: left;
+}
+
+.the-silence-modal__body h2 {
+  margin: 0 0 10px;
+  font-family: Teutonic, Georgia, serif;
+  font-size: 1.7rem;
+  color: #bffff8;
+}
+
+.the-silence-modal__body p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.the-silence-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.the-silence-modal__actions button {
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+}
+
+.the-silence-modal__confirm {
+  background: rgba(12, 112, 119, 0.95);
+  box-shadow: 0 0 12px rgba(79, 224, 214, 0.28);
+}
+
+@media (max-width: 650px) {
+  .the-silence-modal {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .the-silence-modal__agenda {
+    width: min(280px, 72vw);
+  }
+}
+
+.revelation {
+  position: absolute;
+  transform: all 0.5s;
+  z-index: var(--z-index-1000);
+  color: white;
+  text-align: center;
+  margin: auto;
+  inset: 0;
+  width: fit-content;
+  height: fit-content;
+  display: grid;
+  /* glow effect */
+  filter: drop-shadow(0 0 3vmin Indigo) drop-shadow(0 5vmin 4vmin Orchid)
+    drop-shadow(2vmin -2vmin 15vmin MediumSlateBlue) drop-shadow(0 0 7vmin MediumOrchid);
+  animation:
+    revelation 0.3s ease-in-out,
+    glow 4s cubic-bezier(0.55, 0.085, 0.68, 0.53) infinite;
+
+  button {
+    width: 100%;
+    border: 0;
+    padding: 10px;
+    text-transform: uppercase;
+    background-color: var(--button-2);
+    font-weight: bold;
+    color: #eee;
+    font: Arial, sans-serif;
+    &:hover {
+      background-color: #311b3e;
+    }
+
+    i {
+      font-style: normal;
+    }
+
+    .card {
+      border-radius: 15px;
+    }
+  }
+
+  h2 {
+    font-family: Teutonic;
+    text-transform: uppercase;
+    margin: 0;
+    padding: 0;
+    font-size: 2.5em;
+  }
+
+  :deep(.card) {
+    animation: revelation 0.6s ease-in-out;
+    width: 300px !important;
+    aspect-ratio: var(--card-ratio);
+    overflow: hidden;
+    border-radius: 15px;
+  }
+}
+
+.revelation-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  align-self: center;
+  align-content: center;
+  justify-content: center;
+  justify-items: center;
+  justify-self: center;
+}
+
+.revelation.cthulhu-revelation {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  filter: none;
+  background:
+    linear-gradient(rgba(2, 16, 17, 0.78), rgba(1, 7, 8, 0.94)),
+    url('/img/arkham/extra/the-drowned-city/cthulhu-board.jpg') center / cover;
+  animation: cthulhu-revelation-in 500ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  &::before,
+  &::after {
+    position: absolute;
+    inset: -20%;
+    z-index: var(--z-index-0);
+    content: '';
+    pointer-events: none;
+  }
+
+  &::before {
+    background:
+      radial-gradient(ellipse at 50% 110%, rgba(45, 116, 99, 0.42) 0 12%, transparent 46%),
+      radial-gradient(ellipse at 12% 50%, rgba(13, 67, 64, 0.48), transparent 42%),
+      radial-gradient(ellipse at 88% 36%, rgba(68, 87, 43, 0.32), transparent 38%);
+    animation: cthulhu-murk 9s ease-in-out infinite alternate;
+  }
+
+  &::after {
+    opacity: 0.22;
+    background: url('/img/arkham/grunge.png') center / cover;
+    mix-blend-mode: screen;
+  }
+
+  .revelation-container {
+    position: relative;
+    z-index: var(--z-index-1);
+  }
+
+  h2 {
+    color: #cad8bd;
+    letter-spacing: 0.08em;
+    text-shadow: 0 2px 2px rgba(0, 0, 0, 0.9), 0 0 24px rgba(72, 129, 105, 0.8);
+  }
+}
+
+.cthulhu-revelation-card {
+  cursor: pointer;
+  outline: none;
+  filter: drop-shadow(0 20px 24px rgba(0, 4, 5, 0.8));
+  transition: transform 220ms ease, filter 220ms ease;
+
+  &:hover,
+  &:focus-visible {
+    transform: translateY(-5px) scale(1.025);
+    filter: drop-shadow(0 24px 28px rgba(0, 4, 5, 0.9)) drop-shadow(0 0 12px rgba(92, 148, 119, 0.5));
+  }
+
+  &:focus-visible {
+    border-radius: 15px;
+    box-shadow: 0 0 0 3px #a8c3a5;
+  }
+
+  &:active {
+    transform: translateY(-1px) scale(0.985);
+  }
+}
+
+.cthulhu-revelation-hint {
+  color: #b9c9b1;
+  font-family: Teutonic, Georgia, serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.14em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  text-transform: uppercase;
+}
+
+@keyframes cthulhu-revelation-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cthulhu-murk {
+  from {
+    opacity: 0.62;
+    transform: scale(1) rotate(-1deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.08) rotate(1deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .revelation.cthulhu-revelation,
+  .revelation.cthulhu-revelation::before,
+  .cthulhu-revelation-card {
+    animation: none;
+    transition: none;
+  }
+}
+
+@keyframes flip-back {
+  0% {
+    opacity: 1;
+    transform: rotateY(0deg);
+  }
+
+  49% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+
+  100% {
+    transform: rotateY(-180deg);
+    opacity: 0;
+  }
+}
+
+@keyframes flip-front {
+  0% {
+    transform: rotateY(180deg);
+    opacity: 0;
+  }
+
+  49% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg);
+  }
+}
+
+.revelation-card-container {
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  height: fit-content;
+  gap: 10px;
+
+  .the-silence-card {
+    width: 300px;
+    aspect-ratio: var(--card-aspect);
+
+    .the-silence-card-image {
+      animation: none !important;
+      width: 300px !important;
+      aspect-ratio: var(--card-ratio);
+      border-radius: 15px;
+    }
+  }
+
+  .tarot-cards {
+    gap: 15px;
+    display: flex;
+    flex-direction: row;
+    width: fit-content;
+    height: fit-content;
+    &:deep(img) {
+      border-radius: 10px;
+    }
+  }
+
+  .revelation-card {
+    position: relative;
+    width: 300px;
+    aspect-ratio: var(--card-aspect);
+    perspective: 1000px;
+    &:nth-child(1) {
+      animation-delay: 0.3s;
+    }
+
+    &:nth-child(2) {
+      animation-delay: 0.6s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: 0.9s;
+    }
+
+    :deep(.card-container) {
+      transform: rotateY(-180deg);
+      transform-style: preserve-3d;
+      position: absolute;
+      top: 0;
+      left: 0;
+      backface-visibility: hidden;
+      animation: flip-front 0.3s linear;
+      animation-fill-mode: forwards;
+      animation-delay: inherit;
+    }
+
+    .card-container {
+      opacity: 0;
+      transform-style: preserve-3d;
+    }
+
+    .card.back {
+      transform-style: preserve-3d;
+      position: absolute;
+      top: 0;
+      left: 0;
+      backface-visibility: hidden;
+      animation: flip-back 0.3s linear;
+      animation-fill-mode: forwards;
+      animation-delay: inherit;
+    }
+  }
+
+  .tarot {
+    width: 300px;
+    aspect-ratio: 8/14;
+  }
+
+  .tarot-card:nth-child(1) {
+    animation-delay: 0.3s;
+  }
+
+  .tarot-card:nth-child(2) {
+    animation-delay: 0.6s;
+  }
+
+  .tarot-card:nth-child(3) {
+    animation-delay: 0.9s;
+  }
+
+  .tarot-card {
+    position: relative;
+    width: 300px;
+    padding-bottom: 15px;
+    aspect-ratio: 8/14;
+    perspective: 1000px;
+    .Reversed {
+      transform: rotateZ(180deg);
+    }
+    .card-container {
+      transform: rotateY(-180deg);
+      transform-style: preserve-3d;
+      position: absolute;
+      top: 0;
+      left: 0;
+      backface-visibility: hidden;
+      animation: flip-front 0.3s linear;
+      animation-fill-mode: forwards;
+      animation-delay: inherit;
+    }
+
+    img {
+      pointer-events: none;
+    }
+
+    .card-container {
+      opacity: 0;
+      transform-style: preserve-3d;
+      pointer-events: none;
+      img {
+        pointer-events: none;
+      }
+    }
+
+    .card.back {
+      transform-style: preserve-3d;
+      position: absolute;
+      top: 0;
+      left: 0;
+      backface-visibility: hidden;
+      animation: flip-back 0.3s linear;
+      animation-fill-mode: forwards;
+      animation-delay: inherit;
+    }
+  }
+}
 
 .full-width {
   flex: 1;
   padding-bottom: 10px;
+}
+
+.game-bar {
+  flex: 0 0 auto;
+  display: flex;
+  margin: 0;
+  padding: 0;
+  background: var(--background-mid);
+  div {
+    &.right {
+      margin-left: auto;
+    }
+    display: inline;
+    transition: 0.3s;
+    height: 100%;
+    a {
+      display: inline;
+    }
+    button {
+      background: none;
+      border: 0;
+      display: inline;
+      padding: 5px 10px;
+      display: flex;
+      gap: 5px;
+      height: 100%;
+      align-items: center;
+      svg {
+        width: 15px;
+      }
+      &:hover {
+        background: rgba(0, 0, 0, 0.4);
+      }
+      height: 100%;
+    }
+  }
+  justify-content: flex-start;
+
+  .right .drawer-toggle {
+    justify-content: center;
+    min-width: 40px;
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+    &[aria-expanded='true'] {
+      background: rgba(0, 0, 0, 0.21);
+    }
+    &:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: -3px;
+    }
+  }
+}
+
+.game-bar-item.active,
+.game-bar-item:hover {
+  background: rgba(0, 0, 0, 0.21);
+  color: var(--title);
+}
+
+.shortcuts-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 75vh;
+  background: var(--background);
+  color: var(--text);
+}
+
+.shortcuts-header {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: var(--background-dark);
+  border-bottom: 1px solid var(--box-border);
+}
+
+.section-hint {
+  margin: 0 0 6px;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+.shortcuts-profile {
+  margin: 0;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+.shortcuts-title {
+  margin: 0;
+  font-family: Teutonic, serif;
+  font-size: 20px;
+  color: var(--text);
+  text-transform: none;
+}
+
+.shortcuts-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.shortcuts-section {
+  display: flex;
+  flex-direction: column;
+
+  .section-title {
+    margin: 0 0 10px;
+    padding-bottom: 6px;
+    font-family: Teutonic, serif;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--title);
+    border-bottom: 1px solid var(--box-border);
+  }
+}
+
+.shortcut-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--box-background);
+  border: 1px solid var(--box-border);
+  border-radius: 5px;
+}
+
+.shortcut-row:hover {
+  background: var(--background-mid);
+}
+
+.shortcut-name {
+  font-size: 14px;
+  color: var(--text);
+  min-width: 0;
+}
+
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+
+  kbd {
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 4px;
+    background: var(--background-dark);
+    border: 1px solid var(--box-border);
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .chord-arrow {
+    opacity: 0.5;
+    font-size: 12px;
+  }
+}
+
+.shortcuts-footer {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  border-top: 1px solid var(--box-border);
+  background: var(--button-2);
+  color: var(--text);
+  font-family: Teutonic, serif;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: center;
+}
+
+.shortcuts-footer:hover {
+  background: var(--button-2-highlight);
+}
+
+@media (max-width: 700px) {
+  .shortcuts-header,
+  .shortcuts-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .shortcuts-body {
+    padding: 14px 16px;
+  }
+}
+
+.shortcut {
+  margin-left: auto;
+  border: 1px solid var(--title);
+  background-color: var(--box-background);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+button:hover .shortcut {
+  background-color: var(--box-border);
+}
+
+.bug-form {
+  padding: 10px;
+  font-size: 1.2em;
+  input,
+  textarea,
+  button {
+    font-size: 1.2em;
+    padding: 5px 10px;
+  }
 }
 
 .error-dialog {
@@ -934,7 +4472,7 @@ onUnmounted(() => {
   padding-block: 10px;
   width: 50%;
   display: flex;
-  z-index: 100;
+  z-index: var(--z-index-100);
   display: flex;
   flex-direction: column;
   border: 0;
@@ -981,7 +4519,7 @@ onUnmounted(() => {
   }
 }
 .loader {
-  z-index: 1000;
+  z-index: var(--z-index-1000);
   position: absolute;
   top: 50px;
   left: 20px;
@@ -1010,13 +4548,34 @@ onUnmounted(() => {
 }
 
 .processing {
-  z-index: 1000;
+  z-index: var(--z-index-1000);
   position: absolute;
   top: 5px;
   left: 00px;
   width: 80px;
   filter: invert(48%) sepia(32%) saturate(393%) hue-rotate(37deg) brightness(92%) contrast(89%);
   aspect-ratio: 1;
+}
+
+.replay-button {
+  padding: 10px;
+  width: 100%;
+  font-size: 1.2em;
+  border: 0;
+  background-color: var(--spooky-green);
+  &:hover {
+    background-color: var(--spooky-green-dark);
+  }
+}
+
+.warning {
+  background-color: var(--survivor-extra-dark);
+  padding: 10px;
+}
+
+.info {
+  background-color: var(--seeker-extra-dark);
+  padding: 10px;
 }
 
 dialog {
@@ -1051,4 +4610,181 @@ dialog {
   }
 }
 
+.debug-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-index-1000);
+}
+
+.debug-playability-modal {
+  background: #1a1a2e;
+  border: 1px solid var(--button-highlight);
+  border-radius: 8px;
+  padding: 1.5rem;
+  min-width: 300px;
+  max-width: 700px;
+  color: #eee;
+
+  h3 {
+    margin: 0 0 1rem;
+    font-size: 1.1rem;
+    color: #adf;
+  }
+
+  button {
+    margin-top: 1rem;
+  }
+}
+
+.phase-notification {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: clamp(4.5rem, 9vw, 7rem);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--phase-color) 54%, rgba(8, 11, 13, 0.88));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  animation: phase-notification-bloom 1.2s ease-out both;
+}
+
+.phase-notification__name {
+  color: rgba(242, 232, 207, 0.94);
+  font-family: Teutonic, serif;
+  font-size: clamp(1.8rem, 4vw, 3.8rem);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 35px color-mix(in srgb, var(--phase-color) 80%, transparent), 0 5px 26px rgba(0, 0, 0, 0.8);
+  animation: phase-notification-title 1.2s ease-out both;
+}
+
+@keyframes phase-notification-bloom {
+  0% { opacity: 0; }
+  14%, 78% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes phase-notification-title {
+  0% { opacity: 0; transform: translateX(-110%); filter: blur(8px); }
+  22% { opacity: 1; transform: translateX(0); filter: blur(0); }
+  72% { opacity: 1; transform: translateX(0); filter: blur(0); }
+  100% { opacity: 0; transform: translateX(110%); filter: blur(8px); }
+}
+
+.phase-notification-enter-active,
+.phase-notification-leave-active { transition: opacity 0.35s ease; }
+.phase-notification-enter-from,
+.phase-notification-leave-to { opacity: 0; }
+
+.debug-playability-content {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.debug-card-image {
+  width: 150px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.playability-checks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+
+  li {
+    padding: 0.3rem 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+}
+
+.check-name {
+  font-weight: 500;
+}
+.check-detail {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  font-style: italic;
+}
+.check-passed {
+  color: #4f4;
+}
+.check-failed {
+  color: #f44;
+}
+.check-icon {
+  font-weight: bold;
+  width: 1rem;
+  flex-shrink: 0;
+}
+
+/* Reduced motion keeps the reveal, drops the choreography: the card still fills
+ * the screen, it just arrives already there.
+ *
+ * The flip cannot simply be shortened. The front starts rotated away, at
+ * `opacity: 0` and hidden by `backface-visibility`, and the animation is what
+ * brings it round -- so removing the animation alone leaves a card that never
+ * appears, and a very short duration still plays a rotation. The finished state
+ * is set by hand and the back face dropped instead.
+ *
+ * Selectors carry the full `.revelation-card-container` chain and this block
+ * sits last: the rules it overrides are nested a level deeper, so a shorter
+ * selector earlier in the file loses on both specificity and source order. The
+ * glow stays, static -- the pulse is an animation, the colour is not. */
+@media (prefers-reduced-motion: reduce) {
+  .revelation,
+  .revelation :deep(.card),
+  .revelation.cthulhu-revelation,
+  .revelation.cthulhu-revelation::before,
+  .revelation.cthulhu-revelation::after {
+    animation: none;
+  }
+
+  .revelation-card-container .revelation-card,
+  .revelation-card-container .tarot-card {
+    perspective: none;
+  }
+
+  .revelation-card-container .revelation-card :deep(.card-container),
+  .revelation-card-container .revelation-card .card-container,
+  .revelation-card-container .tarot-card .card-container {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+
+  .revelation-card-container .revelation-card .card.back,
+  .revelation-card-container .tarot-card .card.back {
+    display: none;
+  }
+}
+
+/* Teleported to body -- a `position: fixed` element is still clipped by an
+   ancestor carrying a transform or filter, and the board has several. The scope
+   attribute travels with the teleport, so this scoped rule still reaches it. */
+.card-flight-placeholder {
+  position: fixed;
+  z-index: var(--z-index-900);
+  pointer-events: none;
+  border-radius: 6px;
+  /* Reads as an empty slot waiting to be filled: light enough to see against
+     the dark board, quiet enough not to look like a card of its own. */
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
 </style>

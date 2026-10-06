@@ -1,4 +1,5 @@
 import base from '@/locales/en/base.json'
+import cardOption from '@/locales/en/cardOption.json'
 import { homebrewMessages } from '@/locales/homebrew'
 import event from '@/locales/en/event.json'
 import log from '@/locales/en/log.json'
@@ -16,8 +17,9 @@ import theInnsmouthConspiracy from '@/locales/en/theInnsmouthConspiracy'
 import edgeOfTheEarth from '@/locales/en/edgeOfTheEarth'
 import theScarletKeys from '@/locales/en/theScarletKeys'
 import theFeastOfHemlockVale from '@/locales/en/theFeastOfHemlockVale'
-import brethrenOfAsh from '@/locales/en/brethrenOfAsh'
 import theDrownedCity from '@/locales/en/theDrownedCity'
+import brethrenOfAsh from '@/locales/en/brethrenOfAsh'
+import childrenOfBlood from '@/locales/en/childrenOfBlood'
 import standalone from '@/locales/en/standalone'
 import theLabyrinthsOfLunacyLog from '@/locales/en/theLabyrinthsOfLunacy.json'
 import gameBoard from '@/locales/en/gameBoard/gameBoard'
@@ -25,6 +27,7 @@ import xp from '@/locales/en/xp.json'
 
 export default
   { ...base
+  , ...cardOption
   , ...event
   , ...campaignLog
   , ...gameBoard
@@ -44,8 +47,9 @@ export default
   , edgeOfTheEarth
   , theScarletKeys
   , theFeastOfHemlockVale
-  , brethrenOfAsh
   , theDrownedCity
+  , brethrenOfAsh
+  , childrenOfBlood
   , ...homebrewMessages()
   , standalone
   , theLabyrinthsOfLunacy: theLabyrinthsOfLunacyLog

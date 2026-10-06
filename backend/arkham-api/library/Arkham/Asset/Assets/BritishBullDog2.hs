@@ -23,11 +23,7 @@ instance HasModifiersFor BritishBullDog2 where
       a
       (hasUses a)
       (AbilityTarget iid $ AbilityRef (toSource a) 1)
-      [ canFightOverride
-          $ EnemyWithoutModifier CannotBeAttacked
-          <> oneOf
-            [NonEliteEnemy <> at_ (connectedFrom $ locationWithInvestigator iid), enemyAtLocationWith iid]
-      ]
+      [CanModify $ EnemyFightActionCriteria $ CriteriaOverride canFightIgnoreAloof]
 
 instance HasAbilities BritishBullDog2 where
   getAbilities (BritishBullDog2 a) =
@@ -47,8 +43,8 @@ instance RunMessage BritishBullDog2 where
           $ CanFightEnemyWithOverride
           $ CriteriaOverride canFightIgnoreAloof
       chooseOneM iid do
-        (withI18n $ skillVar #agility $ labeled' "useSkill") $ push $ withSkillType #agility fight
-        (withI18n $ skillVar #combat $ labeled' "useSkill") $ push fight
+        (withI18n $ skillVar #agility $ labeled "useSkill") $ push $ withSkillType #agility fight
+        (withI18n $ skillVar #combat $ labeled "useSkill") $ push fight
       pure a
     InHand iid (UseThisAbility iid' (isSource attrs -> True) 2) | iid == iid' -> do
       putCardIntoPlay iid attrs
