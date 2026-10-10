@@ -1,16 +1,18 @@
 {- | Agenda 3a, Opus Magnum.
 
-Its b side, Coda Ultimatum, is unusual: it becomes *both* the current act and
-the current agenda, so advancing it does not continue the agenda deck. The
-scenario ends only when every undefeated investigator has resigned (R1).
+Its back is Coda Ultimatum, which stays in play as both act and agenda. That is
+an agenda of its own here, so advancing this one hands over to it -- see
+"Arkham.Homebrew.TheSymphonyOfErichZann.Agendas.CodaUltimatum".
 -}
 module Arkham.Homebrew.TheSymphonyOfErichZann.Agendas.OpusMagnum (opusMagnum) where
 
 import Arkham.Agenda.Import.Lifted
-import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Agendas qualified as Cards
-import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Stories qualified as Stories
+import Arkham.Agenda.Sequence qualified as Agenda
 import Arkham.Helpers.Query (getLead, getSetAsideCard)
 import Arkham.Helpers.Story (readStory)
+import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Agendas qualified as Cards
+import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Stories qualified as Stories
+import Arkham.Matcher
 
 newtype OpusMagnum = OpusMagnum AgendaAttrs
   deriving anyclass (IsAgenda, HasModifiersFor, HasAbilities)
@@ -26,7 +28,14 @@ instance RunMessage OpusMagnum where
       lead <- getLead
       beyondTheCurtain <- getSetAsideCard Stories.beyondTheCurtain
       readStory lead beyondTheCurtain Stories.beyondTheCurtain
-      -- Coda Ultimatum stays in play as both act and agenda, so the agenda deck
-      -- is deliberately NOT advanced here.
+      {- "Then, replace the current Act and Agenda with this Coda Ultimatum. It
+      is now both the current act and agenda." Discarding an act empties the act
+      stack, so nothing follows it; Coda Ultimatum carries the act's objective
+      itself. -}
+      selectEach AnyAct $ toDiscard attrs
+      {- The deck is already mid-advance, and the windows for it have been
+      checked, so this hands over without going through `AdvanceToAgenda` and
+      checking them a second time. -}
+      push $ Do (AdvanceToAgenda attrs.deck Cards.codaUltimatum Agenda.A (toSource attrs))
       pure a
     _ -> OpusMagnum <$> liftRunMessage msg attrs

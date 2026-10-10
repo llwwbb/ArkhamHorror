@@ -71,11 +71,14 @@ import Arkham.CampaignLogKey
 import Arkham.Card
 import Arkham.Classes.GameLogger
 import Arkham.Classes.HasGame
+import Arkham.Classes.Query (select)
 import Arkham.Constants (notPlayerAbilityIndex)
 import Arkham.Cost (Cost (ActionCost, ResourceCost))
 import Arkham.Enemy.Types (Field (..))
 import Arkham.Game.Base (Game (..))
+import Arkham.Game.Utils (modeScenario)
 import Arkham.GameEnv (getSkillTest)
+import Arkham.Helpers.Scenario (getInResolution)
 import Arkham.Helpers.SkillTest (
   calculateSkillTestResultsData,
   getModifiedSkillTestDifficulty,
@@ -83,8 +86,10 @@ import Arkham.Helpers.SkillTest (
 import Arkham.Id
 import Arkham.Investigator.Types (Field (..))
 import Arkham.Keyword (Keyword (Peril))
+import Arkham.Location.Types (Field (..))
 import Arkham.Log
 import Arkham.Log.Refs
+import Arkham.Matcher (InvestigatorMatcher (ActiveInvestigator), LocationMatcher, replaceYouMatcher)
 import Arkham.Message
 import Arkham.Message qualified as Msg
 import Arkham.Movement (moveForced)
@@ -92,6 +97,9 @@ import Arkham.Phase
 import Arkham.Prelude
 import Arkham.Projection
 import Arkham.Resolution
+
+-- For the @HasField "id"@/@"name"@ instances on 'Arkham.Scenario.Types.Scenario'.
+import Arkham.Scenario.Types ()
 import Arkham.SkillTest.Base (SkillTest (..), SkillTestResultsData (..))
 import Arkham.SkillTest.Type
 import Arkham.Source
@@ -108,12 +116,20 @@ on a message, accumulate, emit when you have enough -- and those were deleted
 because, as the note above records, a frame cannot survive the ask that ends
 the action it was opened in.
 
-A surcharge is the one thing that genuinely has to be carried, and it is safe
-to carry precisely because it does not span an ask: it has to be announced
-where it is computed (see @AdditionalCostPaid@), which is /before/ the thing it
-paid for happens, so sending it straight out would print "+1 action from Frozen
-in Fear" above a move the log has not described yet. Held instead, and attached
-to the next thing narrated, so the two read as one entry.
+A cost is the one thing that genuinely has to be carried: it has to be
+announced where it is computed (see @AdditionalCostPaid@), which is /before/
+the thing it paid for happens, so sending it straight out would print "+1
+action from Frozen in Fear" above a move the log has not described yet. Held
+instead, and attached to the next thing narrated, so the two read as one entry.
+
+__This hold only works when no ask intervenes, and that is not something to
+assume.__ Research Librarian disproved the comfortable version of this claim: a
+@freeReaction@ on @AssetEntersPlay #after@ ends the action between paying for
+the card and resolving it, so the hold flushed and the payment stranded itself
+above a play the log had not written. Anything that must survive an ask belongs
+in game state, where @gameCardPlayStack@ puts it -- carrying context that is
+gone by the time the entry can be built is exactly what the state-machine
+design was for, and the per-action ref is the wrong place to keep it.
 
 'flushNarrator' empties this at the end of every action, so a cost whose action
 produced no entry at all is still said, standalone, rather than dropped with
@@ -134,15 +150,28 @@ so it cannot fail on a missing entity, and sends at most one entry.
 
 {- | Send a built narration, or hold it back.
 
-__This, not 'sendLogDuringTest', is what the engine calls.__ Every narration has
+__This, not 'sendLogInOpenBlock', is what the engine calls.__ Every narration has
 to come through here, because this is the only thing that knows about held
 costs; a second path straight to the logger silently defeats them.
 -}
 placeNarration
   :: (HasGame m, HasGameLogger m) => IORef Narrator -> Message -> LogEntry -> m ()
-placeNarration ref msg entry = case msg of
-  AdditionalCostPaid {} -> holdCost ref entry
-  _ -> emitWithHeldCosts ref entry
+placeNarration ref msg entry
+  | isCostNarration msg = holdCost ref entry
+  | otherwise = emitWithHeldCosts ref entry
+
+{- | Messages whose narration is a price rather than an event.
+
+Every one of these is announced before the thing it bought -- resources leave
+your pool on the way to playing the card, not after -- so sending them straight
+out puts the cost above an entry the log has not written yet. Held instead, and
+attached to whatever the payment turns out to have been for.
+-}
+isCostNarration :: Message -> Bool
+isCostNarration = \case
+  AdditionalCostPaid {} -> True
+  SpendResources {} -> True
+  _ -> False
 
 {- | A surcharge waits for the thing it paid for -- unless a block is already
 open, in which case it belongs in that block, now, next to the rest of the
@@ -150,26 +179,42 @@ action it is part of.
 -}
 holdCost :: (HasGame m, HasGameLogger m) => IORef Narrator -> LogEntry -> m ()
 holdCost ref entry = do
-  mst <- getSkillTest
-  case mst of
-    Just _ -> sendLogDuringTest entry
+  mkey <- openBlockKey
+  case mkey of
+    Just _ -> sendLogInOpenBlock entry
     Nothing -> modifyIORef' ref \n -> n {narratorPendingCosts = n.narratorPendingCosts <> [entry]}
 
 -- | Send an entry, carrying any held costs with it.
 emitWithHeldCosts :: (HasGame m, HasGameLogger m) => IORef Narrator -> LogEntry -> m ()
 emitWithHeldCosts ref entry = do
   held <- takeHeldCosts ref
-  if null held
-    then sendLogDuringTest entry
-    else case entry.logEntryGroup of
+  case held of
+    [] -> sendLogInOpenBlock entry
+    _ | not (canOwnCosts entry) -> do
+      -- Nothing here paid for anything, so the costs stand on their own rather
+      -- than being adopted by whatever happened to come next.
+      traverse_ sendLog held
+      sendLogInOpenBlock entry
+    _ -> case entry.logEntryGroup of
       {- A block draws its header's body and nothing else, so a cost attached as a
       child of one would never be seen. It goes in as the block's first member
       instead, which is where a reader looking for why the action cost what it
       did would expect it. -}
       Just g | g.logGroupRole == GroupHeader -> do
-        sendLogDuringTest entry
+        sendLogInOpenBlock entry
         traverse_ (sendLog . inGroupOf g.logGroupId) held
-      _ -> sendLogDuringTest $ withChildren held entry
+      _ -> sendLogInOpenBlock $ withChildren held entry
+
+{- | Whether an entry is the kind of thing a payment can belong to.
+
+Something a player chose to do, or a block being opened by one. A payment is
+otherwise left alone: a phase banner, a damage line or a campaign-log write
+would adopt it just as happily, and "Mythos phase / spends 2 resources" is
+worse than the two lines apart.
+-}
+canOwnCosts :: LogEntry -> Bool
+canOwnCosts entry =
+  entry.logEntryKind == Action || any ((== GroupHeader) . logGroupRole) entry.logEntryGroup
 
 {- | Say anything still held at the end of an action.
 
@@ -287,6 +332,33 @@ oneShot = \case
   an attack -- one event, not two, and it names what did it. -}
   AssignedDamage target source damage horror
     | damage > 0 || horror > 0 -> Just (renderAssignedDamage target source damage horror)
+  {- Where an enemy spawns being put to a player.
+
+  __Two messages ask this, and the obvious one is the rare one.__ A card's own
+  @setSpawnAt@ matcher never reaches @Do (EnemySpawn ...)@ as a matcher at all:
+  @Helpers/Enemy.hs:75@ routes @SpawnAt@ through
+  @EnemySpawnAtLocationMatching@, which selects and hands off to
+  @spawnAtOneOf@ (@Helpers/Enemy.hs:407@) -- read off a live game, where
+  Dancing Rats' pending ask carried @SpawnAtLocation@ choices and so had
+  already left the matcher behind. @Do (EnemySpawn ...)@ keeps a matcher only
+  for a spawn a modifier redirected (@ChangeSpawnWith@ / @ChangeSpawnLocation@,
+  @Enemy/Runner.hs:479@), which asks at @Enemy/Runner.hs:511@. Both are live;
+  neither covers the other.
+
+  Either way the prompt is only worth a line when more than one location
+  matches -- a single match resolves without asking, so a line there would
+  describe a choice nobody made. The matcher is re-selected rather than
+  carried, which is safe because the narrator runs /before/ the message does
+  and so reads the same board the ask will. -}
+  SpawnMessage (EnemySpawnAtLocationMatching_ _ matcher eid) -> Just do
+    -- The handler resolves @You@ against the active investigator before
+    -- selecting, so the count has to be taken off the same matcher. Via
+    -- 'select' rather than @getActiveInvestigatorId@, whose 'selectJust' throws.
+    select ActiveInvestigator >>= \case
+      [iid] -> renderSpawnChoice eid (replaceYouMatcher iid matcher)
+      _ -> pure Nothing
+  Do (EnemySpawn details)
+    | SpawnAt matcher <- details.spawnAt -> Just (renderSpawnChoice details.enemy matcher)
   -- An enemy arriving. @EnemySpawn_@ is the request; @EnemySpawned_@ is the fact,
   -- and by then the enemy has a location to read.
   SpawnMessage (EnemySpawned_ details) -> Just (renderSpawned details)
@@ -295,6 +367,16 @@ oneShot = \case
   InvestigatorMessage (InvestigatorDefeated_ source iid) ->
     Just (renderDefeated (InvestigatorTarget iid) source)
   -- \* Structure: the headings a reader orients by.
+  {- The scenario's own title banner.
+
+  @LoadScenario@, not @StartScenario@: the latter is what /builds/ the scenario,
+  so when the narrator sees it there is no entity to read a name off yet. By
+  @LoadScenario@ there is, and it still lands before the intro flavour and the
+  setup. -}
+  LoadScenario {} -> Just do
+    mScenario <- modeScenario . gameMode <$> getGame
+    pure $ flip fmap mScenario \s ->
+      structure [ikeyPart "log.scenarioBegins" ["scenario" ~> scenarioRef s.id s.name]]
   Begin phase -> Just (pure $ Just $ structure [ikeyPart (phaseKey phase) []])
   {- The round number.
 
@@ -311,9 +393,21 @@ oneShot = \case
     n <- gameRoundCount <$> getGame
     pure $ Just $ structure [ikeyPart "log.round" ["count" ~> (n + 1)]]
   -- \* Doing things
+  {- Playing a card, as a block: the play, what it cost, and anything the card
+  did on the way in.
+
+  The header arrives LAST -- the cost is paid before the card resolves -- and
+  that is fine, because the client assigns header/member/summary by role rather
+  than by arrival order. What it does need is for every row in between to carry
+  the same group id, which is what @gameCardPlayStack@ and
+  'Arkham.Log.Refs.openBlockKey' are for; a row that does not join splits the
+  block in two. -}
   ResolvedPlayCard iid card -> Just do
     who <- investigatorRefFor iid
-    pure $ Just $ action [ikeyPart "log.playsCard" ["investigator" ~> who, "card" ~> card]]
+    pure
+      $ Just
+      $ opensGroup (cardBlockKey card.id)
+      $ action [ikeyPart "log.playsCard" ["investigator" ~> who, "card" ~> card]]
   {- Movement.
 
   @EnterLocation@ after all. It __is__ pushed -- from @handleDoResolveMovement@
@@ -371,13 +465,17 @@ oneShot = \case
 
   NOT treacheries: the dispatcher that handles this pushes @DrewTreachery@ for
   one (@Game/Runner.hs:3816@), and that is narrated below with the Peril rule.
-  Matching both would log every treachery draw twice. -}
+  Matching both would log every treachery draw twice.
+
+  Both variants, because the deck-aware one is what the encounter phase actually
+  pushes (@Scenario/Runner.hs:988@) -- matching only the plain one dropped every
+  enemy and asset drawn from the encounter deck out of the log. No double entry:
+  the plain variant reaches the other through a direct @runMessage@
+  (@Game/Runner.hs:3747@), which never passes the queue the narrator reads. -}
   InvestigatorMessage (InvestigatorDrewEncounterCard_ iid card)
-    | cdCardType (toCardDef card) /= TreacheryType -> Just do
-        who <- investigatorRefFor iid
-        pure
-          $ Just
-          $ mechanic [ikeyPart "log.drawsEncounter" ["investigator" ~> who, "card" ~> toCard card]]
+    | cdCardType (toCardDef card) /= TreacheryType -> Just (drawsEncounter iid card)
+  InvestigatorMessage (InvestigatorDrewEncounterCardFrom_ iid card _)
+    | cdCardType (toCardDef card) /= TreacheryType -> Just (drawsEncounter iid card)
   {- A treachery drawn, and the one place the log deliberately tells two seats
   different things.
 
@@ -390,10 +488,15 @@ oneShot = \case
   DrewTreachery iid _ card -> Just do
     who <- investigatorRefFor iid
     mPlayer <- fieldMay InvestigatorPlayerId iid
-    let named = mechanic [ikeyPart "log.drawsTreachery" ["investigator" ~> who, "card" ~> card]]
+    let
+      named =
+        opensGroup (cardBlockKey card.id)
+          $ mechanic [ikeyPart "log.drawsTreachery" ["investigator" ~> who, "card" ~> card]]
     if Peril `member` cdKeywords (toCardDef card)
       then do
-        sendLog $ mechanic [ikeyPart "log.drawsPeril" ["investigator" ~> who]]
+        sendLog
+          $ opensGroup (cardBlockKey card.id)
+          $ mechanic [ikeyPart "log.drawsPeril" ["investigator" ~> who]]
         pure $ (`forPlayer` named) <$> mPlayer
       else pure $ Just named
 
@@ -489,9 +592,15 @@ oneShot = \case
             , "count" ~> length cards
             ]
         ]
+  {- Paying for something.
+
+  A 'notice', not a 'mechanic', and held rather than sent: it is the price of
+  the thing on the line above it, not an event of its own. See 'isCostNarration'.
+  Standalone is still a valid outcome -- a card that just takes resources off
+  you pays for nothing -- which is why the investigator stays named. -}
   SpendResources iid n | n > 0 -> Just do
     who <- investigatorRefFor iid
-    pure $ Just $ mechanic [ikeyPart "log.spendsResources" ["investigator" ~> who, "count" ~> n]]
+    pure $ Just $ notice [ikeyPart "log.spendsResources" ["investigator" ~> who, "count" ~> n]]
   {- An ability being used.
 
   @UseAbility@, not @UseCardAbility@: only this one carries the whole 'Ability',
@@ -522,9 +631,11 @@ oneShot = \case
   -- still-unrevealed location, so it would draw its back; name it explicitly.
   RevealLocation _ lid -> Just do
     loc <- locationRefFor lid
-    pure
-      $ Just
-      $ mechanic [ikeyPart "log.locationRevealed" ["location" ~> loc {logRefFaceDown = False}]]
+    mCard <- fieldMay LocationCard lid
+    let entry = mechanic [ikeyPart "log.locationRevealed" ["location" ~> loc {logRefFaceDown = False}]]
+    -- Opens the block the reveal's clues and triggers land in; see
+    -- 'runPreGameMessage'. No card means no block, not no line.
+    pure $ Just $ maybe entry (\card -> opensGroup (cardBlockKey (toCardId card)) entry) mCard
   -- Clues moving on and off the board, which is the scenario's clock.
   PlaceClues _ target n | n > 0 -> Just (renderTokens "log.placesClues" target n)
   RemoveClues _ target n | n > 0 -> Just (renderTokens "log.removesClues" target n)
@@ -605,9 +716,21 @@ oneShot = \case
   GainXP iid _ n | n > 0 -> Just do
     who <- investigatorRefFor iid
     pure $ Just $ record [ikeyPart "log.gainsXp" ["investigator" ~> who, "count" ~> n]]
-  ScenarioResolution res -> Just $ pure $ Just $ structure $ pure $ case res of
-    Resolution n -> ikeyPart "log.resolution" ["count" ~> n]
-    NoResolution -> ikeyPart "log.noResolution" []
+  {- The scenario's ending.
+
+  Guarded on @inResolution@ because the narrator sees this message TWICE: the
+  first pass clears the queue and re-pushes the message so the end-of-game
+  window can go in front of it (@Arkham.Scenario@), setting @inResolution@ on
+  the way. Only the second pass is the resolution actually happening. -}
+  ScenarioResolution res -> Just do
+    inResolution <- getInResolution
+    pure
+      $ guard inResolution
+      $> structure
+        ( pure $ case res of
+            Resolution n -> ikeyPart "log.resolution" ["count" ~> n]
+            NoResolution -> ikeyPart "log.noResolution" []
+        )
   -- \* The decks that end the scenario
   {- Act and agenda advancement.
 
@@ -756,9 +879,37 @@ renderAssignedDamage target source damage horror = do
           Nothing -> (key, extra)
      in mechanic [ikeyPart key' (("target" ~> t) : extra')]
 
--- | "Ghoul Priest spawns at the Study".
-renderSpawned :: HasGame m => SpawnDetails -> m (Maybe LogEntry)
+{- | "Ghoul Priest spawns at the Study".
+| "Daisy Walker draws Deep One Ambusher".
+-}
+drawsEncounter :: HasGame m => InvestigatorId -> EncounterCard -> m (Maybe LogEntry)
+drawsEncounter iid card = do
+  who <- investigatorRefFor iid
+  pure
+    $ Just
+    $ opensGroup (cardBlockKey (toCardId card))
+    $ mechanic [ikeyPart "log.drawsEncounter" ["investigator" ~> who, "card" ~> toCard card]]
+
+{- | "Choosing where Dancing Rats spawns", tagged so the spawn takes it back
+out again rather than leaving the question standing above its own answer.
+-}
+renderSpawnChoice :: HasGame m => EnemyId -> LocationMatcher -> m (Maybe LogEntry)
+renderSpawnChoice eid matcher = do
+  locations <- select matcher
+  if length locations < 2
+    then pure Nothing
+    else do
+      enemy <- enemyRefFor eid
+      pure
+        $ Just
+        $ tagged (spawnChoiceLogTag eid)
+        $ notice [ikeyPart "log.choosingSpawnLocation" ["enemy" ~> enemy]]
+
+renderSpawned :: (HasGame m, HasGameLogger m) => SpawnDetails -> m (Maybe LogEntry)
 renderSpawned details = do
+  -- The spawn replaces the prompt that asked for it rather than following it.
+  -- A no-op when nothing asked, which is most spawns.
+  retractLog (spawnChoiceLogTag details.enemy)
   enemy <- enemyRefFor details.enemy
   mLocation <- join <$> fieldMay EnemyLocation details.enemy
   locRef <- traverse locationRefFor mLocation
@@ -848,6 +999,12 @@ renderSkillTestResult iid mAction target sType success n = do
 -- | What a commit's log line is tagged with, so an uncommit can retract it.
 commitLogTag :: Card -> Text
 commitLogTag card = "commit:" <> tshow (toCardId card)
+
+{- | Names the prompt asking where an enemy spawns, so the spawn can take it
+back out. One per enemy: nothing chooses two spawn points for the same enemy.
+-}
+spawnChoiceLogTag :: EnemyId -> Text
+spawnChoiceLogTag eid = "spawnChoice:" <> idText eid
 
 {- | The key the open test's block is filed under.
 

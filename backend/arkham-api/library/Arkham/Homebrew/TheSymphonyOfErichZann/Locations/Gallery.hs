@@ -1,7 +1,7 @@
 module Arkham.Homebrew.TheSymphonyOfErichZann.Locations.Gallery (gallery) where
 
 import Arkham.Ability
-import Arkham.Action qualified as Action
+import Arkham.Helpers.Modifiers (ModifierType (..))
 import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Locations qualified as Cards
 import Arkham.Homebrew.TheSymphonyOfErichZann.Helpers
 import Arkham.Location.Import.Lifted
@@ -19,17 +19,15 @@ instance HasAbilities Gallery where
   getAbilities (Gallery a) =
     extend1 a
       $ campaignI18n
-      $ withI18nResultLabel "gallery.investigate"
-      $ restricted a 1 Here actionAbility
+      $ withI18nTooltip "gallery.investigate"
+      $ investigateAbility a 1 mempty Here
 
 instance RunMessage Gallery where
   runMessage msg l@(Gallery attrs) = runQueueT $ case msg of
     UseThisAbility iid (isSource attrs -> True) 1 -> do
       sid <- getRandom
+      withMatch (locationIs Cards.auditorium) \auditorium ->
+        skillTestModifier sid (attrs.ability 1) iid (DiscoveredCluesAt auditorium 1)
       investigate sid iid (attrs.ability 1)
-      pure l
-    Successful (Action.Investigate, _) iid (isAbilitySource attrs 1 -> True) _ _ -> do
-      auditorium <- selectJust $ locationIs Cards.auditorium
-      discoverAt NotInvestigate iid (attrs.ability 1) 1 auditorium
       pure l
     _ -> Gallery <$> liftRunMessage msg attrs

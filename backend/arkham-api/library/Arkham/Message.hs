@@ -615,6 +615,8 @@ data Message
   | IncreaseFloodLevel LocationId
   | DecreaseFloodLevel LocationId
   | SetFloodLevel LocationId FloodLevel
+  | -- | The write at the end of the flood pipeline; see 'Arkham.Location.Runner'.
+    ApplyFloodLevel LocationId FloodLevel
   | -- Skill Test Specific
     AddSubscriber Target
   | StoryMessage StoryMessage
@@ -951,6 +953,8 @@ data Message
   | InDiscard InvestigatorId Message -- Nothing uses this yet
   | InSearch Message
   | InHand InvestigatorId Message
+  | -- | Dispatched to the committed-card entities of that investigator; see 'CommittedEffect'.
+    Committed InvestigatorId Message
   | InitDeck InitDeckAttrs -- used to initialize the deck for the campaign
   | LoadSideDeck InvestigatorId [PlayerCard] -- used to initialize the side deck for the campaign
   | LoadDecklist PlayerId ArkhamDBDecklist
@@ -1084,6 +1088,8 @@ data Message
   | RecordSetInsert CampaignLogKey [SomeRecorded]
   | RecordSetReplace CampaignLogKey SomeRecorded SomeRecorded
   | CrossOutRecordSetEntries CampaignLogKey [SomeRecorded]
+  | -- | Debug-only: drop entries from a recorded set. No card un-records one.
+    RemoveRecordSetEntries CampaignLogKey [SomeRecorded]
   | RefillSlots InvestigatorId [AssetId]
   | Remember ScenarioLogKey
   | Forget ScenarioLogKey

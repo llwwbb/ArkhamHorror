@@ -16,7 +16,13 @@ import Arkham.Location.CardDefs.Import
 
 entranceHall :: CardDef
 entranceHall =
-  location ":the-symphony-of-erich-zann:009" "Entrance Hall" [AuseilTheatre] Circle [Square] Set.TheSymphonyOfErichZann
+  location
+    ":the-symphony-of-erich-zann:009"
+    "Entrance Hall"
+    [AuseilTheatre]
+    Circle
+    [Square]
+    Set.TheSymphonyOfErichZann
 
 mainLobby :: CardDef
 mainLobby =
@@ -30,7 +36,13 @@ mainLobby =
 
 gallery :: CardDef
 gallery =
-  location ":the-symphony-of-erich-zann:011" "Gallery" [AuseilTheatre] Triangle [Square, Plus] Set.TheSymphonyOfErichZann
+  location
+    ":the-symphony-of-erich-zann:011"
+    "Gallery"
+    [AuseilTheatre]
+    Triangle
+    [Square, Plus]
+    Set.TheSymphonyOfErichZann
 
 auditorium :: CardDef
 auditorium =
@@ -84,19 +96,3 @@ stageHall =
     Diamond
     [Square, Plus, Moon]
     Set.TheSymphonyOfErichZann
-
-{- | The back of the Beyond the Curtain story card. It replaces a location in
-play rather than being placed, so it prints no symbol of its own.
--}
-theWindowToNothingness :: CardDef
-theWindowToNothingness =
-  ( location
-      ":the-symphony-of-erich-zann:008b"
-      ("The Window to Nothingness" <:> "Impenetrable Silence")
-      [Extradimensional]
-      NoSymbol
-      []
-      Set.TheSymphonyOfErichZann
-  )
-    { cdOtherSide = Just ":the-symphony-of-erich-zann:008"
-    }

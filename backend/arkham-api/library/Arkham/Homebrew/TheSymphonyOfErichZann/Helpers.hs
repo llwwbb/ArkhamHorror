@@ -6,10 +6,11 @@ next to the agenda deck, and the current agenda prints how many may sit there at
 once. When placing one would exceed that maximum, the *earliest* one placed is
 discarded instead -- so the row never grows, it rotates.
 
-"Earliest" is insertion order, which the engine does not record anywhere, so the
-scenario keeps its own ordered list of treachery ids in @scenarioMeta@ under
-'musicOrderKey'. Turnaround reshuffles that list, which is the whole of its
-effect.
+"Earliest" is insertion order, which nothing else in the engine records, so the
+scenario publishes an ordered list of treachery ids through
+'setNextToAgendaOrder'. That also tells the agenda to draw them as a row of
+their own, oldest first, rather than stacking them in with its attachments.
+Turnaround reshuffles that list, which is the whole of its effect.
 
 If the current agenda prints no maximum (Coda Ultimatum does not), Music
 treacheries cannot be discarded by this effect at all.
@@ -18,31 +19,46 @@ module Arkham.Homebrew.TheSymphonyOfErichZann.Helpers where
 
 import Arkham.Agenda.Sequence (agendaStep, unAgendaStep)
 import Arkham.Agenda.Types (Field (..))
-import Arkham.Classes.HasGame
 import Arkham.Card.CardDef (CardDef)
+import Arkham.Classes.HasGame
 import Arkham.Classes.HasQueue (push)
 import Arkham.Classes.Query
 import Arkham.Helpers.Query (getInvestigators)
-import Arkham.Helpers.Scenario (getScenarioMetaKeyDefault, scenarioField, setScenarioMeta)
+import Arkham.Helpers.Scenario (getNextToAgendaOrder, setNextToAgendaOrder)
+import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Enemies qualified as Enemies
 import Arkham.Homebrew.TheSymphonyOfErichZann.Traits (pattern Music)
 import Arkham.I18n
 import Arkham.Id
 import Arkham.Matcher
 import Arkham.Message (Message (PlaceTreachery), ShuffleIn (..))
-import Arkham.Placement (Placement (InPlayArea, NextToAgenda))
 import Arkham.Message.Lifted
 import Arkham.Message.Lifted.Choose
+import Arkham.Placement (Placement (InPlayArea, NextToAgenda))
 import Arkham.Prelude
 import Arkham.Projection
-import Arkham.Scenario.Types (Field (ScenarioMeta))
 import Arkham.Source (toSource)
 import Arkham.Trait (Trait)
 import Arkham.Treachery.Types (TreacheryAttrs)
-import Data.Aeson.KeyMap qualified as KeyMap
 
--- | Where the placement order of the Music row lives inside @scenarioMeta@.
-musicOrderKey :: Key
-musicOrderKey = "musicOrder"
+{- | The four Musicians this scenario is about.
+
+An allowlist rather than the [[Musician]] trait: an investigator's own weakness
+could carry that trait without being one of the orchestra, and act 3 would then
+try to flip it to a Muse it does not have. Auguste Gaudin is a [[Musician]] too
+and is deliberately absent -- he is defeated to advance act 2, and his other
+side is act 1, not a Muse.
+-}
+musicians :: [CardDef]
+musicians =
+  [ Enemies.arnoldWalker
+  , Enemies.isabelLaFratta
+  , Enemies.nicolePage
+  , Enemies.songYin
+  ]
+
+-- | Those four, as an enemy matcher.
+musicianEnemies :: EnemyMatcher
+musicianEnemies = mapOneOf enemyIs musicians
 
 -- | Every [[Music]] treachery currently next to the agenda deck.
 musicTreacheriesInPlay :: HasGame m => m [TreacheryId]
@@ -65,20 +81,14 @@ musicMaximum =
 -- | The recorded placement order, filtered to what is still in play.
 getMusicOrder :: HasGame m => m [TreacheryId]
 getMusicOrder = do
-  recorded <- getScenarioMetaKeyDefault musicOrderKey []
+  recorded <- getNextToAgendaOrder
   inPlay <- musicTreacheriesInPlay
   -- Anything in play but unrecorded (a treachery placed by some other effect)
   -- sorts after everything that was recorded, so it is discarded last.
   pure $ filter (`elem` inPlay) recorded <> filter (`notElem` recorded) inPlay
 
--- | Rewrite the placement order, leaving the rest of @scenarioMeta@ alone.
 setMusicOrder :: ReverseQueue m => [TreacheryId] -> m ()
-setMusicOrder order = do
-  meta <- scenarioField ScenarioMeta
-  let object' = case meta of
-        Object o -> o
-        _ -> KeyMap.empty
-  setScenarioMeta $ Object $ KeyMap.insert musicOrderKey (toJSON order) object'
+setMusicOrder = setNextToAgendaOrder
 
 {- | Put a [[Music]] treachery into play next to the agenda deck.
 
@@ -122,13 +132,17 @@ musePayoff iid musician instrument = do
 Piano Key the same way, but banks itself rather than a Musician.
 -}
 offerInstrument :: (HasI18n, ReverseQueue m) => InvestigatorId -> CardDef -> m ()
-offerInstrument iid instrument = chooseOneM iid do
-  labeled "takeInstrument" do
-    investigators <- getInvestigators
-    chooseOrRunOneM iid $ targets investigators \owner -> do
+offerInstrument iid instrument = do
+  investigators <- getInvestigators
+  -- The Lita Chantler shape: the card beside the question, a portrait per
+  -- investigator, and a decline.
+  chooseOneM iid do
+    questionLabeled "putIntoPlay"
+    questionLabeledCard instrument
+    portraits investigators \owner -> do
       createAssetAt_ instrument (InPlayArea owner)
       addCampaignCardToDeck owner DoNotShuffleIn instrument
-  labeled "leaveInstrument" nothing
+    labeled "leaveInstrument" nothing
 
 -- | The campaign's own i18n scope; the folder name camelCased.
 campaignI18n :: (HasI18n => a) -> a

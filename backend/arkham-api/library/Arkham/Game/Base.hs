@@ -94,6 +94,13 @@ data Game = Game
   , gameModifiers :: Map Target [Modifier]
   , gameEncounterDiscardEntities :: Entities
   , gameInHandEntities :: Map InvestigatorId Entities
+  , gameCommittedEntities :: Map InvestigatorId Entities
+  {- ^ Entities for cards sitting on the current skill test as committed cards,
+    keyed by the investigator who committed them. Rebuilt from
+    @skillTestCommittedCards@ by 'preloadEntities' before every message, for defs
+    that ask for it with 'CommittedEffect'; a committed skill already has a real
+    'Skill' entity and is skipped.
+  -}
   , gameInDiscardEntities :: Map InvestigatorId Entities
   , gameInSearchEntities :: Entities
   , -- Player Details
@@ -175,6 +182,20 @@ data Game = Game
   , gameUndoRoundStep :: Maybe Int
   , gameAsIfAtIgnored :: Set InvestigatorId -- transient: investigators with AsIfAt suppressed during window processing
   , gameLocationOffsets :: Map LocationId (Double, Double) -- player-driven board layout overrides; shared across players
+  , gameCardPlayStack :: [CardId]
+  {- ^ The cards whose log block is open, innermost last: a card being played,
+    or an encounter card being drawn and resolved.
+
+    Log-only, and here rather than in the narrator because the narrator cannot
+    hold it: its ref lives for one action, and a reaction to a card entering
+    play (Research Librarian) ends the action between paying for the card and
+    resolving it. The 'Arkham.ActiveCost.ActiveCost' cannot stand in either --
+    @PayCostFinished@ deletes it as soon as the cost is paid, long before the
+    card resolves.
+
+    A stack, not a @Maybe@: playing a card can play another one, and a drawn
+    treachery can surge into the next one.
+  -}
   }
   deriving stock (Eq, Show)
 

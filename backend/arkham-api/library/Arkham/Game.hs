@@ -81,6 +81,7 @@ import Arkham.Helpers.Campaign (getCurrentDeck)
 import Arkham.Helpers.Card (
   cardListMatches,
   extendedCardMatch,
+  filterCardsSubstituted,
   getHasVictoryPoints,
   getVictoryPoints,
   iconsForCard,
@@ -305,6 +306,7 @@ newGame scenarioOrCampaignId seed playerCount difficulty includeTarotReadings =
         , gameModifiers = mempty
         , gameEncounterDiscardEntities = defaultEntities
         , gameInHandEntities = mempty
+        , gameCommittedEntities = mempty
         , gameInDiscardEntities = mempty
         , gameInSearchEntities = defaultEntities
         , gamePlayers = mempty
@@ -354,6 +356,7 @@ newGame scenarioOrCampaignId seed playerCount difficulty includeTarotReadings =
         , gameUndoRoundStep = Nothing
         , gameAsIfAtIgnored = mempty
         , gameLocationOffsets = mempty
+        , gameCardPlayStack = mempty
         }
  where
   mode = case scenarioOrCampaignId of
@@ -1424,6 +1427,10 @@ getInvestigatorsMatching MatcherFunc {..} matcher = do
         let iid = toId a
         taken <- nub . concat <$> field InvestigatorActionsTaken iid
         anyM (\action -> actionMatches iid action actionMatcher) taken
+    InvestigatorWithNoRepeatedActionsThisTurn -> do
+      flip runMatchesM as \a -> do
+        performed <- fieldMap InvestigatorActionsPerformed concat (toId a)
+        pure $ length performed == length (nub performed)
     InvestigatorSkippedWindow -> pure $ as & runMatches (attr investigatorSkippedWindow)
     CanTakeUntakenAction -> do
       flip runMatchesM as \a -> do
@@ -2153,6 +2160,15 @@ getGameAbilities = do
   inHandAssetAbilities <-
     concatMap (filter inHandAbility . getAbilities)
       <$> filterM unblanked (toList $ g ^. inHandEntitiesL . each . assetsL)
+  -- INVARIANT: a committed card's abilities surface iff their criteria carry
+  -- IsCommitted, the same guard shape as the in-hand zone. (Cards only land in
+  -- gameCommittedEntities when their def has cdCardCommittedEffects.)
+  committedAssetAbilities <-
+    concatMap (filter committedAbility . getAbilities)
+      <$> filterM unblanked (toList $ g ^. committedEntitiesL . each . assetsL)
+  committedEventAbilities <-
+    concatMap (filter committedAbility . getAbilities)
+      <$> filterM unblanked (toList $ g ^. committedEntitiesL . each . eventsL)
   -- A skill is preloaded in hand the same way, and a skill that acts from hand
   -- is the whole point of the InHandEffect zone, so it needs the same guard
   -- rather than being reachable only through the pure sweep.
@@ -2185,6 +2201,8 @@ getGameAbilities = do
     <> inHandEventAbilities
     <> inHandAssetAbilities
     <> inHandSkillAbilities
+    <> committedAssetAbilities
+    <> committedEventAbilities
     <> trueMagickInHandAbilities
     <> campaignAbilities'
     <> inDiscardAssetAbilities
@@ -5380,11 +5398,16 @@ instance Projection Investigator where
           fewer sType n = ix sType %~ removeSlots n
         pure $ foldr (uncurry fewer) investigatorSlots [(s, n) | FewerSlots s n <- mods]
       InvestigatorUsedAbilities -> pure investigatorUsedAbilities
-      InvestigatorTraits -> case investigatorForm of
-        TransfiguredForm inner -> case lookup inner allInvestigatorCards of
-          Nothing -> error "no valid card def"
-          Just c -> pure $ cdCardTraits c
-        _ -> pure investigatorTraits
+      InvestigatorTraits -> do
+        printedTraits <- case investigatorForm of
+          TransfiguredForm inner -> case lookup inner allInvestigatorCards of
+            Nothing -> error "no valid card def"
+            Just c -> pure $ cdCardTraits c
+          _ -> pure investigatorTraits
+        mods <- getModifiers iid
+        let addedTraits = setFromList [t | AddTrait t <- mods]
+        let removedTraits = setFromList [t | RemoveTrait t <- mods]
+        pure $ (printedTraits <> addedTraits) `difference` removedTraits
       InvestigatorAbilities -> pure $ filter ((< 1000) . abilityIndex) $ getAbilities i
       InvestigatorCommittedCards -> do
         mskillTest <- getSkillTest
@@ -5790,8 +5813,8 @@ instance Query ExtendedCardMatcher where
           _ -> pure handCards
         pure $ filter (`elem` cards) cs
       SetAsideCardMatch matcher' -> do
-        cards <- scenarioField ScenarioSetAsideCards
-        pure $ filter (`elem` filterCards matcher' cards) cs
+        cards <- filterCardsSubstituted matcher' =<< scenarioField ScenarioSetAsideCards
+        pure $ filter (`elem` cards) cs
       PassesCommitRestrictions inner -> do
         let
           passesCommitRestriction card = \case
@@ -5920,7 +5943,7 @@ instance Query ExtendedCardMatcher where
       CommittableCard imatch matcher' -> do
         iid <- selectJust imatch
         filterM (getIsCommittable iid) =<< go cs matcher'
-      BasicCardMatch cm -> pure $ filter (`cardMatch` cm) cs
+      BasicCardMatch cm -> filterCardsSubstituted cm cs
       InHandOf forPlay who -> do
         iids <- select who
         cards <- case forPlay of
@@ -6440,6 +6463,7 @@ instance Projection Scenario where
     case fld of
       ScenarioLocationLayout -> pure scenarioLocationLayout
       ScenarioLocationGroups -> pure scenarioLocationGroups
+      ScenarioSubstitutions -> pure scenarioSubstitutions
       ScenarioGrid -> pure scenarioGrid
       ScenarioCardsUnderActDeck -> pure scenarioCardsUnderActDeck
       ScenarioCardsNextToActDeck -> pure scenarioCardsNextToActDeck
@@ -7170,16 +7194,6 @@ asActive iid body = do
   g <- getGame
   runReaderT body (g {gameActiveInvestigatorId = iid})
 
-{- | Card ids that already have an entity somewhere in @e@, so
-'pendingCommitEntities' does not load a second copy of the same card.
--}
-loadedCardIds :: Entities -> Set CardId
-loadedCardIds e =
-  setFromList
-    $ [(toAttrs s).cardId | s <- toList (e ^. skillsL)]
-    <> [(toAttrs x).cardId | x <- toList (e ^. eventsL)]
-    <> [(toAttrs x).cardId | x <- toList (e ^. assetsL)]
-
 {- | Entities for cards sitting on the current skill test that the engine has not
 turned into real entities yet.
 
@@ -7208,6 +7222,7 @@ pendingCommitEntities g = case gameSkillTest g of
   alreadyLoaded =
     loadedCardIds (gameEntities g)
       <> foldMap loadedCardIds (gameInHandEntities g)
+      <> foldMap loadedCardIds (gameCommittedEntities g)
       <> foldMap loadedCardIds (gameInDiscardEntities g)
       <> loadedCardIds (gameInSearchEntities g)
   pending st =
@@ -7242,6 +7257,7 @@ preloadModifiers g = case gameMode g of
     let rawModifiers = buildModifiers g do
           getModifiersFor $ gameEntities g
           traverse_ getModifiersFor $ gameInHandEntities g
+          traverse_ getModifiersFor $ gameCommittedEntities g
           traverse_ getModifiersFor $ gameInDiscardEntities g
           getModifiersFor $ pendingCommitEntities g
           for_ (activeUltimatumsAndBoons (gameSettings g)) getModifiersFor
@@ -7396,6 +7412,7 @@ instance HasAbilities Game where
     getAbilities (gameEntities g)
       <> getAbilities (gameInSearchEntities g)
       <> concatMap getAbilities (gameInHandEntities g)
+      <> concatMap getAbilities (gameCommittedEntities g)
       <> concatMap getAbilities (gameInDiscardEntities g)
       <> getAbilities (gameMode g)
       <> concatMap ultimatumOrBoonAbilities (toList $ activeUltimatumsAndBoons $ gameSettings g)

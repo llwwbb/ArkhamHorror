@@ -1,11 +1,11 @@
 module Arkham.Homebrew.TheSymphonyOfErichZann.Locations.InstrumentCloset (instrumentCloset) where
 
 import Arkham.Ability
-import Arkham.Strategy
-import Arkham.Helpers.Modifiers (ModifierType (..), modifySelect, modifySelfWhen)
+import Arkham.Helpers.Modifiers (ModifierType (..), modifySelect)
 import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Locations qualified as Cards
 import Arkham.Location.Import.Lifted
 import Arkham.Matcher
+import Arkham.Strategy
 import Arkham.Trait (Trait (Ally, Item))
 
 newtype InstrumentCloset = InstrumentCloset LocationAttrs
@@ -13,7 +13,10 @@ newtype InstrumentCloset = InstrumentCloset LocationAttrs
   deriving newtype (Show, Eq, ToJSON, FromJSON, Entity)
 
 instrumentCloset :: LocationCard InstrumentCloset
-instrumentCloset = location InstrumentCloset Cards.instrumentCloset 3 (PerPlayer 1)
+instrumentCloset =
+  locationWith InstrumentCloset Cards.instrumentCloset 3 (PerPlayer 1)
+    $ costToEnterUnrevealedL
+    .~ GroupClueCost (PerPlayer 1) Anywhere
 
 instance HasModifiersFor InstrumentCloset where
   {- "While you are at Instrument Closet, treat each of your non-weakness Ally
@@ -23,10 +26,6 @@ instance HasModifiersFor InstrumentCloset where
       a
       (AssetWithTrait Ally <> NonWeaknessAsset <> AssetControlledBy (investigatorAt a.id))
       [Blank]
-    -- "The door leading to this room is blocked. As an additional cost to move
-    -- to Backstage Room, the investigators must spend 1 clue per investigator,
-    -- as a group."
-    modifySelfWhen a (not a.revealed) [AdditionalCostToEnter $ GroupClueCost (PerPlayer 1) Anywhere]
 
 instance HasAbilities InstrumentCloset where
   -- "[action]: Search the top 9 cards of your deck for an Item asset and draw it. (Limit once per round)"
@@ -36,6 +35,12 @@ instance HasAbilities InstrumentCloset where
 instance RunMessage InstrumentCloset where
   runMessage msg l@(InstrumentCloset attrs) = runQueueT $ case msg of
     UseThisAbility iid (isSource attrs -> True) 1 -> do
-      search iid (attrs.ability 1) iid [fromTopOfDeck 9] (basic $ #asset <> CardWithTrait Item) (DrawFound iid 1)
+      search
+        iid
+        (attrs.ability 1)
+        iid
+        [fromTopOfDeck 9]
+        (basic $ #asset <> CardWithTrait Item)
+        (DrawFound iid 1)
       pure l
     _ -> InstrumentCloset <$> liftRunMessage msg attrs

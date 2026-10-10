@@ -70,15 +70,15 @@ caveMouth =
 
 -- return_to_horror_in_high_gear. Road locations, so they share the Innsmouth Road back.
 
-mudTrack :: CardDef
-mudTrack =
+mudTracks :: CardDef
+mudTracks =
   locationWithUnrevealed
     ":return-to-the-innsmouth-conspiracy:036"
     "Old Innsmouth Road"
     [Road]
     NoSymbol
     []
-    "Mud Track"
+    "Mud Tracks"
     [Road]
     NoSymbol
     []
@@ -99,15 +99,21 @@ straightSection =
     Set.ReturnToHorrorInHighGear
 
 -- | return_to_devil_reef. Shuffled into the encounter deck, so it has an encounter back.
+
+{- | Drawn from the encounter deck, so it needs 'singleSided': 'location' marks a card
+double-sided, which both routes it out of the encounter deck when the set is gathered and
+has 'shuffleEncounterDeck' filter it back out again.
+-}
 shrineToHydra :: CardDef
 shrineToHydra =
-  ( location
-      ":return-to-the-innsmouth-conspiracy:032"
-      "Shrine to Hydra"
-      [Cave]
-      Diamond
-      []
-      Set.ReturnToDevilReef
+  ( singleSided
+      $ location
+        ":return-to-the-innsmouth-conspiracy:032"
+        "Shrine to Hydra"
+        [Cave]
+        NoSymbol
+        [Diamond]
+        Set.ReturnToDevilReef
   )
     { cdVictoryPoints = Just 1
     }

@@ -820,9 +820,6 @@ instance RunMessage AssetAttrs where
       pure $ a & cardsUnderneathL %~ filter (`notElem` cards)
     AddToDiscard _ c -> do
       pure $ a & cardsUnderneathL %~ filter (/= toCard c)
-    ObtainCard cid | cid == a.cardId -> do
-      push $ RemoveFromPlay (toSource a)
-      pure a
     ObtainCard c -> do
       pure $ a & cardsUnderneathL %~ filter ((/= c) . toCardId)
     CommitCard _ card -> do
@@ -918,6 +915,9 @@ instance RunMessage AssetAttrs where
       push $ Do msg'
       pure a
     InHand iid msg'@(UseAbility iid' ab _) | iid == iid' && (isSource a ab.source || isProxySource a ab.source) -> do
+      push $ Do msg'
+      pure a
+    Committed iid msg'@(UseAbility iid' ab _) | iid == iid' && (isSource a ab.source || isProxySource a ab.source) -> do
       push $ Do msg'
       pure a
     Flip _ _ target | a `isTarget` target -> do

@@ -502,7 +502,10 @@ instance RunMessage EnemyAttrs where
         SpawnEngagedWith imatcher -> do
           iids <- select imatcher
           case iids of
-            [] -> pure ()
+            -- Nobody to engage. Doing nothing here would leave the enemy in play as
+            -- an Unplaced entity that can never act and never leaves, so resolve it
+            -- the way every other failed spawn does.
+            [] -> noSpawn a details.investigator
             [iid] -> do
               let
                 getModifiedSpawnAt [] = pure Nothing
@@ -1557,14 +1560,14 @@ instance RunMessage EnemyAttrs where
       push $ Failed (Action.Evade, toProxyTarget target) iid source (toActionTarget target) n
       pure a
     Failed (Action.Evade, target) iid _ _ _ | isTarget a target -> do
-      mods <- getModifiers iid
+      mods <- getCombinedModifiers [toTarget iid, toTarget a]
       keywords <- getModifiedKeywords a
       canAttack <- canBeAttackedBy enemyId iid
       pushAll
         [ EnemyAttack $ viaAlert $ (enemyAttack enemyId a iid) {attackDamageStrategy = enemyDamageStrategy}
         | canAttack
         , Keyword.Alert `elem` keywords
-        , IgnoreRetaliate `notElem` mods
+        , IgnoreAlert `notElem` mods
         ]
       pure a
     InitiateEnemyAttack details | details.enemy == enemyId -> do

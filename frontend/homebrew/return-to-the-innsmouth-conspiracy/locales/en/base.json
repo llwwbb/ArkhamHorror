@@ -2,10 +2,14 @@
   "name": "Return to The Innsmouth Conspiracy",
   "designer": "DerBK",
   "occultation": {
-    "placeDoom": "Place 1 doom on the current agenda"
+    "label": {
+      "placeDoom": "Place 1 doom on the current agenda"
+    }
   },
   "struggleForAir": {
-    "doNotDiscard": "Done discarding assets"
+    "label": {
+      "doNotDiscard": "Done discarding assets"
+    }
   },
   "returnToThePitOfDespair": {
     "setup": {
@@ -18,10 +22,12 @@
     "name": "Return to The Pit of Despair"
   },
   "troublingMemories": {
-    "takeHorror": "Take 1 horror",
-    "takeDamage": "Take 1 damage",
-    "discardCard": "Discard a card from your hand",
-    "gainSurge": "Troubling Memories gains surge"
+    "label": {
+      "takeHorror": "Take 1 horror",
+      "takeDamage": "Take 1 damage",
+      "discardCard": "Discard a card from your hand",
+      "gainSurge": "Troubling Memories gains surge"
+    }
   },
   "returnToTheVanishingOfElinaHarper": {
     "setup": {
@@ -32,12 +38,15 @@
       "setAsideCards": "Set each of the following cards aside, out of play: the Thomas Dawson and Elina Harper story assets, both copies of the Hunting Nightgaunt enemy, and the <span class='return-to-swap'>*Immaterial One*</span> enemy (*Innsmouth Haze* stands in for the Winged One)."
     },
     "name": "Return to The Vanishing of Elina Harper",
+    "extraResolution": "While resolving one of Resolution 1 to 7, resolve the following as well:",
     "townspeopleInsight": "Your dealings with the townspeople have given you insight into what's going on here: each investigator gains 1 extra experience for each Suspect enemy in the victory display."
   },
   "growingSuspicion": {
-    "placeClue": "Place one of your clues on the nearest Suspect enemy",
-    "suspectAttacks": "The nearest Suspect enemy attacks you",
-    "removeHybrid": "Remove a Hybrid story asset you control from the game"
+    "label": {
+      "placeClue": "Place one of your clues on the nearest Suspect enemy",
+      "suspectAttacks": "The nearest Suspect enemy attacks you",
+      "removeHybrid": "Remove a Hybrid story asset you control from the game"
+    }
   },
   "returnToInTooDeep": {
     "setup": {
@@ -46,9 +55,6 @@
       "replacedCards": "Use *Through the Labyrinth* from *Return to In Too Deep* as act 1a, instead of the original.",
       "setAsideCards": "Set the following cards aside, out of play: 2 copies of the Ravager from the Deep enemy, 2 copies of the <span class='return-to-swap'>*Deep One Ambusher*</span> enemy (*Stalkers of Cthulhu* stands in for the Young Deep One), the Joe Sargent story asset, the Teachings of the Order story asset, and the Innsmouth Shoggoth enemy.",
       "setAsideInnsmouthInfluence": "Also set all four copies of *Innsmouth Influence* aside, out of play."
-    },
-    "resolution": {
-      "innsmouthInfluence": "As you are about to leave this forsaken place, you can feel something in yourself pulling, wanting to go back. You wonder if your stay here already started to affect you."
     },
     "name": "Return to In Too Deep"
   },
@@ -62,10 +68,16 @@
       "devilReefLocations": "Shuffle *Cave Mouth* in with the 5 Devil Reef locations and put all 6 of them into play, unrevealed side faceup. Do not remove any. Do not place them adjacent to Churning Waters—these locations are connected not via adjacency, but via their connection symbols."
     },
     "aBargain": {
-      "title": "A Bargain",
-      "body": "You stand in front of the large carved stone depicting a bloated figure with fishlike features. The voice that guided you here is just a whisper now, but you feel power radiating from the statue and you know that's why you are here. It's this power that calls out to you, telling you that you could have all the riches you desired and the long life to take advantage of them.\n\nWhile you approach the statue, you become aware of the price that you would have to pay. You consider your options.",
-      "payThePrice": "You pay the price.",
-      "backOut": "You come to your senses and back out. The voices go quiet."
+      "title": "Scenario Interlude: A Bargain",
+      "intro": "_A Bargain 1:_ You stand in front of the large carved stone depicting a bloated figure with fishlike features. The voice that guided you here is just a whisper now, but you feel power radiating from the statue and you know that's why you are here. It's this power that calls out to you, telling you that you could have all the riches you desired and the long life to take advantage of them.",
+      "body": "While you approach the statue, you become aware of the price that you would have to pay. You consider your options.",
+      "chooseOne": "Choose one:",
+      "payThePrice": "You pay the price. Search your collection for a copy of Innsmouth Influence (from the *Return to In Too Deep* set) and add it to your deck. Discover all clues on Shrine to Hydra and gain 5 resources.",
+      "backOut": "You come to your senses and back out. The voices go quiet.",
+      "label": {
+        "payThePrice": "You pay the price.",
+        "backOut": "You come to your senses and back out. The voices go quiet."
+      }
     }
   },
   "returnToHorrorInHighGear": {
@@ -88,7 +100,9 @@
     },
     "changing": {
       "title": "A Light in the Fog",
-      "body": "You awaken abruptly from your sleep. You still have the dreams in front of your eyes, dreams of swimming in the depths, drawn deeper and deeper. You saw others down there with you, looking just like the twisted fish-like creatures you have encountered again and again now. They seemed strangely familiar to you, as if they are good friends. Or family.\n\nYou sit up straight and move to rub the sleep from your eyes, but you recoil at the sight of your own hands. The webbing between two of your fingers confirms your fears... you are not just imagining it, you are actually changing. You need to get out of this town, and quick."
+      "instructions": "While resolving one of Resolution 1, 2 or 4, every Deep One investigator has to read this:",
+      "body": "<p>You awaken abruptly from your sleep. You still have the dreams in front of your eyes, dreams of swimming in the depths, drawn deeper and deeper. You saw others down there with you, looking just like the twisted fish-like creatures you have encountered again and again now. They seemed strangely familiar to you, as if they are good friends. Or family.</p><p>You sit up straight and move to rub the sleep from your eyes, but you recoil at the sight of your own hands. The webbing between two of your fingers confirms your fears... you are not just imagining it, you are actually changing. You need to get out of this town, and quick.</p>",
+      "trauma": "You gain 1 mental trauma as your mind tries to cope with the changes your body is going through."
     }
   },
   "returnToTheLairOfDagon": {
@@ -114,7 +128,7 @@
   },
   "flashbackXVI": {
     "title": "Flashback XVI",
-    "body": "You might have managed to leave the town of Innsmouth behind you, but as you are sitting in you car you realize that you took a part of it with you. Forever. There are signs of the Old One's influence on your body, sure. The webbing between a couple of fingers you noticed earlier. Spots on your skin that itch and you could swear that the skin on one of your elbows in particular feels more leathery by the day. All of this is deeply disturbing, but it pales to what is going on in your head. You feel guilt. Guilt for crossing your benefactors. Guilt for running from your new family, from your place under the sea. The weirdest part however is the rush of memories that sometimes comes over you. Memories of places and events you weren't around for but that appear in your head nonetheless. Mostly these memories come to you in your sleep, but they have started to appear while awake as well. You remember names of entities you never heard about, names of places you've never been. Among these flashes of insight, one name is recurring again and again. R'lyeh. Even as you think about it now, you silently mouth the word. R'lyeh. You don't know what it means, but at the same time the name offers you comfort. R'lyeh. You wanted to get distance from Innsmouth, but this is more important. R'lyeh. It's where you are needed.\n\nIn your Campaign Log, under \"Memories Recovered\", record \"you remember where you have to go\"."
+    "body": "<div class='blue'><h1>Flashback XVI</h1><p>You might have managed to leave the town of Innsmouth behind you, but as you are sitting in you car you realize that you took a part of it with you. Forever. There are signs of the Old One's influence on your body, sure. The webbing between a couple of fingers you noticed earlier. Spots on your skin that itch and you could swear that the skin on one of your elbows in particular feels more leathery by the day.</p><p>All of this is deeply disturbing, but it pales to what is going on in your head. You feel guilt. Guilt for crossing your benefactors. Guilt for running from your new family, from your place under the sea.</p><p>The weirdest part however is the rush of memories that sometimes comes over you. Memories of places and events you weren't around for but that appear in your head nonetheless. Mostly these memories come to you in your sleep, but they have started to appear while awake as well. You remember names of entities you never heard about, names of places you've never been.</p><p>Among these flashes of insight, one name is recurring again and again. R'lyeh. Even as you think about it now, you silently mouth the word. R'lyeh. You don't know what it means, but at the same time the name offers you comfort. R'lyeh. You wanted to get distance from Innsmouth, but this is more important. R'lyeh. It's where you are needed.</p><hr /><p class='basic'>In your Campaign Log, under “Memories Recovered,” record *you remember where you have to go.*</p><p class='basic'>During the Epilogue, this memory can stand in for another one when determining whether you get to read Flashback XV (you still need 14 or more unlocked Flashbacks, including this one). This means that Deep One investigators might get a different epilogue than non-Deep One investigators.</p><p class='basic'>Proceed to _Epilogue 1_.</p></div>"
   },
   "xp": {
     "townspeopleInsight": "insight into what's going on here"

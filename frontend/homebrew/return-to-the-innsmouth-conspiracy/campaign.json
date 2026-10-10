@@ -1,7 +1,8 @@
 {
   "id": ":return-to-the-innsmouth-conspiracy",
   "name": "Return to The Innsmouth Conspiracy",
-  "dev": true,
+  "floodRules": true,
+  "beta": true,
   "homebrew": true,
   "chapter": 1,
   "designer": "DerBK",

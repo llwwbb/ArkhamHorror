@@ -12,9 +12,10 @@ module Arkham.Homebrew.TheSymphonyOfErichZann.Scenarios.TheSymphonyOfErichZann (
   theSymphonyOfErichZann,
 ) where
 
+import Arkham.Card.CardDef (CardDef)
+import Arkham.Deck qualified as Deck
 import Arkham.Difficulty
 import Arkham.Helpers.FlavorText
-import Arkham.Helpers.Xp (toBonus)
 import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Acts qualified as Acts
 import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Agendas qualified as Agendas
 import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Assets qualified as Assets
@@ -25,10 +26,12 @@ import Arkham.Homebrew.TheSymphonyOfErichZann.CardDefs.Treacheries qualified as 
 import Arkham.Homebrew.TheSymphonyOfErichZann.Helpers
 import Arkham.Homebrew.TheSymphonyOfErichZann.Key
 import Arkham.Homebrew.TheSymphonyOfErichZann.Sets qualified as Set
-import Arkham.Card (genCard)
-import Arkham.Card.CardDef (CardDef)
+import Arkham.Homebrew.TheSymphonyOfErichZann.Traits (pattern Music, pattern Musician)
+import Arkham.Investigator.Types (Field (InvestigatorMentalTrauma))
 import Arkham.Matcher
+import Arkham.Message.Lifted.Choose
 import Arkham.Message.Lifted.Log
+import Arkham.Projection
 import Arkham.Resolution
 import Arkham.Scenario.Import.Lifted
 import Arkham.Trait (Trait (Performer))
@@ -44,9 +47,9 @@ theSymphonyOfErichZann difficulty =
     ":the-symphony-of-erich-zann:001"
     "The Symphony of Erich Zann"
     difficulty
-    [ ".          entranceHall .         backstage1 backstage2"
-    , "gallery    mainLobby    stageHall .          ."
-    , "auditorium .            .         backstage3 backstage4"
+    [ ".          entranceHall backstage1 backstage2"
+    , "gallery    mainLobby    stageHall  ."
+    , "auditorium .            backstage3 backstage4"
     ]
 
 instance HasChaosTokenValue TheSymphonyOfErichZann where
@@ -72,22 +75,14 @@ backstageRooms =
   , Locations.tiringRoom
   ]
 
--- | The four Musician enemies act 2 deals out, one to each Backstage Room.
-musicians :: [CardDef]
-musicians =
-  [ Enemies.arnoldWalker
-  , Enemies.isabelLaFratta
-  , Enemies.nicolePage
-  , Enemies.songYin
-  ]
-
 instance RunMessage TheSymphonyOfErichZann where
   runMessage msg s@(TheSymphonyOfErichZann attrs) = runQueueT $ scenarioI18n $ case msg of
-    PreScenarioSetup -> scope "prologue" do
-      flavor $ h "title" >> p "body1"
-      -- Isabel La Fratta has her own reason to answer Gaudin's letter.
-      playingIsabel <- selectAny (InvestigatorWithTitle "Isabel La Fratta")
-      when playingIsabel $ flavor $ p "isabel"
+    PreScenarioSetup -> do
+      scope "prologue" do
+        flavor $ h "title" >> p "body"
+        playingIsabel <- selectAny (InvestigatorWithTitle "Isabel La Fratta")
+        when playingIsabel $ flavor $ scope "isabel" $ h "title" >> p "body"
+      scope "intro" $ flavor $ h "title" >> p "body"
       pure s
     StandaloneSetup -> do
       setChaosTokens $ chaosBagContents attrs.difficulty
@@ -104,17 +99,21 @@ instance RunMessage TheSymphonyOfErichZann where
         li "performerWeakness"
         unscoped $ li "shuffleRemainder"
 
+      additionalRules "musicTreacheries"
+
       gather Set.TheSymphonyOfErichZann
 
       -- Front of house. Every connection is printed, so nothing is wired here.
-      entranceHall <- placeLabeled "entranceHall" Locations.entranceHall
-      void $ placeLabeled "mainLobby" Locations.mainLobby
-      void $ placeLabeled "gallery" Locations.gallery
-      void $ placeLabeled "auditorium" Locations.auditorium
-      startAt entranceHall
+      startAt =<< placeLabeled "entranceHall" Locations.entranceHall
+      placeLabeled_ "mainLobby" Locations.mainLobby
+      placeLabeled_ "gallery" Locations.gallery
+      placeLabeled_ "auditorium" Locations.auditorium
 
       setAside
         $ [ Enemies.earsOfTheVoid
+          , Enemies.earsOfTheVoid
+          , Treacheries.heardBySomething
+          , Treacheries.heardBySomething
           , Treacheries.heardBySomething
           , Enemies.youngNightingale
           , Assets.augusteGaudinMaestroOfSymphonies
@@ -123,6 +122,9 @@ instance RunMessage TheSymphonyOfErichZann where
           , Assets.laFrattasPianoKey
           , Assets.walkersTrumpet
           , Assets.thePiano
+          , Treacheries.stuckInYourHead
+          , Treacheries.stuckInYourHead
+          , Treacheries.stuckInYourHead
           , Treacheries.stuckInYourHead
           , Stories.beyondTheCurtain
           , Locations.stageHall
@@ -134,15 +136,54 @@ instance RunMessage TheSymphonyOfErichZann where
       -- Stuck in Your Head treachery in their hand."
       performers <- select $ InvestigatorWithTrait Performer
       for_ performers \iid -> do
-        card <- genCard Treacheries.stuckInYourHead
+        card <- fromSetAside Treacheries.stuckInYourHead
         addToHand iid [card]
 
-      setAgendaDeck [Agendas.overture, Agendas.crescendo, Agendas.opusMagnum]
+      setAgendaDeck
+        [ Agendas.overture
+        , Agendas.crescendo
+        , Agendas.opusMagnum
+        , Agendas.codaUltimatum
+        ]
       setActDeck
         [ Acts.musicFromAuseilTheatre
         , Acts.thePossessedConductor
         , Acts.undreamableOrchestra
         ]
+    -- "[skull]: Reveal another token."
+    ResolveChaosToken _ Skull iid -> do
+      drawAnotherChaosToken iid
+      pure s
+    {- "[cultist]: After this test ends, discard cards from the top of the
+    encounter deck until a [[Music]] treachery is discarded. Draw it." -}
+    ResolveChaosToken _ Cultist iid -> do
+      afterMaybeSkillTestQuiet
+        $ discardUntilFirst iid attrs Deck.EncounterDeck (basic $ #treachery <> withTrait Music)
+      pure s
+    RequestedEncounterCard (isSource attrs -> True) (Just iid) (Just card) -> do
+      drawCard iid card
+      pure s
+    FailedSkillTest iid _ _ (ChaosTokenTarget token) _ _ -> do
+      case token.face of
+        {- "[tablet]: If you fail, place 1 doom on a Musician enemy at your
+        location." On Hard/Expert it is instead the /nearest/ Musician enemy,
+        which can be a tie, so both readings ask. -}
+        Tablet -> do
+          candidates <-
+            select
+              $ if isEasyStandard attrs
+                then EnemyWithTrait Musician <> enemyAtLocationWith iid
+                else NearestEnemyTo iid (EnemyWithTrait Musician)
+          chooseTargetM iid candidates $ placeDoomOn Tablet 1
+        {- "[elder thing]: If you fail, each ready Musician enemy at your
+        location immediately engages and attacks you." -}
+        ElderThing -> do
+          enemies <- select $ EnemyWithTrait Musician <> ReadyEnemy <> enemyAtLocationWith iid
+          for_ enemies \enemy -> do
+            engageEnemy iid enemy
+            initiateEnemyAttack enemy ElderThing iid
+        _ -> pure ()
+      pure s
     ScenarioResolution r -> scope "resolutions" do
       case r of
         {- "If no resolution was reached (each investigator resigned or was
@@ -153,13 +194,36 @@ instance RunMessage TheSymphonyOfErichZann where
           -- "Before resolving any other resolution, if at least 1 investigator
           -- was defeated: the defeated investigators read Investigator Defeat first."
           investigatorDefeat
-          flavor $ h "resolution1" >> p "resolution1Body"
+          record AllIsQuietAtRueDAuseilForNow
+          resolutionWithXp "resolution1" $ allGainXp' attrs
+
           -- "Each investigator who was not defeated may remove the Stuck in
           -- Your Head weakness from their deck."
-          record AllIsQuietAtRueDAuseilForNow
+          survivors <- select $ not_ DefeatedInvestigator
+          for_ survivors \iid -> do
+            hasWeakness <-
+              selectAny
+                $ InvestigatorWithId iid
+                <> DeckWith (HasCard $ cardIs Treacheries.stuckInYourHead)
+            when hasWeakness $ chooseOneM iid do
+              labeled "removeStuckInYourHead"
+                $ removeCampaignCardFromDeck iid Treacheries.stuckInYourHead
+              labeled "keepStuckInYourHead" nothing
+
+          {- "If you 'saved all the musicians', each investigator may either heal
+          1 mental trauma, or earn 1 additional experience." Healing is only
+          offered to someone who has mental trauma to heal. -}
           savedAll <- getHasRecord YouSavedAllTheMusicians
-          allGainXpWithBonus attrs
-            $ mconcat [toBonus "savedAllTheMusicians" 1 | savedAll]
+          when savedAll $ eachInvestigator \iid -> do
+            hasMental <- fieldP InvestigatorMentalTrauma (> 0) iid
+            chooseOneM iid do
+              when hasMental
+                $ labeled "healMentalTrauma"
+                $ push
+                $ HealTrauma iid 0 1
+              labeled "gainExperience"
+                $ gainXp iid attrs (ikey "xp.savedAllTheMusicians") 1
+
           endOfScenario
         _ -> error $ "Unknown resolution: " <> show r
       pure s
@@ -172,7 +236,7 @@ investigatorDefeat :: (HasI18n, ReverseQueue m) => m ()
 investigatorDefeat = do
   defeated <- select DefeatedInvestigator
   unless (null defeated) do
-    flavor $ h "investigatorDefeat" >> p "investigatorDefeatBody"
+    resolutionOnly defeated $ withTitle "investigatorDefeat"
     for_ defeated \iid -> do
       {- "Each investigator who was defeated and does not already have a copy of
       the Stuck in your Head weakness in their deck must add 1 copy of it to his

@@ -46,6 +46,7 @@ instance ToJSON Game where
       , "gameModifiers" .= gameModifiers g
       , "gameEncounterDiscardEntities" .= gameEncounterDiscardEntities g
       , "gameInHandEntities" .= gameInHandEntities g
+      , "gameCommittedEntities" .= gameCommittedEntities g
       , "gameInDiscardEntities" .= gameInDiscardEntities g
       , "gameInSearchEntities" .= gameInSearchEntities g
       , "gamePlayerCount" .= gamePlayerCount g
@@ -92,6 +93,7 @@ instance ToJSON Game where
       , "gameUndoRoundStep" .= gameUndoRoundStep g
       , "gameAsIfAtIgnored" .= gameAsIfAtIgnored g
       , "gameLocationOffsets" .= gameLocationOffsets g
+      , "gameCardPlayStack" .= gameCardPlayStack g
       ]
   toEncoding g =
     pairs
@@ -119,6 +121,7 @@ instance ToJSON Game where
       <> ("gameModifiers" .= gameModifiers g)
       <> ("gameEncounterDiscardEntities" .= gameEncounterDiscardEntities g)
       <> ("gameInHandEntities" .= gameInHandEntities g)
+      <> ("gameCommittedEntities" .= gameCommittedEntities g)
       <> ("gameInDiscardEntities" .= gameInDiscardEntities g)
       <> ("gameInSearchEntities" .= gameInSearchEntities g)
       <> ("gamePlayerCount" .= gamePlayerCount g)
@@ -165,6 +168,7 @@ instance ToJSON Game where
       <> ("gameUndoRoundStep" .= gameUndoRoundStep g)
       <> ("gameAsIfAtIgnored" .= gameAsIfAtIgnored g)
       <> ("gameLocationOffsets" .= gameLocationOffsets g)
+      <> ("gameCardPlayStack" .= gameCardPlayStack g)
 
 instance FromJSON Game where
   parseJSON = withObject "Game" \o -> do
@@ -199,6 +203,9 @@ instance FromJSON Game where
     gameModifiers <- o .: "gameModifiers"
     gameEncounterDiscardEntities <- o .: "gameEncounterDiscardEntities"
     gameInHandEntities <- o .: "gameInHandEntities"
+    -- Derived state, rebuilt by preloadEntities every message; games persisted
+    -- before the committed zone existed simply have none recorded.
+    gameCommittedEntities <- o .:? "gameCommittedEntities" .!= mempty
     gameInDiscardEntities <- o .: "gameInDiscardEntities"
     gameInSearchEntities <- o .: "gameInSearchEntities"
     gamePlayerCount <- o .: "gamePlayerCount"
@@ -248,5 +255,7 @@ instance FromJSON Game where
     gameUndoRoundStep <- o .:? "gameUndoRoundStep" .!= Nothing
     let gameAsIfAtIgnored = mempty
     gameLocationOffsets <- o .:? "gameLocationOffsets" .!= mempty
+    -- .:? with a default: existing saves predate the stack.
+    gameCardPlayStack <- o .:? "gameCardPlayStack" .!= mempty
 
     pure Game {..}
