@@ -205,7 +205,7 @@ mintAccessToken config now = do
       claims = GoogleOAuthClaims
         registeredClaims
         "https://www.googleapis.com/auth/firebase.messaging"
-  signedResult <- runJOSE (signJWT config.signingKey (newJWSHeader ((), RS256)) claims)
+  signedResult <- runJOSE (signJWT config.signingKey (newJWSHeaderProtected RS256) claims)
   signed <- case signedResult of
     Left (err :: JWTError) -> fail $ Prelude.show err
     Right value -> pure value

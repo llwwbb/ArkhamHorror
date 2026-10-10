@@ -26,8 +26,6 @@ library
       Api.Arkham.Export
       Api.Arkham.Helpers
       Api.Arkham.Types.MultiplayerVariant
-      Api.Push.Notifications
-      Api.Push.Worker
       Api.Handler.ApiKeys
       Api.Handler.Arkham.Achievements
       Api.Handler.Arkham.Admin.GameStats
@@ -50,6 +48,8 @@ library
       Api.Handler.Arkham.Replay
       Api.Handler.Arkham.Undo
       Api.Handler.ThirdEdition
+      Api.Push.Notifications
+      Api.Push.Worker
       Application
       Arkham.Ability
       Arkham.Ability.Builder
@@ -8684,8 +8684,8 @@ library
     , constraints-extras
     , containers
     , cryptohash-sha256
-    , crypton-x509-store
     , crypton-x509
+    , crypton-x509-store
     , data-default-class
     , dependent-map
     , dependent-sum
@@ -8734,6 +8734,7 @@ library
     , time
     , tls
     , transformers
+    , unix
     , unliftio
     , uri-bytestring
     , uuid

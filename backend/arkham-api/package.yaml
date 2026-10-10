@@ -127,6 +127,7 @@ library:
     - tls
     - transformers
     - unliftio
+    - unix
     - uri-bytestring
     - uuid
     - vector
