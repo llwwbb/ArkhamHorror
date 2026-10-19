@@ -1,8 +1,11 @@
 // Frontend assets contributed by homebrew campaigns, discovered from the
 // frontend/homebrew/<campaign>/ directories:
 //
-// - `*.css` is injected into the bundle as-is (asset URLs inside should be
-//   absolute, e.g. /img/arkham/homebrew/<campaign>/...).
+// - `*.css` is injected into the bundle by Vite, so a `url()` inside must be
+//   campaign-relative (e.g. ./img/icons/moon.png) to be emitted as a hashed
+//   asset. An origin-absolute /img/arkham/... path is left alone by the build
+//   and then 404s: images are served from the asset host, and the app origin
+//   answers an unknown /img/ path with index.html.
 // - `icons.json` maps icon keys to CSS classes; each entry hooks the text
 //   formatters so `{key}` (i18n/flavor text) and `[key]` (ArkhamDB-style card
 //   text) both render as `<span class="<class>"></span>`.
@@ -17,7 +20,14 @@
 import.meta.glob('@homebrew/*/*.css', { eager: true })
 
 export type HomebrewScenarioDeckDisplay = {
-  image?: 'top-card-back'
+  // 'top-card-back' stacks the deck on its own top card, held facedown;
+  // 'player-back' on the standard player card back, for a deck built out of
+  // player cards (Ages Unwound's true-solo dummy deck).
+  image?: 'top-card-back' | 'player-back'
+  // The art the deck is stacked on, as a card code (`:campaign:009b`) rather
+  // than an image path, so a deck of locations held unrevealed-side-up shows
+  // that side even while it is empty. Also the fallback for `top-card-back`.
+  back?: string
   className?: string
 }
 

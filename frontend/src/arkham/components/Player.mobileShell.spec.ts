@@ -7,7 +7,7 @@ describe('Player mobile shell hand rendering', () => {
     expect(playerSource).toContain('const phoneShell = usePhoneShell()')
     expect(playerSource).toContain('const showLegacyMobileHand = computed(() => isMobile.value && !phoneShell)')
     expect(playerSource).toContain('if (showLegacyMobileHand.value) {')
-    expect(playerSource).toContain('v-if="showLegacyMobileHand" class="hand hand-area-IsMobile"')
+    expect(playerSource).toMatch(/v-if="showLegacyMobileHand"\s+class="hand hand-area-IsMobile"/)
   })
 
   it('does not render the legacy draggable choice modal inside the phone shell', () => {

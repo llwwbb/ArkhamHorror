@@ -8,7 +8,6 @@ import Arkham.Card.CardCode
 import Arkham.Card.Id
 import {-# SOURCE #-} Arkham.Criteria
 import Arkham.Direction
-import Arkham.Location.Group
 import {-# SOURCE #-} Arkham.Enemy.Types (Enemy)
 import Arkham.Field
 import Arkham.ForMovement
@@ -17,6 +16,7 @@ import Arkham.Key
 import Arkham.Label
 import Arkham.Location.Brazier
 import Arkham.Location.Grid
+import Arkham.Location.Group
 import Arkham.LocationSymbol
 import {-# SOURCE #-} Arkham.Matcher.Ability
 import {-# SOURCE #-} Arkham.Matcher.Asset
@@ -95,6 +95,7 @@ data LocationMatcher
   | LocationWithClues ValueMatcher
   | LocationWithHorror ValueMatcher
   | LocationWithShroud ValueMatcher
+  | LocationWithPrintedShroud ValueMatcher
   | LocationWithShroudLessThanOrEqualToLessThanEnemyMaybeField EnemyId (Field Enemy (Maybe Int))
   | LocationWithMostClues LocationMatcher
   | LocationWithMostInvestigators LocationMatcher
@@ -204,6 +205,9 @@ data LocationMatcher
 
 location_ :: LocationMatcher -> LocationMatcher
 location_ = id
+
+instance IsLabel "empty" LocationMatcher where
+  fromLabel = EmptyLocation
 
 instance IsLabel "revealed" LocationMatcher where
   fromLabel = RevealedLocation

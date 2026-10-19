@@ -46,6 +46,16 @@ import Arkham.Evade qualified as Evade
 import Arkham.Exhaust qualified as Exhaust
 import Arkham.Fight
 import Arkham.Fight qualified as Fight
+
+{- The vocabulary an ending needs to state its verdict, re-exported so every
+scenario and campaign that can end a game has it alongside 'gameOverWith' and
+friends.
+
+Only the types and 'plainly'. The note constants stay out: they read like
+ordinary prose, and three Circle Undone scenarios already bind
+@neverSeenOrHeardFromAgain@ as a local, which @-Werror=name-shadowing@ makes
+fatal. A scenario that needs one imports "Arkham.Game.Outcome" for it. -}
+import Arkham.Game.Outcome as X (Certainty (..), GameResult (..), Verdict (..), plainly)
 import Arkham.GameEnv
 import Arkham.Helpers.Act
 import Arkham.Helpers.Agenda
@@ -348,7 +358,7 @@ killRemaining (toSource -> source) = do
   remaining <- select UneliminatedInvestigator
   resigned <- select ResignedInvestigator
   for_ remaining $ kill source
-  gameOverIf (null resigned)
+  when (null resigned) gameOverLost
   pure remaining
 
 addCampaignCardToDeck
@@ -388,6 +398,23 @@ addCampaignCardToDeckChoiceWith choices shouldShuffleIn card f = do
   lead <- getLeadPlayer
   card' <- fetchCard card
   push $ Msg.addCampaignCardToDeckChoiceWith lead choices shouldShuffleIn card' f
+
+{- | Like 'addCampaignCardToDeckChoiceWith', but the prompt shows @alsoShow@
+beside the offered card.
+-}
+addCampaignCardToDeckChoiceAlsoShowing
+  :: (FetchCard card, FetchCard shown, ReverseQueue m)
+  => [InvestigatorId]
+  -> ShuffleIn
+  -> card
+  -> [shown]
+  -> (InvestigatorId -> [Message])
+  -> m ()
+addCampaignCardToDeckChoiceAlsoShowing choices shouldShuffleIn card alsoShow f = do
+  lead <- getLeadPlayer
+  card' <- fetchCard card
+  alsoShow' <- fetchCards alsoShow
+  push $ Msg.addCampaignCardToDeckChoiceAlsoShowing lead choices shouldShuffleIn card' alsoShow' f
 
 {- | Like 'addCampaignCardToDeckChoice', with a continuation for the players
 DECLINING the card (e.g. the "I Don't Trust Her" achievement).
@@ -944,9 +971,13 @@ aspect iid source a action = Msg.aspect iid source a action >>= pushAll . Msg.le
 
 questionLabelWithCard
   :: ReverseQueue m => Text -> CardCode -> InvestigatorId -> Question Message -> m ()
-questionLabelWithCard lbl cCode iid q = do
+questionLabelWithCard lbl cCode iid q = Arkham.Message.Lifted.questionLabelWithCards lbl [cCode] iid q
+
+questionLabelWithCards
+  :: ReverseQueue m => Text -> [CardCode] -> InvestigatorId -> Question Message -> m ()
+questionLabelWithCards lbl cCodes iid q = do
   pid <- getPlayer iid
-  push $ Ask pid (QuestionLabel lbl (Just cCode) q)
+  push $ Ask pid (QuestionLabel lbl cCodes q)
 
 selectOneToHandle
   :: (HasCallStack, ReverseQueue m, Targetable (QueryElement matcher), Query matcher, Sourceable source)
@@ -3449,6 +3480,10 @@ loseActions iid source n = push $ LoseActions iid (toSource source) n
 
 spendActions :: (ReverseQueue m, Sourceable source) => InvestigatorId -> source -> Int -> m ()
 spendActions = loseActions
+
+loseStandardActions
+  :: (ReverseQueue m, Sourceable source) => InvestigatorId -> source -> Int -> m ()
+loseStandardActions iid source n = push $ LoseStandardActions iid (toSource source) n
 
 requestChaosTokens :: (ReverseQueue m, Sourceable source) => InvestigatorId -> source -> Int -> m ()
 requestChaosTokens iid source n = do

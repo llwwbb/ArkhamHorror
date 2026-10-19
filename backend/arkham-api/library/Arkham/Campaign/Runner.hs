@@ -230,7 +230,7 @@ defaultCampaignRunner msg a = case msg of
               Nothing -> do
                 pid <- getPlayer iid
                 let cards = nub $ map toCardCode $ filterCards (card_ $ #asset <> #spell) (unDeck deck)
-                pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" Nothing $ ChooseOne $ flip map cards \c ->
+                pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" [] $ ChooseOne $ flip map cards \c ->
                   CardLabel c False [UpdateCardSetting iid "11080" (SetCardSetting CardAttachments [c])]
               Just _ -> pure Nothing
           else pure Nothing
@@ -371,7 +371,7 @@ defaultCampaignRunner msg a = case msg of
             Nothing -> do
               pid <- getPlayer iid
               let cards = nub $ map toCardCode $ filterCards (card_ #spell) (unDeck deck)
-              pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" Nothing $ ChooseOne $ flip map cards \c ->
+              pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" [] $ ChooseOne $ flip map cards \c ->
                 CardLabel c False [UpdateCardSetting iid "11080" (SetCardSetting CardAttachments [c])]
             Just _ -> pure Nothing
         else pure Nothing
@@ -456,6 +456,11 @@ defaultCampaignRunner msg a = case msg of
       . (logL . recordedSetsL %~ deleteMap key)
       . overRecordedCount key (const Nothing)
       . (logL . orderedKeysL %~ removeOrderedKey)
+  ForgetRecord key ->
+    pure
+      $ updateAttrs a
+      $ (logL %~ forgetCampaignLogKey key)
+      . (recordCountHistoryL %~ filter ((/= key) . (.rccKey)))
   Record key -> do
     -- The log line is the narrator's now (log.recorded); this used to send its
     -- own brace-DSL copy, which showed up beside the structured one.

@@ -100,6 +100,11 @@ data InvestigatorMatcher
   | FewestCardsInHand
   | MostCardsInHand
   | MostDamage
+  | {- | "...the most damage on them and their <matcher> cards": the printed
+    idiom that counts an investigator's own damage together with the damage
+    on the assets they control.
+    -}
+    MostDamageIncludingAssets AssetMatcher
   | LowestRemainingHealth
   | LowestRemainingSanity
   | MostRemainingHealth
@@ -131,6 +136,12 @@ data InvestigatorMatcher
   | InvestigatorEngagedWith EnemyMatcher
   | InvestigatorCanBeEngagedBy EnemyId
   | InvestigatorWithActionsRemaining ValueMatcher
+  | {- | Remaining actions plus unspent additional actions that carry no
+    limitation on their use -- Ages Unwound's "standard actions". The plain
+    'InvestigatorWithActionsRemaining' reads only the action counter, so it
+    misses an untaken Leo De Luca action.
+    -}
+    InvestigatorWithStandardActionsRemaining ValueMatcher
   | InvestigatorWithActionsPerformed ValueMatcher
   | InvestigatorWithClues ValueMatcher
   | InvestigatorWithCluesInPool ValueMatcher
@@ -160,6 +171,11 @@ data InvestigatorMatcher
   | YetToTakeTurn
   | NotInvestigator InvestigatorMatcher
   | InvestigatorThatMovedDuringTurn
+  | {- | Round-scoped sibling of 'InvestigatorThatMovedDuringTurn'. Needed for
+    printed text that says "this round" rather than "this turn", which includes
+    movement forced on you outside your own turn (a mythos-phase treachery).
+    -}
+    InvestigatorThatMovedDuringRound
   | InvestigatorWithSupply Supply
   | {- | Investigator-side view of 'LocationWithDiscoverableCluesBy'. Both delegate
     to 'Arkham.Helpers.Investigator.getCanDiscoverClues', so this asks whether

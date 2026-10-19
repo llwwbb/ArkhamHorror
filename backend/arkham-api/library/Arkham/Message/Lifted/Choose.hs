@@ -144,11 +144,13 @@ chooseOrRunOneM iid choices = do
         _ -> do
           pid <- getPlayer iid
           push $ questionWithSource s pid $ labelWrap label labelCardCode $ ChooseOne choices'
-      Nothing -> case label of
-        Nothing -> chooseOrRunOne iid choices'
-        Just l -> case choices' of
+      Nothing -> case (label, labelCardCode) of
+        (Nothing, Nothing) -> chooseOrRunOne iid choices'
+        _ -> case choices' of
           [x] -> push $ uiToRun x
-          _ -> questionLabel l iid $ ChooseOne choices'
+          _ -> do
+            pid <- getPlayer iid
+            push $ Msg.Ask pid $ labelWrap label labelCardCode $ ChooseOne choices'
 
 chooseOrRunNM :: ReverseQueue m => InvestigatorId -> Int -> ChooseT m a -> m ()
 chooseOrRunNM iid n choices = do
@@ -512,7 +514,7 @@ questionSourced a = modify $ \s -> s {Arkham.Message.Lifted.Choose.source = Just
 
 labelWrap :: Maybe Text -> Maybe CardCode -> Question Message -> Question Message
 labelWrap Nothing Nothing q = q
-labelWrap mlabel mcard q = QuestionLabel (fromMaybe "@none" mlabel) mcard q
+labelWrap mlabel mcard q = QuestionLabel (fromMaybe "@none" mlabel) (maybeToList mcard) q
 
 storyWithContinue :: (HasI18n, ReverseQueue m) => FlavorTextBuilder () -> m ()
 storyWithContinue builder = storyWithChooseOneM builder $ unscoped $ labeled "continue" nothing

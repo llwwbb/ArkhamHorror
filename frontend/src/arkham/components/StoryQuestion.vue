@@ -114,10 +114,20 @@ const labelChoices = computed<[StoryLabelChoice, number][]>(() => {
   return []
 })
 
-const questionImage = computed(() => {
+/* Both of these were inline `labelChoices.some(...)` calls, written twice each.
+ * Hoisted so the scan is cached and the branches read as what they ask. */
+const hasCardLabels = computed(() =>
+  labelChoices.value.some(([choice]) => choice.tag === MessageType.CARD_LABEL),
+)
+
+const hasChaosTokenLabels = computed(() =>
+  labelChoices.value.some(([choice]) => choice.tag === MessageType.CHAOS_TOKEN_LABEL),
+)
+
+const questionImages = computed(() => {
   const q = question.value
-  if (!q || q.tag !== QuestionType.QUESTION_LABEL) return null
-  return q.card ? cardLabelImage(q.card) : null
+  if (!q || q.tag !== QuestionType.QUESTION_LABEL) return []
+  return q.cards.map(cardLabelImage)
 })
 
 const choose = (idx: number) => {
@@ -200,8 +210,8 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
       />
     </template>
     <div class="question-label" v-else-if="question && question.tag === QuestionType.QUESTION_LABEL">
-      <div v-if="questionImage" class="question-image">
-        <img :src="questionImage" class="card" />
+      <div v-if="questionImages.length > 0" class="question-image">
+        <img v-for="src in questionImages" :key="src" :src="src" class="card" />
       </div>
       <div class="question-content">
         <h2 v-html="label(question.label)"></h2>
@@ -226,7 +236,7 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
         </div>
 
         <div class="label-choices" v-if="labelChoices.length > 0">
-          <div class="card-labels" v-if="labelChoices.some(([choice, _]) => choice.tag === MessageType.CARD_LABEL)">
+          <div class="card-labels" v-if="hasCardLabels">
             <template v-for="[choice, index] in labelChoices" :key="index">
               <template v-if="choice.tag === MessageType.CARD_LABEL">
                 <a href='#' @click.prevent="choose(index)">
@@ -236,7 +246,7 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
               </template>
             </template>
           </div>
-          <div class="token-labels" v-if="labelChoices.some(([choice, _]) => choice.tag === MessageType.CHAOS_TOKEN_LABEL)">
+          <div class="token-labels" v-if="hasChaosTokenLabels">
             <template v-for="[choice, index] in labelChoices" :key="index">
               <div v-if="choice.tag === MessageType.CHAOS_TOKEN_LABEL">
                 <img class="token front" :src="chaosTokenImage(choice.face)" @click="choose(index)">
@@ -277,7 +287,7 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
     </div>
     <template v-else-if="choices.length > 0">
       <div class="choices box">
-        <div class="card-labels" v-if="labelChoices.some(([choice, _]) => choice.tag === MessageType.CARD_LABEL)">
+        <div class="card-labels" v-if="hasCardLabels">
           <template v-for="[choice, index] in labelChoices" :key="index">
             <template v-if="choice.tag === MessageType.CARD_LABEL">
               <a href='#' @click.prevent="choose(index)">
@@ -287,7 +297,7 @@ const isBuildSpiritDeckQuestion = (q: Question): q is Question & { tag: Question
             </template>
           </template>
         </div>
-        <div class="token-labels" v-if="labelChoices.some(([choice, _]) => choice.tag === MessageType.CHAOS_TOKEN_LABEL)">
+        <div class="token-labels" v-if="hasChaosTokenLabels">
           <template v-for="[choice, index] in labelChoices" :key="index">
             <div v-if="choice.tag === MessageType.CHAOS_TOKEN_LABEL">
               <img class="token front" :src="chaosTokenImage(choice.face)" @click="choose(index)">

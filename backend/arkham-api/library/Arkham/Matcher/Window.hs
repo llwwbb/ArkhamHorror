@@ -27,6 +27,7 @@ import Arkham.Matcher.Placement
 import Arkham.Matcher.SkillTest
 import Arkham.Matcher.SkillType
 import Arkham.Matcher.Source
+import Arkham.Matcher.Story
 import Arkham.Matcher.Target
 import Arkham.Matcher.Treachery
 import Arkham.Matcher.Value
@@ -115,6 +116,8 @@ data WindowMatcher
     -}
     EnemyWouldTakeDamageWithAmount Timing SourceMatcher EnemyMatcher ValueMatcher
   | WouldSearchDeck Timing Who DeckMatcher
+  | -- | "When a card would search the encounter deck to find an enemy".
+    WouldFindEncounterCard Timing Who TargetMatcher SearchMatcher
   | WouldLookAtDeck Timing Who DeckMatcher
   | LookedAtDeck Timing Who DeckMatcher
   | SearchedDeck Timing Who DeckMatcher
@@ -163,6 +166,7 @@ data WindowMatcher
   | MythosStep WindowMythosStepMatcher
   | LocationEntersPlay Timing LocationMatcher
   | ResolvesTreachery Timing Who TreacheryMatcher
+  | ResolvesStory Timing Who StoryMatcher
   | TreacheryEntersPlay Timing TreacheryMatcher
   | AgendaEntersPlay Timing AgendaMatcher
   | AssetEntersPlay Timing AssetMatcher
@@ -187,8 +191,12 @@ data WindowMatcher
   | DiscoveringLastClue Timing Who Where
   | LastClueRemovedFromLocation Timing LocationMatcher
   | DiscoverClues Timing Who Where ValueMatcher
-  | WouldDiscoverClues Timing Who Where ValueMatcher
+  | WouldDiscoverClues Timing Who Where ValueMatcher SourceMatcher
   | GainsClues Timing Who ValueMatcher
+  | {- | The counterpart of 'LostActions'. @#when@ is before the gain lands, so
+    it can be cancelled by dropping the queued @Do (GainActions ...)@.
+    -}
+    GainsActions Timing Who SourceMatcher ValueMatcher
   | GainsResources Timing Who SourceMatcher ValueMatcher
   | SpendsResources Timing Who ValueMatcher
   | EnemyWouldAttack Timing Who EnemyAttackMatcher EnemyMatcher
@@ -288,6 +296,8 @@ data WindowMatcher
   | AssignedHorror Timing Who TargetListMatcher
   | DealtDamageOrHorror Timing SourceMatcher Who
   | InvestigatorDealtDamageOrHorror Timing SourceMatcher Who
+  | -- | "When an encounter card that you have drawn gains surge".
+    GainsSurge Timing Who SourceMatcher
   | WouldDrawEncounterCard Timing Who PhaseMatcher
   | WouldDrawCard Timing Who DeckMatcher
   | {- | 'WouldDrawCard', restricted by what caused the draw. The window itself
@@ -316,6 +326,8 @@ data WindowMatcher
   | GameEnds Timing
   | InvestigatorEliminated Timing Who
   | InvestigatorResigned Timing Who
+  | SuffersPhysicalTrauma Timing Who
+  | SuffersMentalTrauma Timing Who
   | AnyWindow
   | AnyWindowIfEnemy EnemyMatcher
   | NotAnyWindow
@@ -438,6 +450,11 @@ instance FromJSON WindowMatcher where
         case econtents of
           Left (a, b, c) -> pure $ EnemySpawns a (PlacementAt b) c
           Right (a, b, c) -> pure $ EnemySpawns a b c
+      "WouldDiscoverClues" -> do
+        econtents <- (Left <$> o .: "contents") <|> (Right <$> o .: "contents")
+        case econtents of
+          Left (a, b, c, d) -> pure $ WouldDiscoverClues a b c d AnySource
+          Right (a, b, c, d, e) -> pure $ WouldDiscoverClues a b c d e
       "WouldAddChaosTokensToChaosBag" -> do
         econtents <- (Left <$> o .: "contents") <|> (Right <$> o .: "contents")
         case econtents of

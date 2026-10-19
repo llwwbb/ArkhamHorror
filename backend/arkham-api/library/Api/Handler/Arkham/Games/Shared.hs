@@ -19,7 +19,7 @@ import Arkham.Asset.Types (Asset, assetController, assetOwner, assetPlacement)
 import Arkham.Campaign.Types (CampaignAttrs)
 import Arkham.Campaigns.TheDreamEaters.Meta qualified as TheDreamEaters
 import Arkham.Card.CardCode (CardCode (..), HasCardCode (toCardCode))
-import Arkham.Card.CustomCard (CustomCard, registerCustomCards)
+import Arkham.Card.CustomCard (CustomCard, customCardRegistryGeneration, registerCustomCards)
 import Arkham.ClassSymbol
 import Arkham.Classes.Entity (attr, overAttrs, toAttrs)
 import Arkham.Classes.GameLogger
@@ -54,7 +54,9 @@ import Arkham.Epic.Types (
 import Arkham.Event.Types (eventController)
 import Arkham.Game
 import Arkham.Game.Diff
+import Arkham.Game.Outcome (GameOutcome)
 import Arkham.Game.State
+import Arkham.Game.Utils (gameOutcomeOf)
 import Arkham.GameEnv
 import Arkham.Id
 import Arkham.Investigator (lookupInvestigator)
@@ -93,6 +95,7 @@ import Database.Esqueleto.Experimental hiding (update, (=.))
 import Database.Redis (Connection, RedisChannel, publish, runRedis)
 import Entity.Answer
 import Entity.Arkham.GameRaw
+import GHC.Clock (getMonotonicTimeNSec)
 
 import Data.Aeson qualified as Aeson
 import Entity.Arkham.LogEntry
@@ -100,6 +103,7 @@ import Entity.Arkham.Step
 import Import hiding (delete, exists, on, (==.), (>=.))
 import Import qualified as P
 import Json
+import Text.Printf (printf)
 
 -- ConnectionOptions, connectionCompressionOptions and defaultConnectionOptions
 -- come in via the Yesod.WebSockets re-export below.
@@ -202,12 +206,44 @@ withKeepAlive inner = do
   conn <- ask
   withRunInIO \run -> withPingThread conn keepAlivePingSeconds (pure ()) (run inner)
 
+{- | What a socket on a game room may do with it.
+
+Both roles are fed the same broadcasts; they differ only in what the server
+does with what comes back up the wire. 'Watching' is not a weaker 'Answering':
+nothing authenticates a spectator, so an inbound packet from one carries no
+seat it could be attributed to and is dropped unread.
+-}
+data StreamRole = Answering | Watching
+  deriving stock Eq
+
+-- | The socket a seated player holds: receives updates and submits answers.
 gameStream :: ArkhamGameId -> WebSocketsT Handler ()
-gameStream gameId = catchingConnectionException $ withKeepAlive do
-  userId <- lift getRequestUserId
+gameStream = gameStreamAs Answering
+
+{- | The socket a spectator holds: receives the same updates and sends nothing.
+
+Spectating used to share 'gameStream', which meant a watcher's socket accepted
+answers and could play the game it was only meant to be watching.
+-}
+spectatorStream :: ArkhamGameId -> WebSocketsT Handler ()
+spectatorStream = gameStreamAs Watching
+
+gameStreamAs :: StreamRole -> ArkhamGameId -> WebSocketsT Handler ()
+gameStreamAs role gameId = catchingConnectionException $ withKeepAlive do
+  mUserId <- case role of
+    Answering -> Just <$> lift getRequestUserId
+    Watching -> pure Nothing
+  let watching = role == Watching
   let cleanup room subId = do
         unsubscribeFromRoom room subId
         lift $ decrRoomMember gameId
+        when watching do
+          void $ adjustRoomWatchers room (-1)
+          lift $ decrRoomWatcher gameId
+        -- Before the release below: once the room is dropped there is nobody
+        -- left on this pod to tell, and the sockets still on it are exactly
+        -- the ones the new number is for.
+        lift $ publishWatcherCount gameId room
         -- Drops the room AND its Redis subscription together, under the rooms
         -- lock, if this was the last subscriber. The room owns the one
         -- subscription for this channel on this pod; this connection has no
@@ -218,16 +254,27 @@ gameStream gameId = catchingConnectionException $ withKeepAlive do
   -- rooms lock that looks the room up, so a concurrently departing connection
   -- can't release the room before we are counted on it.
   let acquire = do
-        joined <- lift $ joinGameRoom gameId
+        joined@(room, _, _) <- lift $ joinGameRoom gameId
         lift $ incrRoomMember gameId
+        when watching do
+          void $ adjustRoomWatchers room 1
+          lift $ incrRoomWatcher gameId
+        -- Announced on a player's connect too, though it cannot have changed:
+        -- it is how a seat that opens the game mid-session learns the count
+        -- without a route of its own to ask. This socket is already subscribed,
+        -- so the answer comes back to whoever just arrived.
+        lift $ publishWatcherCount gameId room
         pure joined
 
   bracket acquire (\(room, subId, _) -> cleanup room subId) \(room, _subId, sub) -> do
     let broadcast = broadcastToRoom room
     race_
       (runSubscriberSender sub)
-      (runConduit $ sourceWS .| mapM_C (handleData userId room broadcast))
+      (runConduit $ sourceWS .| mapM_C (inbound mUserId room broadcast))
  where
+  inbound Nothing _ _ = \(_ :: ByteString) -> pure ()
+  inbound (Just userId) room broadcast = handleData userId room broadcast
+
   handleData userId room broadcast dataPacket = lift do
     case eitherDecodeStrict dataPacket of
       Left err -> $(logWarn) $ tshow err
@@ -237,9 +284,35 @@ gameStream gameId = catchingConnectionException $ withKeepAlive do
         over the live library on every action -- a card-builder save was invisible
         in an open tab until it reconnected, which is the opposite of what the
         overlay in 'updateGame' is for. -}
-        customCards <- userCustomCards userId
+        customCards <- readLibraryTimed userId
         updateGame customCards answer gameId (Just room) `catch` \(e :: SomeException) -> do
           liftIO $ broadcast $ encode $ GameError $ tshow e
+
+{- | 'userCustomCards', saying so when it was slow.
+
+The read sits outside 'updateGame' and so outside its timing line, but it is on
+the same per-answer path: a library whose stamp query or re-read is costing a
+player real time would otherwise be invisible between the two.
+-}
+readLibraryTimed :: UserId -> Handler (Map CardCode CustomCard)
+readLibraryTimed userId = do
+  started <- liftIO getMonotonicTimeNSec
+  cards <- userCustomCards userId
+  finished <- liftIO getMonotonicTimeNSec
+  when (finished - started >= slowLibraryReadThresholdNs)
+    $ $(logWarn)
+    $ "slow custom card library read user="
+    <> toPathPiece userId
+    <> " cards="
+    <> tshow (Map.size cards)
+    <> " took="
+    <> T.pack (printf "%.0f" (fromIntegral (finished - started) / 1e6 :: Double))
+    <> "ms"
+  pure cards
+
+-- | See 'readLibraryTimed'.
+slowLibraryReadThresholdNs :: Word64
+slowLibraryReadThresholdNs = 100_000_000
 
 {- | Why a subscriber's sender loop ended.
 
@@ -349,6 +422,8 @@ data GameDetails = GameDetails
   , scenario :: Maybe ScenarioDetails
   , campaign :: Maybe CampaignDetails
   , gameState :: GameState
+  , outcome :: Maybe GameOutcome
+  -- ^ How it ended, for a finished game; see "Arkham.Game.Outcome".
   , name :: Text
   , investigators :: [InvestigatorDetails]
   , otherInvestigators :: [InvestigatorDetails]
@@ -411,8 +486,34 @@ phaseTransitions oldPhase newPhase entered = go oldPhase (entered <> [newPhase])
     | p == prev = go prev ps
     | otherwise = p : go p ps
 
+{- | How long an action may take before its timing is worth a warning.
+
+The split below is logged at 'LevelInfo' for every action, which production
+does not keep (see 'shouldLogIO'), and escalated past this point -- so a server
+log carries the actions that were actually slow, broken down far enough to say
+which part of answering was.
+-}
+slowAnswerThresholdNs :: Word64
+slowAnswerThresholdNs = 500_000_000
+
 updateGame :: Map CardCode CustomCard -> Answer -> ArkhamGameId -> Maybe Room -> Handler ()
 updateGame customCards response gameId mRoom = do
+  answerStarted <- liftIO getMonotonicTimeNSec
+  {- TEMPORARY. The registry is written twice per answer -- the row's frozen
+  snapshot as 'FromJSON Game' runs, then the owner's live library over it -- and
+  the two only agree while the library is untouched since the snapshot was taken.
+  A write that changes anything drops every compiled card, for every game on the
+  process, so what matters is how often that happened while this answer ran
+  rather than which request caused it. 0 means the caches survived. -}
+  generationBefore <- customCardRegistryGeneration
+  phasesRef <- newIORef []
+  let
+    -- Each mark closes the phase that led up to it, so the labels read as the
+    -- work done to reach them rather than the instant they were taken at.
+    mark :: MonadIO m => Text -> m ()
+    mark label = liftIO do
+      now <- getMonotonicTimeNSec
+      modifyIORef' phasesRef ((label, now) :)
   let broadcast :: Broadcast
       broadcast = case mRoom of
         Nothing -> \_ -> pure ()
@@ -448,6 +549,8 @@ updateGame customCards response gameId mRoom = do
     registerCustomCards customCards
 
     activePlayer <- runReaderT getActivePlayer gameJson
+    -- The row is read, its 379KB of JSON parsed, and the libraries registered.
+    mark "load"
 
     let playerId = fromMaybe activePlayer (answerPlayer response)
 
@@ -526,6 +629,8 @@ updateGame customCards response gameId mRoom = do
           Just () -> pure ()
           Nothing -> liftIO $ throwIO $ RunMessagesTimeout gameId runMessagesTimeoutMicros
 
+        mark "engine"
+
         ge <- readIORef gameRef
         let diffDown = diff ge arkhamGameCurrentData
         -- Epic Multiplayer: detect an IN-GROUP act advance (the act entity is
@@ -564,6 +669,7 @@ updateGame customCards response gameId mRoom = do
                 variant'
                 arkhamGameCreatedAt
                 now
+                arkhamGameAllowSpectators
         replace gameId g'
         {- In order, one row at a time, NOT every insert then every retraction.
 
@@ -703,6 +809,8 @@ updateGame customCards response gameId mRoom = do
                 pure [achievement | or completions]
               pure $ ordNub $ directEarns <> soloEarns <> progressEarns <> soloProgressEarns
 
+        mark "persist"
+
         pure
           ( g'
           , publishLog
@@ -750,6 +858,26 @@ updateGame customCards response gameId mRoom = do
   -- step so it can't be locally undone (the other groups follow on their own turns
   -- via 'ActAdvanceGen'). 'arkhamGameStep' here is the post-commit (new) step.
   when actAdvanced $ setGameUndoFloor gameId arkhamGameStep
+
+  mark "publish"
+  phases <- reverse <$> readIORef phasesRef
+  finished <- liftIO getMonotonicTimeNSec
+  generationAfter <- customCardRegistryGeneration
+  let
+    elapsed since until' = T.pack (printf "%.0f" (fromIntegral (until' - since) / 1e6 :: Double)) <> "ms"
+    split _ [] = []
+    split previous ((label, at) : rest) = (label <> "=" <> elapsed previous at) : split at rest
+    timing =
+      T.intercalate
+        " "
+        ( ("game=" <> gameIdToText gameId)
+            : ("total=" <> elapsed answerStarted finished)
+            : ("cardgen=" <> tshow (generationAfter - generationBefore))
+            : split answerStarted phases
+        )
+  if finished - answerStarted >= slowAnswerThresholdNs
+    then $(logWarn) $ "slow answer " <> timing
+    else $(logInfo) $ "answer " <> timing
 
 {- | Merge reported checklist items into the user's progress row for a
 cross-playthrough achievement (see 'achievementChecklist'); the row's
@@ -965,6 +1093,18 @@ handleMessageLog pendingLogRef broadcast msg = liftIO $ case msg of
     ClientPlayabilityReport {} -> Nothing
     ClientCustomCardIssue {} -> Nothing
 
+{- | Tell a game's room how many people are watching it.
+
+The cross-pod total when there is a Redis broker, and the room's own tally
+otherwise -- which is the same number on a single pod, and the only one a
+local dev setup has.
+-}
+publishWatcherCount :: ArkhamGameId -> Room -> Handler ()
+publishWatcherCount gameId room = do
+  shared <- getRedisWatcherCount gameId
+  local' <- roomWatcherCount room
+  publishToRoom gameId $ GameWatcherCount $ fromMaybe local' shared
+
 publishToRoom :: (MonadIO m, ToJSON a, HasApp m) => ArkhamGameId -> a -> m ()
 publishToRoom gameId a = do
   broker <- getsApp appMessageBroker
@@ -1153,6 +1293,7 @@ runMessagesInGroupCore p msgs gid = do
               arkhamGameMultiplayerVariant
               arkhamGameCreatedAt
               now
+              arkhamGameAllowSpectators
         replace gid game'
         insert_
           $ ArkhamStep
@@ -1594,6 +1735,7 @@ toGameDetailsEntry (Entity gameId game) playerCount =
                 That _ -> Nothing
                 These c _ -> Just $ CampaignDetails c.id c.difficulty c.currentCampaignMode
             , gameState = a.gameGameState
+            , outcome = gameOutcomeOf a
             , name = arkhamGameRawName game
             , investigators
             , otherInvestigators =

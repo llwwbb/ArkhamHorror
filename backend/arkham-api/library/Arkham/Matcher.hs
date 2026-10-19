@@ -302,6 +302,7 @@ canParleyEnemy = CanParleyEnemy . InvestigatorWithId
 
 enemyEngagedWith :: InvestigatorId -> EnemyMatcher
 enemyEngagedWith = EnemyIsEngagedWith . InvestigatorWithId
+
 onlyEnemyEngagedWith :: InvestigatorId -> EnemyMatcher
 onlyEnemyEngagedWith = OnlyEnemyEngagedWith . InvestigatorWithId
 
@@ -383,6 +384,13 @@ orConnected forMovement x = let m = be x in oneOf [m, ConnectedFrom forMovement 
 orConnected_ :: Be matcher LocationMatcher => matcher -> LocationMatcher
 orConnected_ = orConnected NotForMovement
 {-# INLINE orConnected_ #-}
+
+-- | Locations at most @n@ away, counting @x@ itself as 0.
+withinDistance :: Be matcher LocationMatcher => Int -> matcher -> LocationMatcher
+withinDistance n x
+  | n <= 0 = be x
+  | n == 1 = orConnected NotForMovement x
+  | otherwise = LocationWithDistanceFromAtMost n (be x) Anywhere
 
 whileInvestigating :: (AsId a, IdOf a ~ LocationId) => a -> SkillTestMatcher
 whileInvestigating = WhileInvestigating . LocationWithId . asId

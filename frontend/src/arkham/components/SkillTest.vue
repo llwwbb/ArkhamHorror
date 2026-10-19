@@ -10,7 +10,7 @@ import { chaosTokenEffectKey, symbolChaosTokenFaces } from '@/arkham/types/Scena
 import { Game } from '@/arkham/types/Game';
 import { Enemy } from '@/arkham/types/Enemy';
 import { Modifier, cannotCommitCardsToWords } from '@/arkham/types/Modifier';
-import { SkillTest } from '@/arkham/types/SkillTest';
+import { ChaosTokenFaceEffect, SkillTest, chaosTokenEffectParts } from '@/arkham/types/SkillTest';
 import { AbilityLabel, AbilityMessage, Message } from '@/arkham/types/Message'
 import Draggable from '@/components/Draggable.vue';
 import Card from '@/arkham/components/Card.vue'
@@ -88,8 +88,14 @@ const yourModifiers = computed(() => {
   return (investigator.modifiers ?? []).filter(shouldRenderYourModifiers)
 })
 
-const shouldRenderSkillTestModifier = (mod: Modifier) =>
-  mod.type.tag !== 'MetaModifier' || mod.type.contents === 'ThreeAces1'
+const shouldRenderSkillTestModifier = (mod: Modifier) => {
+  // Chaos token values are listed per token in the token-effects bars, attributed
+  // to the card that added them, so a pill would duplicate them. The decoder has
+  // no case for this tag, so it arrives through the OtherModifier catch-all and
+  // rendered as a textless pill anyway.
+  if (mod.type.tag === 'OtherModifier' && mod.type.contents === 'AddChaosTokenValue') return false
+  return mod.type.tag !== 'MetaModifier' || mod.type.contents === 'ThreeAces1'
+}
 
 const modifiers = computed(() =>
   [...(props.game.investigators[props.skillTest.investigator]?.modifiers ?? []).
@@ -219,6 +225,33 @@ const swarmHost = computed(() => {
   return props.game.cards[props.game.enemies[swarmEnemy.value.placement.swarmHost].cardId]
 })
 
+/* The enemy being tested stands on a card from someone's deck (The Myriad
+ * Gentleman's copies), so its entity id is that deck card's and `targetCard`
+ * resolves to the deck card rather than to the enemy. Read it off the entity
+ * instead and draw it the way a swarm card is drawn: a player back beside the
+ * enemy's own card. A weakness enemy IS its player card, so its codes match and
+ * this leaves it alone. */
+const deckCardEnemy = computed(() => {
+  if (!targetCardId.value || swarmEnemy.value) return null
+  const physical = targetCard.value
+  if (!physical || physical.tag !== 'PlayerCard') return null
+  const code = Cards.toCardContents(physical).cardCode
+  return (
+    Object.values(props.game.enemies).find(
+      (e) => e.cardId === targetCardId.value && e.cardCode !== code,
+    ) ?? null
+  )
+})
+
+const deckCardEnemyCard = computed<Cards.Card | null>(() => {
+  const enemy = deckCardEnemy.value
+  if (!enemy || !targetCard.value) return null
+  return {
+    tag: 'EncounterCard',
+    contents: { ...Cards.toCardContents(targetCard.value), cardCode: enemy.cardCode },
+  }
+})
+
 const sourceCard = computed(() => {
   if (!props.skillTest.sourceCard) return null
   if (props.skillTest.sourceCard === props.skillTest.targetCard) return null
@@ -265,7 +298,6 @@ const focusedChaosTokens = computed(() => {
 
 const tokenEffects = computed(() => {
   const scenario = props.game.scenario
-  if(!scenario) return []
   const tokens = props.skillTest.resolvedChaosTokens.length > 0
     ? props.skillTest.resolvedChaosTokens
     : props.skillTest.revealedChaosTokens
@@ -275,22 +307,45 @@ const tokenEffects = computed(() => {
     return displayedToken.modifiedFaces?.length ? displayedToken.modifiedFaces : [token.face]
   })
 
+  // Cards that registered an effect on a face, from the engine's own breakdown.
+  const cardEffects = new Map<TokenFace, ChaosTokenFaceEffect[]>()
+  for (const entry of props.skillTest.valueBreakdown?.tokens ?? []) {
+    if (entry.effects.length > 0) cardEffects.set(entry.face, entry.effects)
+  }
+
   // The printed symbols first, in their canonical order, then any homebrew token
-  // that came out, in the order it was revealed.
+  // that came out, in the order it was revealed, then any other revealed face a
+  // card is acting on — a card effect can land on a numeric token too.
   const effectFaces = [
     ...(symbolChaosTokenFaces as readonly TokenFace[]).filter((face) => faces.includes(face)),
     ...new Set(faces.filter((face) => customTokenKey(face) !== null)),
   ]
+  for (const face of new Set(faces)) {
+    if (!effectFaces.includes(face) && cardEffects.has(face)) effectFaces.push(face)
+  }
 
   return effectFaces
     .flatMap((face) => {
-      const key = chaosTokenEffectKey(scenario, face)
-      if (!key) return []
       // Scenarios without a `tokens` block in their locale (every homebrew one
       // so far) get the key back from `t`; showing it would leak the raw path.
-      const text = t(key)
-      if (text === key) return []
-      return [{ face, image: chaosTokenImage(face), html: formatContent(text) }]
+      const key = scenario ? chaosTokenEffectKey(scenario, face) : null
+      const text = key ? t(key) : null
+      const html = text && text !== key ? formatContent(text) : null
+
+      // Card effects sit beneath the scenario's printed effect rather than
+      // replacing it, so a drawn token shows both. Each becomes its own bar.
+      const cards = (cardEffects.get(face) ?? []).map((effect) => {
+        const { value, text } = chaosTokenEffectParts(effect, t)
+        return {
+          name: effect.name,
+          value,
+          text: text === null ? null : formatContent(text),
+          applied: effect.applied,
+        }
+      })
+
+      if (!html && cards.length === 0) return []
+      return [{ face, image: chaosTokenImage(face), html, cards }]
     })
 })
 
@@ -331,12 +386,12 @@ const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
         <button type="button" class="skip-triggers-notice__button" @click="openSettings">{{ $t('skillTest.skipTriggersAdjust') }}</button>
       </div>
       <div class="skill-test-contents">
-        <div v-if="swarmEnemy" class="target-card swarming">
+        <div v-if="swarmEnemy || deckCardEnemy" class="target-card swarming">
           <div class="swarm">
             <img :src="imgsrc('backs/back_player.jpg')" class="card" />
           </div>
-          <div v-if="swarmHost" class="host">
-            <Card :game="game" :card="swarmHost" :revealed="true" playerId="" />
+          <div v-if="swarmHost ?? deckCardEnemyCard" class="host">
+            <Card :game="game" :card="(swarmHost ?? deckCardEnemyCard)!" :revealed="true" playerId="" />
           </div>
         </div>
         <Card
@@ -414,10 +469,24 @@ const adjustDebugSkillValue = (event: MouseEvent, direction: 1 | -1) => {
         <Token v-for="focusedToken in focusedChaosTokens" :key="focusedToken.id" :token="focusedToken" :playerId="playerId" :game="game" @choose="choose" />
       </div>
       <div v-if="tokenEffects.length > 0" class="token-effects">
-        <div class="token-effect" v-for="effect in tokenEffects" :key="effect.face">
-          <div class="token-effect__token"><img :src="effect.image" /></div>
-          <div class="token-effect__text"><span v-html="effect.html"></span></div>
-        </div>
+        <template v-for="effect in tokenEffects" :key="effect.face">
+          <div class="token-effect">
+            <div class="token-effect__token"><img :src="effect.image" /></div>
+            <div class="token-effect__text"><span v-if="effect.html" v-html="effect.html"></span></div>
+          </div>
+          <div
+            v-for="(card, i) in effect.cards"
+            :key="`${effect.face}-${i}`"
+            class="token-addon"
+            :class="{ 'token-addon--pending': !card.applied }"
+          >
+            <div class="token-addon__body">
+              <span v-if="card.name" class="token-addon__name">{{ card.name }}</span>
+              <span v-if="card.text" class="token-addon__text" v-html="card.text"></span>
+            </div>
+            <div v-if="card.value" class="token-addon__value">{{ card.value }}</div>
+          </div>
+        </template>
       </div>
       <div v-if="debug.active && skillTest.result?.tag == 'Unrun' && !['SkillTestFastWindow1', 'SkillTestFastWindow2'].includes(skillTest.step)">
         <button @click="debug.send(game.id, {tag: 'SkillTestMessage', contents: {tag: 'PassSkillTest_'}})">{{ $t('skillTestActions.passSkillTest') }}</button>
@@ -1059,7 +1128,10 @@ i.iconSkillAgility {
 
 .token-effect__text {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
   padding: 9px 14px;
   text-align: left;
   color: #dbe0e7;
@@ -1071,6 +1143,56 @@ i.iconSkillAgility {
     height: 1.1em;
     vertical-align: -0.15em;
   }
+}
+
+/* One card's effect on the drawn token: its own full-width bar under the
+   token's, so the effects read as add-ons stacked on it. A separate class
+   rather than a .token-effect modifier, so the grid columns don't collide. */
+.token-addon {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: rgba(10, 11, 15, 0.66);
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  color: #dbe0e7;
+  font-family: 'Noto Sans', Avenir, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.token-addon__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  border-left: 3px solid var(--title);
+  padding-left: 12px;
+}
+
+/* Declared but not yet resolved: the stripe is dimmed, the row is not. */
+.token-addon--pending .token-addon__body {
+  border-left-color: rgba(255, 255, 255, 0.22);
+}
+
+.token-addon__name {
+  color: #f4ecf8;
+  font-weight: 600;
+}
+
+.token-addon__text :deep(img) {
+  height: 1.1em;
+  vertical-align: -0.15em;
+}
+
+.token-addon__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 15px;
+  color: #f4ecf8;
+  min-width: 2.2em;
+  text-align: right;
 }
 
 .test-source {

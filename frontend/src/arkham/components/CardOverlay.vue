@@ -16,6 +16,7 @@ import CardCrossedOffOverlay from '@/arkham/components/CardCrossedOffOverlay.vue
 import { useDeviceLayout } from '@/arkham/composables/useDeviceLayout'
 import { homebrewTokenMap } from '@/arkham/homebrewAssets'
 import { originalArt } from '@/arkham/artVariants'
+import { hasEngineCardDef } from '@/arkham/customCards'
 import { BugAntIcon } from '@heroicons/vue/20/solid'
 import { useDebug } from '@/arkham/debug'
 import { fetchCard, fetchPlayability, type PlayabilityResponse } from '@/arkham/api'
@@ -400,8 +401,8 @@ const overlayCardCode = computed<string | null>(() => {
   const el = hoveredElement.value
   if (!el) return null
   const direct = normalizedCardCode(el.dataset.cardCode ?? el.dataset.imageId)?.replace(/b$/, '')
-  // Homebrew definitions are not served by the single-card endpoint.
-  if (direct) return direct.startsWith(':') ? null : direct
+  // Homebrew and custom definitions are not served by the single-card endpoint.
+  if (direct) return hasEngineCardDef(direct) ? direct : null
 
   const image = card.value
   // A homebrew image path ends in /cards/<local code>, which otherwise looks

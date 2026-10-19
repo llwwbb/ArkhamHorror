@@ -65,6 +65,7 @@ function gameWithSwarm(): { game: Game; host: EnemyState } {
   return {
     host,
     game: {
+      cards: {},
       enemies: { [host.id]: host, [swarm.id]: swarm },
       stories: {},
       enemyAttackTargets: [],

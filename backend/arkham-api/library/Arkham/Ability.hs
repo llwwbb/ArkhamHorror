@@ -19,6 +19,7 @@ import Arkham.Ability.Types qualified
 import Arkham.Action
 import Arkham.Actions
 import Arkham.Card.CardCode
+import Arkham.ChaosToken.Types (ChaosTokenFace, ChaosTokenModifier, ChaosTokenValue (..))
 import Arkham.Constants
 import Arkham.I18n
 import Arkham.Matcher
@@ -162,6 +163,21 @@ onlyOnce = groupLimit PerGame
 withTooltip :: Text -> Ability -> Ability
 withTooltip t a = a & abilityTooltipL ?~ t
 
+{- | Declare which chaos token faces this ability affects, so the skill test
+window can show it before a token is revealed.
+
+Replaces whatever was declared before rather than appending, so a shared helper
+may publish a face-only declaration ('NoModifier') that an individual card then
+restates with its own value. Purely informational -- see
+'abilityChaosTokenEffects'.
+-}
+affectsChaosTokens :: [ChaosTokenValue] -> Ability -> Ability
+affectsChaosTokens vs a = a & abilityChaosTokenEffectsL .~ vs
+
+-- | 'affectsChaosTokens' for the common one-face case.
+affectsChaosToken :: ChaosTokenFace -> ChaosTokenModifier -> Ability -> Ability
+affectsChaosToken face modifier = affectsChaosTokens [ChaosTokenValue face modifier]
+
 withI18nTooltip :: HasI18n => Text -> Ability -> Ability
 withI18nTooltip t a = a & abilityTooltipL ?~ scope "tooltips" (toI18n t)
 
@@ -259,7 +275,17 @@ effect (Locked Door) on the location you happen to be standing in. See #5333.
 investigateAbilityAt
   :: (Sourceable a, HasCardCode a) => a -> LocationMatcher -> Int -> Cost -> Criterion -> Ability
 investigateAbilityAt entity matcher idx cost criteria =
-  (mkAbility entity idx (investigateAction cost))
+  investigateAbilityAtWith entity matcher #intellect idx cost criteria
+
+{- | Like 'investigateAbilityAt', but the ability names the skill the location is
+investigated with rather than [intellect], so the button reads with the skill the
+test will actually use (Arkham Woods Cliffside, Stables).
+-}
+investigateAbilityAtWith
+  :: (Sourceable a, HasCardCode a)
+  => a -> LocationMatcher -> SkillType -> Int -> Cost -> Criterion -> Ability
+investigateAbilityAtWith entity matcher stype idx cost criteria =
+  (mkAbility entity idx (investigateActionWith stype cost))
     { abilityCriteria = criteria <> exists (matcher <> InvestigatableLocation)
     }
 
@@ -377,6 +403,7 @@ mkAbility entity idx type' =
     , abilityEvadeCriteriaOverride = Nothing
     , abilityNonBlocking = False
     , abilityBlocksIn = Nothing
+    , abilityChaosTokenEffects = []
     }
 
 applyAbilityModifiers :: Ability -> [ModifierType] -> Ability
@@ -594,15 +621,14 @@ defaultAbilityLimit = \case
   -- not, and the act's Objective was offered once per seat (#5761). The period still
   -- scopes the bucket: PerWindow intersects `usedAbilityWindows`, PerTest is cleared at
   -- SkillTestEnds, and PerMove is rewritten to PerMovement by `upgradePerMove`.
-  ForcedAbility window' -> case window' of
-    SkillTestResult {} -> GroupLimit PerTest 1
-    Moves {} -> GroupLimit PerMove 1
-    Enters timing _ _ | timing /= #after -> GroupLimit PerMove 1
-    Enters timing _ _ | timing == #after -> GroupLimit PerWindow 1
-    EnemySpawns {} -> GroupLimit PerSpawn 1
-    _ -> GroupLimit PerWindow 1
-  SilentForcedAbility _ -> GroupLimit PerWindow 1
-  ForcedAbilityWithCost _ _ -> GroupLimit PerWindow 1
+  -- The three Forced shapes share one table: which window it is decides the
+  -- period, not which of them was written. A silent forced on a
+  -- `SkillTestResult` window used to take the bare `PerWindow` bucket, and a
+  -- criterion that stays true for the whole test then had nothing to stop it
+  -- firing again -- the message loop runs until the request times out.
+  ForcedAbility window' -> forcedLimit window'
+  SilentForcedAbility window' -> forcedLimit window'
+  ForcedAbilityWithCost window' _ -> forcedLimit window'
   ReactionAbility _ _ _ -> PlayerLimit PerWindow 1
   CustomizationReaction {} -> PlayerLimit PerWindow 1
   ConstantReaction {} -> PlayerLimit PerWindow 1
@@ -616,6 +642,14 @@ defaultAbilityLimit = \case
   Cosmos -> NoLimit
   ForcedWhen _ aType -> defaultAbilityLimit aType
   ConstantAbility -> NoLimit
+ where
+  forcedLimit = \case
+    SkillTestResult {} -> GroupLimit PerTest 1
+    Moves {} -> GroupLimit PerMove 1
+    Enters timing _ _ | timing /= #after -> GroupLimit PerMove 1
+    Enters timing _ _ | timing == #after -> GroupLimit PerWindow 1
+    EnemySpawns {} -> GroupLimit PerSpawn 1
+    _ -> GroupLimit PerWindow 1
 
 decreaseAbilityActionCost :: Ability -> Int -> Ability
 decreaseAbilityActionCost ab n = modifyAbilityCost (`decreaseActionCost` n) ab

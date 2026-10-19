@@ -72,6 +72,7 @@ import Arkham.Helpers.Message qualified as Msg
 import Arkham.Helpers.Modifiers hiding (cardResolutionModifiers)
 import Arkham.Helpers.Playable
 import Arkham.Helpers.Query
+import Arkham.Helpers.Ref (sourceToTarget)
 import Arkham.Helpers.Scenario
 import Arkham.Helpers.SkillTest (getIsCommittable)
 import Arkham.Helpers.Window hiding (checkAfter, checkWhen, checkWindows)
@@ -83,6 +84,7 @@ import Arkham.Investigator.Types (Field (..))
 import Arkham.Keyword qualified as Keyword
 import Arkham.Location.Grid
 import Arkham.Location.Types (Field (..))
+import Arkham.Log.Refs (placeConcealedBlockKey)
 import Arkham.Matcher qualified as Matcher
 import Arkham.Message.Lifted hiding (discard)
 import Arkham.Message.Lifted.Choose
@@ -239,7 +241,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
                   Nothing -> do
                     pid <- getPlayer iid
                     let cards = nub $ map toCardCode $ filterCards (card_ $ #asset <> #spell) (unDeck deck)
-                    pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" Nothing $ ChooseOne $ flip map cards \c ->
+                    pure $ Just $ Ask pid $ QuestionLabel "$cards.label.eldritchBrand5.chooseCard" [] $ ChooseOne $ flip map cards \c ->
                       CardLabel c False [UpdateCardSetting iid "11080" (SetCardSetting CardAttachments [c])]
                   Just _ -> pure Nothing
               else pure Nothing
@@ -967,9 +969,12 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
   Discarded (TreacheryTarget _) _ card -> do
     case card of
       PlayerCard _ -> pure a
-      EncounterCard ec -> do
-        handler <- getEncounterDeckHandler $ toCardId card
-        pure $ a & discardLens handler %~ (ec :) . filter (/= ec)
+      -- only single sided encounter cards should end up in discard
+      EncounterCard ec
+        | card.singleSided -> do
+            handler <- getEncounterDeckHandler $ toCardId card
+            pure $ a & discardLens handler %~ (ec :) . filter (/= ec)
+        | otherwise -> pure a
       VengeanceCard _ -> error "vengeance card"
   DrewCards iid drew | isNothing drew.target -> do
     for_ (toList drew.rules) \case
@@ -1073,13 +1078,30 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
               $ DrawCards iid
               $ drawing {cardDrawAlreadyDrawn = map toCard drew, cardDrawAmount = drawing.amount - length drew}
         pure $ a & (deckLens handler .~ Deck rest) & (inShuffleL .~ null rest)
-  Search (MkSearch searchType iid _ (toScenarioHandleDeck -> Just (deck, _)) _ _ _ _ _) -> do
+  Search (MkSearch searchType iid source (toScenarioHandleDeck -> Just (deck, _)) _ matcher _ _ _) -> do
     case searchType of
-      Searching -> wouldDo msg (Window.WouldSearchDeck iid deck) (Window.SearchedDeck iid deck)
+      {- Searching the encounter deck is also a dig through it for a card, so it
+      raises 'WouldFindEncounterCard' beside 'WouldSearchDeck' in the one batch:
+      an ability worded "instead" then catches every way of reaching the deck,
+      not just the 'FindEncounterCard' one. -}
+      Searching ->
+        wouldDoAny
+          msg
+          ( Window.WouldSearchDeck iid deck
+              : [ Window.WouldFindEncounterCard iid (sourceToTarget source) matcher
+                | isJust (encounterDeckToDigThrough deck)
+                ]
+          )
+          (Window.SearchedDeck iid deck)
       Looking -> wouldDo msg (Window.WouldLookAtDeck iid deck) (Window.LookedAtDeck iid deck)
-      Revealing -> do
-        batchId <- getRandom
-        push $ DoBatch batchId msg
+      {- Revealing raises no window of its own, but revealing from the encounter
+      deck to find a card is the same dig as searching it. -}
+      Revealing ->
+        wouldOnly
+          msg
+          [ Window.WouldFindEncounterCard iid (sourceToTarget source) matcher
+          | isJust (encounterDeckToDigThrough deck)
+          ]
     pure a
   DoBatch _ (Search (MkSearch _ iid _ (toScenarioHandleDeck -> Just (deck, _)) _ _ foundStrategy _ _)) -> do
     let isDrawing = isSearchDraw foundStrategy
@@ -1519,10 +1541,20 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
             encounterDeck <- withDeckM (shuffle . (card :)) scenarioEncounterDeck
             pure $ a & encounterDeckL .~ encounterDeck
       _ -> pure a
-  DiscardUntilFirst iid source Deck.EncounterDeck matcher -> do
-    push $ DiscardUntilFirst iid source (Deck.EncounterDeckByKey RegularEncounterDeck) matcher
-    pure a
-  DiscardUntilFirst iid source (Deck.EncounterDeckByKey RegularEncounterDeck) matcher -> do
+  {- "Discard from the encounter deck to find a card" is the same digging as a
+  search, so it raises 'WouldFindEncounterCard' in a batch of its own and an
+  ability worded "instead" can cancel it. The deck alias is resolved here rather
+  than re-pushed, or the re-push would frame a second batch. -}
+  DiscardUntilFirst iid source deck matcher
+    | Just deck' <- encounterDeckToDigThrough deck -> do
+        (batchId, wouldWindowMsgs) <-
+          wouldWindows (Window.WouldFindEncounterCard iid (sourceToTarget source) matcher)
+        push
+          $ Would batchId
+          $ wouldWindowMsgs
+          <> [DoBatch batchId $ DiscardUntilFirst iid source deck' matcher]
+        pure a
+  DoBatch _ (DiscardUntilFirst iid source (Deck.EncounterDeckByKey RegularEncounterDeck) matcher) -> do
     (discards, remainingDeck) <- breakM (`extendedCardMatch` matcher) (unDeck scenarioEncounterDeck)
     let len = length discards + if null remainingDeck then 0 else 1
     push $ DiscardTopOfEncounterDeckWithDiscardedCards iid len source Nothing []
@@ -1530,7 +1562,7 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       [] -> push (RequestedEncounterCard source (Just iid) Nothing)
       x : _ -> push (RequestedEncounterCard source (Just iid) (Just x))
     pure a
-  DiscardUntilFirst iid source (Deck.EncounterDeckByKey k) matcher -> do
+  DoBatch _ (DiscardUntilFirst iid source (Deck.EncounterDeckByKey k) matcher) -> do
     (discards, remainingDeck) <-
       breakM (`extendedCardMatch` matcher) (unDeck $ a ^. encounterDeckLensFromKey k)
     case remainingDeck of
@@ -1607,7 +1639,16 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     shuffled <- shuffleM encounterDeck
     push (FoundEncounterCard iid target card)
     pure $ a & (encounterDeckL .~ Deck shuffled) & (discardL .~ discard)
-  FindEncounterCard iid target zones matcher strategy -> do
+  {- Framed in a batch that raises 'WouldFindEncounterCard' first, so an ability
+  worded "instead" (Ages Unwound's /Just One Man/) can cancel the search and put
+  its own card in the treachery's hands. The work itself moved to the 'DoBatch'
+  case below. -}
+  FindEncounterCard iid target _ matcher _ -> do
+    (batchId, wouldWindowMsgs) <-
+      wouldWindows (Window.WouldFindEncounterCard iid target (Matcher.BasicCardMatch matcher))
+    push $ Would batchId $ wouldWindowMsgs <> [DoBatch batchId msg]
+    pure a
+  DoBatch _ (FindEncounterCard iid target zones matcher strategy) -> do
     let
       matchingDiscards =
         if Zone.FromEncounterDiscard `elem` zones
@@ -1807,11 +1848,40 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
       $ if isStandalone
         then a & standaloneCampaignLogL . recordedL %~ insertSet key
         else a
+  CrossOutRecord key -> do
+    isStandalone <- getIsStandalone
+    pure
+      $ if isStandalone
+        then
+          let wasRecorded = key `member` (a ^. standaloneCampaignLogL . recordedL)
+           in a
+                & standaloneCampaignLogL
+                . recordedL
+                %~ deleteSet key
+                & standaloneCampaignLogL
+                . crossedOutL
+                %~ (if wasRecorded then insertSet key else id)
+                & standaloneCampaignLogL
+                . recordedSetsL
+                %~ deleteMap key
+                & standaloneCampaignLogL
+                . recordedCountsL
+                %~ deleteMap key
+                & standaloneCampaignLogL
+                . orderedKeysL
+                %~ (if wasRecorded then filter (/= key) else id)
+        else a
   RecordCount key n -> do
     isStandalone <- getIsStandalone
     pure
       $ if isStandalone
         then a & standaloneCampaignLogL . recordedCountsL %~ insertMap key n
+        else a
+  ForgetRecord key -> do
+    isStandalone <- getIsStandalone
+    pure
+      $ if isStandalone
+        then a & standaloneCampaignLogL %~ forgetCampaignLogKey key
         else a
   IncrementRecordCount key n -> do
     isStandalone <- getIsStandalone
@@ -2153,8 +2223,28 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     pure $ a & setAsideCardsL %~ filter (/= card)
   SetDecksLayout layout -> do
     pure $ a & decksLayoutL .~ layout
-  PlaceConcealedCards _iid _cards lids -> do
+  PlaceConcealedCards iid cards lids -> do
+    {- A log block around the whole batch, so the placements read as one unit.
+
+    It has to live in game state rather than in the narrator: a batch of more
+    than one card asks for a location per card, and the narrator ref is rebuilt
+    every action. See 'Arkham.Log.Refs.placeConcealedBlockKey' for what the key
+    carries and why.
+
+    Only for more than one card -- a single placement is one line and a block
+    around it would be two rows saying the same thing. -}
+    mLogBlock <-
+      if length cards > 1
+        then do
+          token <- getRandom
+          let key = placeConcealedBlockKey iid (length cards) token
+          push $ OpenLogBlock key
+          pure (Just key)
+        else pure Nothing
     forTargets lids msg
+    -- Queued last, so it resolves behind every placement the chain queues
+    -- ahead of it, which is what makes it the end of the batch.
+    for_ mLogBlock $ push . CloseLogBlock
     pure a
   ForTargets ls (PlaceConcealedCards iid (card : cards) lids) -> do
     let
@@ -2210,3 +2300,14 @@ runScenarioAttrs msg a@ScenarioAttrs {..} = runQueueT $ case msg of
     pushEnd $ EndOfScenario mNextCampaignStep
     pure a
   _ -> pure a
+
+{- | The encounter deck a "dig through the deck until you find one" message is
+aimed at, with the plain alias resolved to the regular deck's key. 'Nothing' for
+any other deck: an investigator's own deck is not the encounter deck, so digging
+through it raises no 'WouldFindEncounterCard'.
+-}
+encounterDeckToDigThrough :: Deck.DeckSignifier -> Maybe Deck.DeckSignifier
+encounterDeckToDigThrough = \case
+  Deck.EncounterDeck -> Just $ Deck.EncounterDeckByKey RegularEncounterDeck
+  Deck.EncounterDeckByKey k -> Just $ Deck.EncounterDeckByKey k
+  _ -> Nothing
