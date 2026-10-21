@@ -10,6 +10,7 @@ import * as ArkhamGame from '@/arkham/types/Game';
 import type { AbilityLabel, AbilityMessage, Message } from '@/arkham/types/Message';
 import TokenPool from '@/arkham/components/TokenPool.vue';
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import AbilitiesMenu from '@/arkham/components/AbilitiesMenu.vue'
 import { IsMobile } from '@/arkham/isMobile'
 import Token from '@/arkham/components/Token.vue';
@@ -150,6 +151,7 @@ function handleCardClick() {
       :game="game"
       @click="$emit('choose', ability.index)"
     />
+    <SkipFastToggle v-if="!canUseMobileAbilityMenu" :game="game" :abilities="abilities" />
     <AbilitiesMenu
       v-if="canUseMobileAbilityMenu"
       v-model="showAbilities"

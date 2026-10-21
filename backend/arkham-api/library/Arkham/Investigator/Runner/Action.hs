@@ -591,9 +591,26 @@ handlePlayerWindow a@InvestigatorAttrs {..} iid additionalActions isAdditional i
         <> afterEndTurn
   pure a
 
+{- | Fast abilities on cards the investigator has set to skip outside their own
+turn. Outside it they are dropped rather than offered, so a window that has
+nothing else to ask does not stop for them.
+-}
+dropSkippedFastAbilities :: HasGame m => InvestigatorAttrs -> [Ability] -> m [Ability]
+dropSkippedFastAbilities attrs abilities
+  | null skipped = pure abilities
+  | otherwise =
+      attrs.id <=~> TurnInvestigator >>= \case
+        True -> pure abilities
+        -- by the ability's own card code: the one the client keys the toggle on
+        False -> pure $ filter (\ability -> not (isFastAbility ability && ability.cardCode `member` skipped)) abilities
+ where
+  skipped = skipFastOutsideTurnCardCodes attrs.settings
+
 handlePlayerWindowV2 a@InvestigatorAttrs {..} iid additionalActions isAdditional = do
   let windows = [mkWhen Window.FastPlayerWindow]
-  actions <- getActions investigatorId windows
+  -- this is the window a seat gets during someone else's turn, so the cards set to
+  -- skip their fast abilities outside the seat's own turn are dropped here too
+  actions <- dropSkippedFastAbilities a =<< getActions investigatorId windows
   anyForced <- anyM (isForcedAbility investigatorId) actions
   unless anyForced $ do
     playableCards <-

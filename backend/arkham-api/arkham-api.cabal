@@ -9984,6 +9984,7 @@ test-suite spec
       Arkham.Investigator.Cards.WendyAdamsSpec
       Arkham.Investigator.Cards.ZoeySamarasSpec
       Arkham.Investigator.RunnerSpec
+      Arkham.Investigator.SkipFastOutsideTurnSpec
       Arkham.Location.Cards.DreamGatePointlessRealitySpec
       Arkham.Location.Cards.DreamGateWondrousJourneySpec
       Arkham.Location.Cards.TheDreamEaters.BeyondTheGatesOfSleep.EnchantedWoodsVillageOfZoogsSpec

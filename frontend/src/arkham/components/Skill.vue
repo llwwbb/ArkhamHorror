@@ -10,6 +10,7 @@ import * as ArkhamGame from '@/arkham/types/Game';
 import { AbilityLabel, AbilityMessage, Message, MessageType } from '@/arkham/types/Message';
 import { cardImg } from '@/arkham/helpers';
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import * as Arkham from '@/arkham/types/Skill';
 
 export interface Props {
@@ -132,6 +133,7 @@ const choose = (index: number) => emits('choose', index)
       :game="game"
       @click="choose(ability.index)"
       />
+    <SkipFastToggle :game="game" :abilities="abilities" />
     <template v-if="debug.active">
       <button class="debug-open" @click="debugging = true">{{ $t('enemy.debug') }}</button>
     </template>

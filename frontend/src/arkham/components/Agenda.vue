@@ -12,6 +12,7 @@ import * as ArkhamGame from '@/arkham/types/Game';
 import { AbilityLabel, AbilityMessage, type Message } from '@/arkham/types/Message';
 import { MessageType } from '@/arkham/types/Message';
 import AbilityButton from '@/arkham/components/AbilityButton.vue';
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import PoolItem from '@/arkham/components/PoolItem.vue';
 import Treachery from '@/arkham/components/Treachery.vue';
 import Event from '@/arkham/components/Event.vue';
@@ -382,6 +383,7 @@ const wards = computed(() => props.agenda.tokens[TokenType.Ward])
         class="sideways"
         @click="$emit('choose', ability.index)"
         />
+      <SkipFastToggle :game="game" :abilities="abilities" />
       <Enemy
         v-for="enemyId in attachedEnemies"
         :enemy="game.enemies[enemyId]"

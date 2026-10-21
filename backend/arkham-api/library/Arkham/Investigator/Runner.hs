@@ -463,23 +463,6 @@ dropSilencedAbilities attrs abilities
  where
   silenced = silencedCardCodes attrs.settings
 
-{- | Fast abilities on cards the investigator has set to skip outside their own
-turn. Outside it they are dropped rather than offered, so a window that has
-nothing else to ask does not stop for them.
--}
-dropSkippedFastAbilities :: HasGame m => InvestigatorAttrs -> [Ability] -> m [Ability]
-dropSkippedFastAbilities attrs abilities
-  | null skipped = pure abilities
-  | otherwise =
-      attrs.id <=~> TurnInvestigator >>= \case
-        True -> pure abilities
-        False -> flip filterM abilities \ability ->
-          if isFastAbility ability
-            then maybe True ((`notMember` skipped) . toCardCode) <$> sourceToMaybeCard ability.source
-            else pure True
- where
-  skipped = skipFastOutsideTurnCardCodes attrs.settings
-
 {- | One round of a materialised forced-initiation queue.
 
 ONE button per ability, no matter how many of its initiations remain: the button fires
