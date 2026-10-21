@@ -374,7 +374,10 @@
     "grouped": "分组"
   },
   "player": {
-    "viewDeck": "查看牌组"
+    "viewDeck": "查看牌组",
+    "skipFastOutsideTurn": "非我回合时跳过此卡的快速能力",
+    "unskipFastOutsideTurn": "非我回合时重新询问此卡的快速能力",
+    "skipFastOutsideTurnOn": "非你的回合时跳过快速能力"
   },
   "enemy": {
     "debug": "调试"

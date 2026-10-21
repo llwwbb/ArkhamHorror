@@ -40,6 +40,7 @@ conFieldNames =
   , -- `addToRemovedFromGame` in Game.Runner.
     (("Message", "RemovePlayerCardFromGame"), ["remember it was removed", ""])
   , (("Message", "SetCardSilenced"), ["", "", "silenced"])
+  , (("Message", "SetCardSkipFastOutsideTurn"), ["", "", "skipped"])
   , (("Message", "SetFlippable"), ["", "flippable"])
   , (("Message", "SetAsIfAtIgnored"), ["", "ignored"])
   , (("Message", "SetUltimatumsAndBoonsEnabled"), ["enabled"])

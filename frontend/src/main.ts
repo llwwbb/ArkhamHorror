@@ -10,7 +10,7 @@ import { useUserStore } from '@/stores/user'
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { library } from "@fortawesome/fontawesome-svg-core";
 import { faExpeditedssl } from "@fortawesome/free-brands-svg-icons";
-import { faCode, faFilter, faGear, faLayerGroup, faBan, faCircleExclamation, faGhost, faLocationDot, faSearch, faList, faImage, faAngleDown, faUndo, faTrash, faEye, faCopy, faExternalLink, faRefresh, faBook, faChevronLeft, faChevronRight, faBars, faTimes, faShieldHeart, faWrench, faPaperclip, faArrowLeft, faArrowUp, faStore, faTriangleExclamation, faLanguage, faShuffle, faTrophy, faDownload, faUpload, faCheckDouble, faFlask, faBug, faPen, faThumbsUp, faHourglassHalf, faCircleXmark, faCircleCheck, faClipboardCheck, faChartSimple, faRectangleList, faCircleQuestion, faBullhorn, faBoxArchive, faUserGear, faPlus, faLink, faLinkSlash, faUsers, faLock, faUnlock } from '@fortawesome/free-solid-svg-icons'
+import { faCode, faFilter, faGear, faLayerGroup, faBan, faCircleExclamation, faGhost, faLocationDot, faSearch, faList, faImage, faAngleDown, faUndo, faTrash, faEye, faCopy, faExternalLink, faRefresh, faBook, faChevronLeft, faChevronRight, faBars, faTimes, faShieldHeart, faWrench, faPaperclip, faArrowLeft, faArrowUp, faStore, faTriangleExclamation, faLanguage, faShuffle, faTrophy, faDownload, faUpload, faCheckDouble, faFlask, faBug, faPen, faThumbsUp, faHourglassHalf, faCircleXmark, faCircleCheck, faClipboardCheck, faChartSimple, faRectangleList, faCircleQuestion, faBullhorn, faBoxArchive, faUserGear, faPlus, faLink, faLinkSlash, faUsers, faLock, faUnlock, faForward } from '@fortawesome/free-solid-svg-icons'
 import * as VueI18n from 'vue-i18n'
 import { loadLocaleMessages, normalizeLocale } from '@/locales/messages'
 import { setI18n } from '@/locales/i18n'
@@ -18,7 +18,7 @@ import { preferredLanguage } from '@/locales/language'
 import mitt from 'mitt';
 import { installChunkRecovery, reloadIfStaleChunk } from '@/chunkRecovery'
 
-library.add(faCode, faFilter, faBan, faLocationDot, faCircleExclamation, faGhost, faSearch, faList, faImage, faAngleDown, faExpeditedssl, faUndo, faTrash, faEye, faCopy, faExternalLink, faRefresh, faBook, faChevronLeft, faChevronRight, faBars, faTimes, faShieldHeart, faWrench, faPaperclip, faArrowLeft, faArrowUp, faStore, faTriangleExclamation, faLanguage, faShuffle, faTrophy, faGear, faLayerGroup, faDownload, faUpload, faCheckDouble, faFlask, faBug, faPen, faThumbsUp, faHourglassHalf, faCircleXmark, faCircleCheck, faClipboardCheck, faChartSimple, faRectangleList, faCircleQuestion, faBullhorn, faBoxArchive, faUserGear, faPlus, faLink, faLinkSlash, faUsers, faLock, faUnlock)
+library.add(faCode, faFilter, faBan, faLocationDot, faCircleExclamation, faGhost, faSearch, faList, faImage, faAngleDown, faExpeditedssl, faUndo, faTrash, faEye, faCopy, faExternalLink, faRefresh, faBook, faChevronLeft, faChevronRight, faBars, faTimes, faShieldHeart, faWrench, faPaperclip, faArrowLeft, faArrowUp, faStore, faTriangleExclamation, faLanguage, faShuffle, faTrophy, faGear, faLayerGroup, faDownload, faUpload, faCheckDouble, faFlask, faBug, faPen, faThumbsUp, faHourglassHalf, faCircleXmark, faCircleCheck, faClipboardCheck, faChartSimple, faRectangleList, faCircleQuestion, faBullhorn, faBoxArchive, faUserGear, faPlus, faLink, faLinkSlash, faUsers, faLock, faUnlock, faForward)
 
 installChunkRecovery()
 

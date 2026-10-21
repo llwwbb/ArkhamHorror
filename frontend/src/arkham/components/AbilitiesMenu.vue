@@ -13,11 +13,15 @@ const props = withDefaults(defineProps<{
   showMove?: boolean
   hostHasSwarm?: boolean
   playAction?: number
-}>(), {showMove: true, hostHasSwarm: false});
+  /* Whether this card's fast abilities are skipped outside the player's turn;
+   * undefined hides the toggle (no fast ability on offer). */
+  skipFastOutsideTurn?: boolean
+}>(), {showMove: true, hostHasSwarm: false, skipFastOutsideTurn: undefined});
 
 const emits = defineEmits<{
   (e: 'choose', index: number): void;
   (e: 'hover', value: boolean): void;
+  (e: 'toggleSkipFast'): void;
 }>();
 
 interface Position {
@@ -181,6 +185,18 @@ onUnmounted(() => {
           :game="game"
           @click="chooseAbility(index)"
         />
+        <button
+          v-if="skipFastOutsideTurn !== undefined"
+          type="button"
+          class="skip-fast-toggle"
+          :class="{ 'skip-fast-toggle--on': skipFastOutsideTurn }"
+          :aria-pressed="skipFastOutsideTurn"
+          :aria-label="skipFastOutsideTurn ? $t('player.unskipFastOutsideTurn') : $t('player.skipFastOutsideTurn')"
+          v-tooltip="skipFastOutsideTurn ? $t('player.unskipFastOutsideTurn') : $t('player.skipFastOutsideTurn')"
+          @click.stop="emits('toggleSkipFast')"
+        >
+          <font-awesome-icon icon="forward" />
+        </button>
       </div>
     </OnClickOutside>
   </Teleport>
@@ -238,6 +254,30 @@ onUnmounted(() => {
 .abilities.anchored.bottom { position-area: bottom span-right; }
 .abilities.anchored.left { position-area: left span-bottom; margin-right: 8px; }
 .abilities.anchored.right { position-area: right span-bottom; margin-left: 8px; }
+
+/* Kept small on purpose: a corner glyph under the ability buttons, not a row of
+   its own. Muted until switched on, then the "you changed a default" teal. */
+.abilities .skip-fast-toggle {
+  align-self: flex-end;
+  width: auto;
+  min-height: 0;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.7em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.abilities .skip-fast-toggle:hover {
+  color: #fff;
+}
+
+.abilities .skip-fast-toggle--on {
+  color: var(--highlight);
+}
 
 .play-card-button {
   border: 0;

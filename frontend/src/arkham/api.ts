@@ -1388,6 +1388,14 @@ export const setCardSilenced = (
 ): Promise<void> =>
   updateGameRaw(gameId, { tag: 'SetCardSilenced', contents: [investigatorId, cardCode, silenced] })
 
+export const setCardSkipFastOutsideTurn = (
+  gameId: string,
+  investigatorId: string,
+  cardCode: string,
+  skipped: boolean,
+): Promise<void> =>
+  updateGameRaw(gameId, { tag: 'SetCardSkipFastOutsideTurn', contents: [investigatorId, cardCode, skipped] })
+
 export interface PlayabilityResponse {
   cardId: string
   cardCode: string

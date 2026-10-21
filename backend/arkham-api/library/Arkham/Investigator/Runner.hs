@@ -463,6 +463,23 @@ dropSilencedAbilities attrs abilities
  where
   silenced = silencedCardCodes attrs.settings
 
+{- | Fast abilities on cards the investigator has set to skip outside their own
+turn. Outside it they are dropped rather than offered, so a window that has
+nothing else to ask does not stop for them.
+-}
+dropSkippedFastAbilities :: HasGame m => InvestigatorAttrs -> [Ability] -> m [Ability]
+dropSkippedFastAbilities attrs abilities
+  | null skipped = pure abilities
+  | otherwise =
+      attrs.id <=~> TurnInvestigator >>= \case
+        True -> pure abilities
+        False -> flip filterM abilities \ability ->
+          if isFastAbility ability
+            then maybe True ((`notMember` skipped) . toCardCode) <$> sourceToMaybeCard ability.source
+            else pure True
+ where
+  skipped = skipFastOutsideTurnCardCodes attrs.settings
+
 {- | One round of a materialised forced-initiation queue.
 
 ONE button per ability, no matter how many of its initiations remain: the button fires
@@ -519,7 +536,7 @@ runWindow
   => InvestigatorAttrs -> [Window] -> [Ability] -> [Card] -> m ()
 runWindow attrs windows allActions playableCards = do
   let iid = toId attrs
-  actions <- dropSilencedAbilities attrs allActions
+  actions <- dropSkippedFastAbilities attrs =<< dropSilencedAbilities attrs allActions
   unless (null playableCards && null actions) $ do
     anyForced <- anyM (isForcedAbility iid) actions
     player <- getPlayer iid
@@ -666,6 +683,13 @@ runInvestigatorMessage msg a@InvestigatorAttrs {..} = runQueueT $ case msg of
     let attrs' = a & settingsL %~ setCardSilenced cCode v
     -- Same reasoning as UpdateGlobalSetting: silencing a card while its window
     -- is the open question should drop the prompt now, not next window.
+    currentWindows <- concat <$> getWindowStack
+    when (any (\w -> Window.windowType w == Window.FastPlayerWindow) currentWindows) do
+      push $ Do (CheckWindows currentWindows)
+    pure attrs'
+  SetCardSkipFastOutsideTurn iid cCode v | iid == a.id -> do
+    let attrs' = a & settingsL %~ setCardSkipFastOutsideTurn cCode v
+    -- Same reasoning as SetCardSilenced: drop the open prompt now, not next window.
     currentWindows <- concat <$> getWindowStack
     when (any (\w -> Window.windowType w == Window.FastPlayerWindow) currentWindows) do
       push $ Do (CheckWindows currentWindows)
