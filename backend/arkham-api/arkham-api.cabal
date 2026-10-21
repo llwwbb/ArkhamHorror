@@ -27,6 +27,7 @@ library
       Api.Arkham.Export
       Api.Arkham.Helpers
       Api.Arkham.Maintenance
+      Api.Arkham.RoomOps
       Api.Arkham.Types.MultiplayerVariant
       Api.BugUpload
       Api.Handler.ApiKeys
@@ -200,6 +201,7 @@ library
       Arkham.Act.CardDefs.TheScarletKeys.SanguineShadows
       Arkham.Act.CardDefs.TheScarletKeys.ShadesOfSuffering
       Arkham.Act.CardDefs.TheScarletKeys.WithoutATrace
+      Arkham.Act.CardDefs.TracesToNowhere
       Arkham.Act.CardDefs.WarOfTheOuterGods
       Arkham.Act.Cards
       Arkham.Act.Cards.AllOrNothing.HotOnYourTail
@@ -579,6 +581,12 @@ library
       Arkham.Act.Cards.TheScarletKeys.WithoutATrace.EscapingTheOtherworld
       Arkham.Act.Cards.TheScarletKeys.WithoutATrace.RedRuin
       Arkham.Act.Cards.TheScarletKeys.WithoutATrace.TraversingTheOutside
+      Arkham.Act.Cards.TracesToNowhere.AlbrechtsGamble
+      Arkham.Act.Cards.TracesToNowhere.LinasNightmare
+      Arkham.Act.Cards.TracesToNowhere.MoreThanYouBargainedFor
+      Arkham.Act.Cards.TracesToNowhere.MrPeelsScheme
+      Arkham.Act.Cards.TracesToNowhere.TakingOverTheSearch
+      Arkham.Act.Cards.TracesToNowhere.TheCulprit
       Arkham.Act.Cards.WarOfTheOuterGods.CloseAllPortals
       Arkham.Act.Cards.WarOfTheOuterGods.CloseThePortal
       Arkham.Act.Cards.WarOfTheOuterGods.WarOfTheOuterGods
@@ -714,6 +722,7 @@ library
       Arkham.Agenda.CardDefs.TheScarletKeys.SanguineShadows
       Arkham.Agenda.CardDefs.TheScarletKeys.ShadesOfSuffering
       Arkham.Agenda.CardDefs.TheScarletKeys.WithoutATrace
+      Arkham.Agenda.CardDefs.TracesToNowhere
       Arkham.Agenda.CardDefs.WarOfTheOuterGods
       Arkham.Agenda.Cards
       Arkham.Agenda.Cards.AllOrNothing.EyesAllAroundYou
@@ -1039,6 +1048,10 @@ library
       Arkham.Agenda.Cards.TheScarletKeys.WithoutATrace.OtherworldlyHorror
       Arkham.Agenda.Cards.TheScarletKeys.WithoutATrace.OtherworldlyLambs
       Arkham.Agenda.Cards.TheScarletKeys.WithoutATrace.OtherworldlySlaughter
+      Arkham.Agenda.Cards.TracesToNowhere.FromAnotherDimension
+      Arkham.Agenda.Cards.TracesToNowhere.HardCase
+      Arkham.Agenda.Cards.TracesToNowhere.IntoThePit
+      Arkham.Agenda.Cards.TracesToNowhere.RunningOutOfTime
       Arkham.Agenda.Cards.WarOfTheOuterGods.EzelZenRezlEmerges
       Arkham.Agenda.Cards.WarOfTheOuterGods.SilenusDescends
       Arkham.Agenda.Cards.WarOfTheOuterGods.TheEggHatches
@@ -1067,9 +1080,11 @@ library
       Arkham.Asset.Assets.AceOfSwords1
       Arkham.Asset.Assets.AdamLynch
       Arkham.Asset.Assets.Adaptable1
+      Arkham.Asset.Assets.AdeleHusserlEstrangedDaughter
       Arkham.Asset.Assets.AgencyBackup5
       Arkham.Asset.Assets.AgentAriQuinnFoundationResearcher
       Arkham.Asset.Assets.Ajax
+      Arkham.Asset.Assets.AlbrechtHusserlRecklessGambler
       Arkham.Asset.Assets.AlchemicalConcoction
       Arkham.Asset.Assets.AlchemicalDistillation
       Arkham.Asset.Assets.AlchemicalTransmutation
@@ -1144,6 +1159,8 @@ library
       Arkham.Asset.Assets.AveryClaypoolAntarcticGuide
       Arkham.Asset.Assets.AveryClaypoolAntarcticGuideResolute
       Arkham.Asset.Assets.AwakenedMantle
+      Arkham.Asset.Assets.AzizaSteerHardboiled
+      Arkham.Asset.Assets.AzizaSteerHasABoneToPick
       Arkham.Asset.Assets.AzureFlame
       Arkham.Asset.Assets.AzureFlame3
       Arkham.Asset.Assets.AzureFlame5
@@ -1231,6 +1248,7 @@ library
       Arkham.Asset.Assets.Chainsaw4
       Arkham.Asset.Assets.Charisma3
       Arkham.Asset.Assets.CharlesRossEsq
+      Arkham.Asset.Assets.CharlesTammJustHereToGetPaid
       Arkham.Asset.Assets.CharlieKaneKnowsAGuy
       Arkham.Asset.Assets.CharonsObol1
       Arkham.Asset.Assets.ChemistrySet
@@ -1397,6 +1415,7 @@ library
       Arkham.Asset.Assets.EldritchBrand5
       Arkham.Asset.Assets.EldritchSophist
       Arkham.Asset.Assets.EldritchTongue
+      Arkham.Asset.Assets.EliasHusserlJrFleeingTheCity
       Arkham.Asset.Assets.ElinaHarperKnowsTooMuch
       Arkham.Asset.Assets.ElinaHarpersCarRunning
       Arkham.Asset.Assets.ElinaHarpersCarStopped
@@ -1428,6 +1447,7 @@ library
       Arkham.Asset.Assets.EsotericAtlas1
       Arkham.Asset.Assets.EsotericAtlas2
       Arkham.Asset.Assets.EsotericFormula
+      Arkham.Asset.Assets.EugenePeelHidingSomething
       Arkham.Asset.Assets.EvanescentAscensionTheMorningStar
       Arkham.Asset.Assets.ExpeditedTicket
       Arkham.Asset.Assets.ExpeditionGearToughButReliable
@@ -1509,6 +1529,7 @@ library
       Arkham.Asset.Assets.GiftOfNodens5
       Arkham.Asset.Assets.GildedVolto
       Arkham.Asset.Assets.GirishKadakiaICPCPunjabDetective4
+      Arkham.Asset.Assets.GladysWashingtonCuriousCoroner
       Arkham.Asset.Assets.GMen
       Arkham.Asset.Assets.GoodMoney
       Arkham.Asset.Assets.GoodMoneyTheQuoPart
@@ -1632,6 +1653,7 @@ library
       Arkham.Asset.Assets.JohnnyValoneReadyToMakeADeal
       Arkham.Asset.Assets.JohnRaymondLegrasseHuntingForAnswers
       Arkham.Asset.Assets.JordanPerry
+      Arkham.Asset.Assets.JosephineHusserlMiffedMatriarch
       Arkham.Asset.Assets.JudithParkTheMuscle
       Arkham.Asset.Assets.Jumpsuit
       Arkham.Asset.Assets.Katana
@@ -1673,6 +1695,7 @@ library
       Arkham.Asset.Assets.LibraryPass1
       Arkham.Asset.Assets.LibraryPass5
       Arkham.Asset.Assets.LightningGun5
+      Arkham.Asset.Assets.LinaHusserlTheNextBigThing
       Arkham.Asset.Assets.LiquidCourage
       Arkham.Asset.Assets.LiquidCourage1
       Arkham.Asset.Assets.LitaChantler
@@ -1727,6 +1750,7 @@ library
       Arkham.Asset.Assets.MaskedCarnevaleGoer_21
       Arkham.Asset.Assets.MaskOfSilenusFaceOfTheVoid1
       Arkham.Asset.Assets.Matchbox
+      Arkham.Asset.Assets.MatildeCorreaInvestigativeReporter
       Arkham.Asset.Assets.MauserC96
       Arkham.Asset.Assets.MauserC962
       Arkham.Asset.Assets.MauserTankgewehrM19185
@@ -2202,6 +2226,7 @@ library
       Arkham.Asset.Assets.VedaWhitsleySkilledBotanist
       Arkham.Asset.Assets.Venturer
       Arkham.Asset.Assets.Versatile2
+      Arkham.Asset.Assets.VicarYangTryingToDoTheRightThing
       Arkham.Asset.Assets.ViolaCase
       Arkham.Asset.Assets.VirgilGray
       Arkham.Asset.Assets.VirgilGrayTrulyInspired
@@ -2767,6 +2792,7 @@ library
       Arkham.Enemy.CardDefs.TheScarletKeys.SecretWar
       Arkham.Enemy.CardDefs.TheScarletKeys.ShadesOfSuffering
       Arkham.Enemy.CardDefs.TheScarletKeys.WithoutATrace
+      Arkham.Enemy.CardDefs.TracesToNowhere
       Arkham.Enemy.CardDefs.WarOfTheOuterGods
       Arkham.Enemy.Cards
       Arkham.Enemy.Cards.AccursedFollower
@@ -3448,6 +3474,17 @@ library
       Arkham.Enemy.Cards.TheThingThatFollows
       Arkham.Enemy.Cards.TommyMalloy
       Arkham.Enemy.Cards.TonysQuarry
+      Arkham.Enemy.Cards.TracesToNowhere.AbductorThatWhichLurksInShadows
+      Arkham.Enemy.Cards.TracesToNowhere.AlbrechtHusserlDesperateGambler
+      Arkham.Enemy.Cards.TracesToNowhere.AmbushingShadow
+      Arkham.Enemy.Cards.TracesToNowhere.Bruiser
+      Arkham.Enemy.Cards.TracesToNowhere.CrookedCops
+      Arkham.Enemy.Cards.TracesToNowhere.DimensionalShamblerDraggingThemBelow
+      Arkham.Enemy.Cards.TracesToNowhere.EugenePeelDoubleCrossingCultist
+      Arkham.Enemy.Cards.TracesToNowhere.HiredEnforcer
+      Arkham.Enemy.Cards.TracesToNowhere.LinaHusserlVisionsOfHerOwnDemise
+      Arkham.Enemy.Cards.TracesToNowhere.TheCleanerLeaveItToHim
+      Arkham.Enemy.Cards.TracesToNowhere.ThoseWhichGrasp
       Arkham.Enemy.Cards.UnboundBeast
       Arkham.Enemy.Cards.VengefulHound
       Arkham.Enemy.Cards.VengefulShade
@@ -6110,6 +6147,7 @@ library
       Arkham.Location.CardDefs.TheScarletKeys.SanguineShadows
       Arkham.Location.CardDefs.TheScarletKeys.ShadesOfSuffering
       Arkham.Location.CardDefs.TheScarletKeys.WithoutATrace
+      Arkham.Location.CardDefs.TracesToNowhere
       Arkham.Location.CardDefs.WarOfTheOuterGods
       Arkham.Location.Cards
       Arkham.Location.Cards.BrethrenOfAsh.Arkham.DowntownArkhamSanatorium
@@ -7404,6 +7442,21 @@ library
       Arkham.Location.Cards.TheScarletKeys.ShadesOfSuffering.WayangKulitTheater
       Arkham.Location.Cards.TheScarletKeys.WithoutATrace.CourtOfTheOutsiders
       Arkham.Location.Cards.TheScarletKeys.WithoutATrace.OutsidersLairWithoutATrace
+      Arkham.Location.Cards.TracesToNowhere.ArkhamAdvertiser
+      Arkham.Location.Cards.TracesToNowhere.BonePit
+      Arkham.Location.Cards.TracesToNowhere.DuterteFuneralHomeAfterHours
+      Arkham.Location.Cards.TracesToNowhere.DuterteFuneralHomeSomethingInTheBasement
+      Arkham.Location.Cards.TracesToNowhere.EtherealPerch
+      Arkham.Location.Cards.TracesToNowhere.FrenchHill
+      Arkham.Location.Cards.TracesToNowhere.HistoricalSociety
+      Arkham.Location.Cards.TracesToNowhere.MeigerEstateBeyondTheBlackDoor
+      Arkham.Location.Cards.TracesToNowhere.MeigerEstateUnderNewOwnership
+      Arkham.Location.Cards.TracesToNowhere.MerchantDistrict
+      Arkham.Location.Cards.TracesToNowhere.SouthChurch
+      Arkham.Location.Cards.TracesToNowhere.SteersOffice
+      Arkham.Location.Cards.TracesToNowhere.ThePortal
+      Arkham.Location.Cards.TracesToNowhere.TickTockClub
+      Arkham.Location.Cards.TracesToNowhere.TrainStation
       Arkham.Location.Cards.WarOfTheOuterGods.ArkhamWarOfTheOuterGods
       Arkham.Location.Cards.WarOfTheOuterGods.AthenaeumOfTheEmptySky
       Arkham.Location.Cards.WarOfTheOuterGods.ChateauRamezay
@@ -7689,6 +7742,7 @@ library
       Arkham.Scenario.Scenarios.TheScarletKeys.SanguineShadows
       Arkham.Scenario.Scenarios.TheScarletKeys.ShadesOfSuffering
       Arkham.Scenario.Scenarios.TheScarletKeys.WithoutATrace
+      Arkham.Scenario.Scenarios.TracesToNowhere
       Arkham.Scenario.Scenarios.WarOfTheOuterGods
       Arkham.Scenario.Setup
       Arkham.Scenario.Types
@@ -7817,6 +7871,7 @@ library
       Arkham.Scenarios.TheScarletKeys.SanguineShadows.Helpers
       Arkham.Scenarios.TheScarletKeys.ShadesOfSuffering.Helpers
       Arkham.Scenarios.TheScarletKeys.WithoutATrace.Helpers
+      Arkham.Scenarios.TracesToNowhere.Helpers
       Arkham.Scenarios.WarOfTheOuterGods.Helpers
       Arkham.Script
       Arkham.Search
@@ -8063,6 +8118,7 @@ library
       Arkham.Story.CardDefs.TheScarletKeys.DeadHeat
       Arkham.Story.CardDefs.TheScarletKeys.DealingsInTheDark
       Arkham.Story.CardDefs.TheScarletKeys.ShadesOfSuffering
+      Arkham.Story.CardDefs.TracesToNowhere
       Arkham.Story.Cards
       Arkham.Story.Cards.BadBlood.TriumphAndSubjugation
       Arkham.Story.Cards.ChildrenOfBlood.BloodToken
@@ -8269,6 +8325,15 @@ library
       Arkham.Story.Cards.TheScarletKeys.ShadesOfSuffering.PlayfulShadows
       Arkham.Story.Cards.TheScarletKeys.ShadesOfSuffering.SympathyPain
       Arkham.Story.Cards.TheScarletKeys.ShadesOfSuffering.TimorousShadows
+      Arkham.Story.Cards.TracesToNowhere.AcrossTheThreshold
+      Arkham.Story.Cards.TracesToNowhere.AGlimpseBeyond
+      Arkham.Story.Cards.TracesToNowhere.GamblingYourTimeAway
+      Arkham.Story.Cards.TracesToNowhere.LuckRunningOut
+      Arkham.Story.Cards.TracesToNowhere.PulledBelow
+      Arkham.Story.Cards.TracesToNowhere.SnapOutOfIt
+      Arkham.Story.Cards.TracesToNowhere.UnlockingTheTruth
+      Arkham.Story.Cards.TracesToNowhere.YesterdaysNews
+      Arkham.Story.Cards.TracesToNowhere.YoureComingWithMe
       Arkham.Story.Import.Lifted
       Arkham.Story.Runner
       Arkham.Story.Stories
@@ -8556,6 +8621,7 @@ library
       Arkham.Treachery.CardDefs.TheScarletKeys.SpatialAnomaly
       Arkham.Treachery.CardDefs.TheScarletKeys.SpreadingCorruption
       Arkham.Treachery.CardDefs.TheScarletKeys.StrangeHappenings
+      Arkham.Treachery.CardDefs.TracesToNowhere
       Arkham.Treachery.CardDefs.VileExperiments
       Arkham.Treachery.CardDefs.WarOfTheOuterGods
       Arkham.Treachery.Cards
@@ -9298,6 +9364,17 @@ library
       Arkham.Treachery.Cards.ThriceDamnedCuriosity
       Arkham.Treachery.Cards.ThroughTheGates
       Arkham.Treachery.Cards.ToFightTheBlackWind
+      Arkham.Treachery.Cards.TracesToNowhere.AethrealBlight
+      Arkham.Treachery.Cards.TracesToNowhere.ApproachingShadow
+      Arkham.Treachery.Cards.TracesToNowhere.BackToSquareOne
+      Arkham.Treachery.Cards.TracesToNowhere.DisappearingEvidence
+      Arkham.Treachery.Cards.TracesToNowhere.DrawingHeat
+      Arkham.Treachery.Cards.TracesToNowhere.HeavyRain
+      Arkham.Treachery.Cards.TracesToNowhere.HungryVoid
+      Arkham.Treachery.Cards.TracesToNowhere.LockedOut
+      Arkham.Treachery.Cards.TracesToNowhere.LostToTheDarkness
+      Arkham.Treachery.Cards.TracesToNowhere.OverYourShoulder
+      Arkham.Treachery.Cards.TracesToNowhere.TheMysteryDeepens
       Arkham.Treachery.Cards.Unaware
       Arkham.Treachery.Cards.UnbrokenWeb
       Arkham.Treachery.Cards.UnspeakableOathBloodthirst

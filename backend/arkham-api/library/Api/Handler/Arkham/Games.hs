@@ -11,6 +11,7 @@ module Api.Handler.Arkham.Games (
   getApiV1ArkhamGamesR,
   getApiV1ArkhamSpectatableGamesR,
   getApiV1ArkhamSpectatableGamesDigestR,
+  SpectatableGameActivity (..),
   postApiV1ArkhamGamesR,
   putApiV1ArkhamGameR,
   deleteApiV1ArkhamGameR,
@@ -58,6 +59,7 @@ import Control.Monad.Random (mkStdGen)
 import Control.Monad.Random.Class (getRandom)
 import Data.Aeson (withObject, (.!=), (.:?))
 import Data.Coerce
+import Data.Set qualified as Set
 import Data.Time.Clock
 import Database.Esqueleto.Experimental hiding (update, (=.))
 import Database.Esqueleto.Internal.Internal (unsafeSqlBinOp, unsafeSqlValue)
@@ -65,7 +67,6 @@ import Entity.Answer
 import Entity.Arkham.GameRaw
 import Entity.Arkham.Step
 import Import hiding (Value, delete, exists, on, (==.))
-import Yesod.WebSockets
 
 {- | Step counter only: one indexed Int column, no game JSON touched, no lock.
 
@@ -93,8 +94,7 @@ newtype GameStepJson = GameStepJson
 getApiV1ArkhamGameR :: ArkhamGameId -> Handler GetGameJson
 getApiV1ArkhamGameR gameId = do
   userId <- getRequestUserId
-  wsOptions <- websocketConnectionOptions
-  webSocketsOptions wsOptions $ gameStream gameId
+  servePongAware $ gameStream gameId
   runDB do
     g <- get404 gameId
     gameLog <- getGameLogTail gameId gameLogTailSize
@@ -137,8 +137,7 @@ questions.
 -}
 getApiV1ArkhamGameSpectateR :: ArkhamGameId -> Handler GetGameJson
 getApiV1ArkhamGameSpectateR gameId = do
-  wsOptions <- websocketConnectionOptions
-  webSocketsOptions wsOptions $ spectatorStream gameId
+  servePongAware $ spectatorStream gameId
   runDB do
     g <- get404 gameId
     let Game {..} = g.currentData
@@ -181,6 +180,17 @@ The same four conditions the list itself applies, in
 'Api.Handler.Arkham.Games.Summary.spectatableGameSummaries'. They have to stay
 the same question: a digest answering "has the list changed?" about some other
 list is worse than no digest.
+
+What this query cannot answer is whether anybody is *there*. @IsActive@ is the
+game state -- not pending decks, not over -- and an abandoned game keeps it
+forever, so an advertised game nobody has opened in days still matched every
+condition above. Presence lives in the rooms (Redis, or this pod's map), which
+is a different store entirely, so both callers intersect these rows with
+'getLiveGameRooms'.
+
+The limit is applied before that intersection, which cannot lose a live game in
+practice: the order is @updatedAt@ descending and a game somebody is connected
+to is a game being played, so it sorts above the abandoned ones.
 -}
 spectatableGames :: UserId -> SqlQuery (SqlExpr (Entity ArkhamGameRaw))
 spectatableGames userId = do
@@ -224,12 +234,15 @@ getApiV1ArkhamSpectatableGamesR :: Handler [GameDetailsEntry]
 getApiV1ArkhamSpectatableGamesR = do
   userId <- getRequestUserId
   entries <- runDB $ spectatableGameSummaries userId
-  pure $ filter inPlay entries
+  live <- getLiveGameRooms
+  pure $ filter (beingPlayed live) entries
  where
-  -- The query already asked Postgres for games in play; this drops the rows
-  -- that failed to decode, which have no state to go on either way.
-  inPlay = \case
-    SuccessGameDetails gd -> gd.gameState == IsActive
+  {- The query already asked Postgres for games in play; this drops the rows
+  that failed to decode, which have no state to go on either way, and the ones
+  with nobody connected -- "in play" is a game state and says nothing about
+  whether anybody is at the table. -}
+  beingPlayed live = \case
+    SuccessGameDetails gd -> gd.gameState == IsActive && gd.id `Set.member` live
     FailedGameDetails {} -> False
 
 {- | Which games the watch list would show.
@@ -240,22 +253,59 @@ instead and pays for the list only when the answer changes -- the same bargain
 the membership query returning keys, so it stays a handful of uuids however
 many games are open.
 
-Sorted, so the answer is membership and nothing else. The list is ordered by
-@updatedAt@, which every action in a watched game moves, and a digest carrying
-that order would report a change -- and buy the whole list again -- every time
-anybody took a turn. A game appearing or ending is what a watcher waiting for a
-table needs to see; two of them trading places in the list is not.
+Sorted by id, so membership is the whole of what the client compares. The list
+is ordered by @updatedAt@, which every action in a watched game moves, and a
+digest reporting that order would buy the whole list again every time anybody
+took a turn. A game appearing or ending is what a watcher waiting for a table
+needs to see; two of them trading places in the list is not.
 
 Ids rather than a hash, because the client only needs to know *that* the set
 moved and a hash of 50 uuids is not meaningfully smaller than the uuids.
+
+Each id carries 'idleSeconds' alongside it -- see 'SpectatableGameActivity' --
+which is the one thing besides membership a watcher cannot work out from the
+list it already has.
 -}
-getApiV1ArkhamSpectatableGamesDigestR :: Handler [ArkhamGameId]
+getApiV1ArkhamSpectatableGamesDigestR :: Handler [SpectatableGameActivity]
 getApiV1ArkhamSpectatableGamesDigestR = do
   userId <- getRequestUserId
-  ids <- runDB $ select do
+  rows <- runDB $ select do
     games <- spectatableGames userId
-    pure games.id
-  pure $ sort $ map (coerce . unValue) ids
+    pure (games.id, games.updatedAt)
+  -- The same presence filter the list applies, for the same reason.
+  live <- getLiveGameRooms
+  now <- liftIO getCurrentTime
+  pure
+    $ sortOn
+      (.id)
+      [ activity now gid (unValue updatedAt)
+      | (gameId, updatedAt) <- rows
+      , let gid = coerce (unValue gameId)
+      , gid `Set.member` live
+      ]
+ where
+  activity now gid updatedAt =
+    SpectatableGameActivity
+      { id = gid
+      , idleSeconds = max 0 $ round $ nominalDiffTimeToSeconds $ diffUTCTime now updatedAt
+      }
+
+{- | A game on the watch list, and how long it has been quiet.
+
+@updatedAt@ moves on every action in a game, so the gap between it and now is
+how long nobody at that table has done anything -- which is how the watch page
+tells a game somebody is playing from one whose players wandered off, both of
+which are @IsActive@ and look identical in the list.
+
+Elapsed seconds rather than the timestamp itself, so the answer does not depend
+on the watcher's clock agreeing with the server's.
+-}
+data SpectatableGameActivity = SpectatableGameActivity
+  { id :: ArkhamGameId
+  , idleSeconds :: Int
+  }
+  deriving stock (Show, Generic)
+  deriving anyclass ToJSON
 
 data CreateGamePost = CreateGamePost
   { deckIds :: [Maybe ArkhamDeckId]

@@ -76,6 +76,7 @@ import Story from '@/arkham/components/Story.vue';
 import Asset from '@/arkham/components/Asset.vue';
 import Location from '@/arkham/components/Location.vue';
 import TreacheryView from '@/arkham/components/Treachery.vue';
+import SealedChaosTokens from '@/arkham/components/SealedChaosTokens.vue';
 import { useGameChoices } from '@/arkham/composables/useGameChoices';
 import { setLocationOffset, resetLocationOffsets, updateGameRaw } from '@/arkham/api';
 import { useDebug, scenarioHasDebugOptions } from '@/arkham/debug'
@@ -1695,6 +1696,8 @@ const globalAssets = computed(() => Object.values(props.game.assets).filter((ass
   asset.placement.tag === "OtherPlacement" && asset.placement.contents === "Global"
 ))
 const cardsUnderScenarioReference = computed(() => props.scenario.cardsUnderScenarioReference)
+/* Tokens sealed on the scenario reference card itself (Traces to Nowhere's codex entries). */
+const scenarioSealedChaosTokens = computed(() => props.scenario.sealedChaosTokens)
 const cardsUnderAgenda = computed(() => props.scenario.cardsUnderAgendaDeck)
 const cardsUnderAct = computed(() => props.scenario.cardsUnderActDeck)
 const cardsNextToAct = computed(() => props.scenario.cardsNextToActDeck)
@@ -2873,6 +2876,13 @@ async function addChaosToken(face: any){
                 <PoolItem v-if="damage && damage > 0" type="damage" :amount="damage" />
               </div>
             </div>
+            <SealedChaosTokens
+              v-if="scenarioSealedChaosTokens.length > 0"
+              :tokens="scenarioSealedChaosTokens"
+              :game="game"
+              :playerId="playerId"
+              @choose="choose"
+            />
             <div v-if="scenarioReferenceTreacheries.length > 0" class="scenario-reference-attachments">
               <TreacheryView
                 v-for="treacheryId in scenarioReferenceTreacheries"
