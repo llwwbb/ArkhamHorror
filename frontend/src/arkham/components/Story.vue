@@ -8,6 +8,7 @@ import { AbilityLabel, AbilityMessage, Message, MessageType } from '@/arkham/typ
 import { cardImage } from '@/arkham/cardImages'
 import { useCardFlip } from '@/arkham/composables/useCardFlip'
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import Token from '@/arkham/components/Token.vue'
 import { readTokenBag } from '@/arkham/types/TokenBag'
 import * as Arkham from '@/arkham/types/Story'
@@ -143,6 +144,7 @@ const sealedChaosTokens = computed(() => props.story.sealedChaosTokens ?? [])
         :game="game"
         @click="$emit('choose', ability.index)"
         />
+      <SkipFastToggle :game="game" :abilities="abilities" />
     </div>
     <div v-if="setAsideTokens.length > 0" class="infestation-tokens">
       <Token v-for="token in setAsideTokens" :key="token.id" :token="token" :playerId="playerId" :game="game" @choose="choose" />

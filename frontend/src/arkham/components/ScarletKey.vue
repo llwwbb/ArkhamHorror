@@ -5,6 +5,7 @@ import * as ArkhamGame from '@/arkham/types/Game'
 import { AbilityLabel, AbilityMessage, Message, MessageType } from '@/arkham/types/Message'
 import { cardImage } from '@/arkham/cardImages'
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import * as Arkham from '@/arkham/types/ScarletKey'
 import TokenPool from '@/arkham/components/TokenPool.vue';
 
@@ -100,6 +101,7 @@ const abilities = computed(() => {
         :game="game"
         @click="$emit('choose', ability.index)"
         />
+      <SkipFastToggle :game="game" :abilities="abilities" />
     </div>
   </div>
 </template>

@@ -11,6 +11,7 @@ import { AbilityLabel, AbilityMessage, Message, MessageType } from '@/arkham/typ
 import { cardImage } from '@/arkham/cardImages';
 import TokenPool from '@/arkham/components/TokenPool.vue';
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import Token from '@/arkham/components/Token.vue';
 import * as Arkham from '@/arkham/types/Event';
 
@@ -156,6 +157,7 @@ const choose = (index: number) => emits('choose', index)
       :game="game"
       @click="$emit('choose', ability.index)"
       />
+    <SkipFastToggle :game="game" :abilities="abilities" />
 
     <button v-if="cardsUnderneath.length > 0" class="view-discard-button" @click="showCardsUnderneath">{{cardsUnderneathLabel}}</button>
     <template v-if="debug.active">
