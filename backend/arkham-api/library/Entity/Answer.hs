@@ -673,6 +673,7 @@ handleAnswerPure game@Game {..} playerId = \case
         UpdateGlobalSetting {} | inFastWindow -> handled [message]
         UpdateCardSetting {} | inFastWindow -> handled [message]
         SetCardSilenced {} | inFastWindow -> handled [message]
+        SetCardSkipFastOutsideTurn {} | inFastWindow -> handled [message]
         SetAsIfRuling {} | inFastWindow -> handled [message]
         _ -> handled [message, AskMap gameQuestion]
       else handled [message]

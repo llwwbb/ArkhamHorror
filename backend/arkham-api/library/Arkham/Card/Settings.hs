@@ -56,13 +56,17 @@ data PerCardSettings = PerCardSettings
   triggers (fast abilities and reactions) instead of prompting for them. Forced
   abilities still fire.
   -}
+  , cardSkipFastOutsideTurn :: Bool
+  {- ^ Drop this card's fast abilities from window prompts while it is not this
+  investigator's turn, instead of stopping to ask.
+  -}
   }
   deriving stock (Show, Ord, Eq, Generic, Data)
   deriving anyclass ToJSON
 
 instance Semigroup PerCardSettings where
-  PerCardSettings i1 d1 a1 o1 s1 <> PerCardSettings i2 d2 a2 o2 s2 =
-    PerCardSettings (i1 || i2) (d1 || d2) (a1 <> a2) (o1 <> o2) (s1 || s2)
+  PerCardSettings i1 d1 a1 o1 s1 f1 <> PerCardSettings i2 d2 a2 o2 s2 f2 =
+    PerCardSettings (i1 || i2) (d1 || d2) (a1 <> a2) (o1 <> o2) (s1 || s2) (f1 || f2)
 
 instance FromJSON PerCardSettings where
   parseJSON = withObject "PerCardSettings" \o -> do
@@ -71,6 +75,7 @@ instance FromJSON PerCardSettings where
     cardAttachments <- o .:? "cardAttachments" .!= []
     cardOptions <- o .:? "cardOptions" .!= mempty
     cardSilenced <- o .:? "cardSilenced" .!= False
+    cardSkipFastOutsideTurn <- o .:? "cardSkipFastOutsideTurn" .!= False
     pure PerCardSettings {..}
 
 data PerCardSetting a where
@@ -230,6 +235,7 @@ defaultPerCardSettings =
     , cardAttachments = []
     , cardOptions = mempty
     , cardSilenced = False
+    , cardSkipFastOutsideTurn = False
     }
 
 globalSettingsL :: Lens' CardSettings GlobalSettings
@@ -264,6 +270,9 @@ cardOptionsL = lens cardOptions \m x -> m {cardOptions = x}
 cardSilencedL :: Lens' PerCardSettings Bool
 cardSilencedL = lens cardSilenced \m x -> m {cardSilenced = x}
 
+cardSkipFastOutsideTurnL :: Lens' PerCardSettings Bool
+cardSkipFastOutsideTurnL = lens cardSkipFastOutsideTurn \m x -> m {cardSkipFastOutsideTurn = x}
+
 {- | Set one declared option for one card. Kept off the 'PerCardSetting' GADT on
 purpose: that exists for heterogeneous typed settings, and a keyed option map
 doesn't need its hand-rolled 'Data' instances.
@@ -287,6 +296,17 @@ setCardSilenced cCode v =
 -- | The card codes whose non-forced window triggers should be skipped.
 silencedCardCodes :: CardSettings -> Set CardCode
 silencedCardCodes = Map.keysSet . Map.filter cardSilenced . perCardSettings
+
+{- | Skip a card's fast abilities outside this investigator's turn. Kept off the
+'PerCardSetting' GADT for the same reason as 'setCardOption'.
+-}
+setCardSkipFastOutsideTurn :: CardCode -> Bool -> CardSettings -> CardSettings
+setCardSkipFastOutsideTurn cCode v =
+  perCardSettingsL . at cCode . non defaultPerCardSettings . cardSkipFastOutsideTurnL .~ v
+
+-- | The card codes whose fast abilities are skipped outside this investigator's turn.
+skipFastOutsideTurnCardCodes :: CardSettings -> Set CardCode
+skipFastOutsideTurnCardCodes = Map.keysSet . Map.filter cardSkipFastOutsideTurn . perCardSettings
 
 updateCardSetting :: CardCode -> SetCardSetting -> CardSettings -> CardSettings
 updateCardSetting cCode = \case

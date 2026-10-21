@@ -579,6 +579,8 @@ data Message
     window triggers. Set from the hidden-cards stack.
     -}
     SetCardSilenced InvestigatorId CardCode Bool
+  | -- | Skip a card's fast abilities for this investigator outside their turn
+    SetCardSkipFastOutsideTurn InvestigatorId CardCode Bool
   | SetAsIfRuling AsIfRuling
   | SetUltimatumsAndBoonsEnabled Bool
   | -- | Ultimatum of The Scream: ban this ally for the rest of the campaign

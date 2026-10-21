@@ -36,6 +36,7 @@ import { useSettings } from '@/stores/settings';
 import { isManifestedSpiritAsset } from '@/arkham/spiritVisuals';
 import { useDbCardStore } from '@/stores/dbCards'
 import { useCardStore } from '@/stores/cards'
+import * as Api from '@/arkham/api'
 
 const props = withDefaults(defineProps<{
   game: Game
@@ -234,6 +235,39 @@ const abilities = computed(() => {
       return acc;
     }, []);
 })
+
+// Outside their own turn an investigator can have this card's fast abilities
+// dropped from window prompts instead of stopping to ask. The toggle rides on the
+// abilities menu, so it shows whenever a fast ability of this card is on offer,
+// and is set for the investigator that ability is offered to.
+const isFastType = (type: AbilityType): boolean => {
+  switch (type.tag) {
+    case "FastAbility": return true
+    case "DelayedAbility": return isFastType(type.abilityType)
+    case "Objective": return isFastType(type.abilityType)
+    default: return false
+  }
+}
+
+const skipFastInvestigatorId = computed(() => {
+  const label = abilities.value.find(({ contents }) =>
+    contents.tag === MessageType.ABILITY_LABEL && isFastType(contents.ability.type))
+  return label?.contents.tag === MessageType.ABILITY_LABEL ? label.contents.investigatorId : null
+})
+
+const skipsFastFor = (iid: string | null) =>
+  iid ? props.game.investigators[iid]?.settings.perCardSettings?.[cardCode.value]?.cardSkipFastOutsideTurn === true : false
+
+const skipFastOutsideTurn = computed(() =>
+  skipFastInvestigatorId.value ? skipsFastFor(skipFastInvestigatorId.value) : undefined)
+
+const showSkipFastMark = computed(() => skipsFastFor(props.asset.controller))
+
+function toggleSkipFast() {
+  const iid = skipFastInvestigatorId.value
+  if (!iid) return
+  Api.setCardSkipFastOutsideTurn(props.game.id, iid, cardCode.value, !skipsFastFor(iid))
+}
 
 const cardsUnderneath = computed(() => props.asset.cardsUnderneath)
 
@@ -466,6 +500,9 @@ function startDrag(event: DragEvent) {
             </svg>
           </span>
           <font-awesome-icon v-if="isSpirit" :icon="['fas', 'ghost']" class="spirit-icon" />
+          <span v-if="showSkipFastMark" class="skip-fast-mark" v-tooltip="$t('player.skipFastOutsideTurnOn')">
+            <font-awesome-icon icon="forward" />
+          </span>
           <span
             v-if="jammed"
             class="status-icon"
@@ -531,7 +568,9 @@ function startDrag(event: DragEvent) {
           :frame="frame"
           :abilities="abilities"
           :game="game"
+          :skipFastOutsideTurn="skipFastOutsideTurn"
           @choose="chooseAbility"
+          @toggleSkipFast="toggleSkipFast"
           @hover="(value) => emits('abilities-hover', value)"
         />
         <CardConfig :game="game" :playerId="playerId" :cardCode="cardCode" />
@@ -951,6 +990,17 @@ img.card.ability-target {
   align-self: center;
   margin-top: 1px;
   margin-bottom: 1px;
+}
+
+.skip-fast-mark {
+  position: absolute;
+  bottom: 8%;
+  left: 4%;
+  z-index: var(--z-index-3);
+  font-size: 0.6em;
+  color: var(--highlight);
+  pointer-events: auto;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
 }
 
 .spirit-icon {
