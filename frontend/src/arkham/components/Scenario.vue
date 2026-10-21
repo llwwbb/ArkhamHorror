@@ -37,6 +37,7 @@ import { useMenu } from '@/composable/menu';
 import { useSettings } from '@/stores/settings';
 import { keyToId } from '@/arkham/types/Key'
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import Act from '@/arkham/components/Act.vue';
 import CardView from '@/arkham/components/Card.vue';
 import Draggable from '@/components/Draggable.vue';
@@ -2829,6 +2830,7 @@ async function addChaosToken(face: any){
                   :game="game"
                   @click="choose(ability.index)"
                 />
+                <SkipFastToggle :game="game" :abilities="abilities" />
               </div>
               <PoolItem class="depth" v-if="currentDepth" type="resource" :amount="currentDepth" />
               <PoolItem class="civilians-slain" v-if="civiliansSlain" type="resource" :amount="civiliansSlain" />
