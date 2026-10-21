@@ -473,10 +473,8 @@ dropSkippedFastAbilities attrs abilities
   | otherwise =
       attrs.id <=~> TurnInvestigator >>= \case
         True -> pure abilities
-        False -> flip filterM abilities \ability ->
-          if isFastAbility ability
-            then maybe True ((`notMember` skipped) . toCardCode) <$> sourceToMaybeCard ability.source
-            else pure True
+        -- by the ability's own card code: the one the client keys the toggle on
+        False -> pure $ filter (\ability -> not (isFastAbility ability && ability.cardCode `member` skipped)) abilities
  where
   skipped = skipFastOutsideTurnCardCodes attrs.settings
 

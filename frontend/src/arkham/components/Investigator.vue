@@ -20,6 +20,7 @@ import SealedChaosTokens from '@/arkham/components/SealedChaosTokens.vue';
 import CardDebugWindow from '@/arkham/components/debug/CardDebugWindow.vue';
 import { investigatorTarget, cardDropHandlers } from '@/arkham/debugCardDrop';
 import AbilityButton from '@/arkham/components/AbilityButton.vue'
+import SkipFastToggle from '@/arkham/components/SkipFastToggle.vue'
 import { useMenu } from '@/composable/menu';
 import { useEscape } from '@/composable/escape';
 import { useI18n } from 'vue-i18n';
@@ -621,6 +622,7 @@ const spadeInjury = computed(() => {
               :game="game"
               @click="$emit('choose', ability.index)"
               />
+            <SkipFastToggle :game="game" :abilities="abilities" />
             <button
             :class="{ active: endTurnAction !== -1 && investigator.remainingActions === 0 }"
             :disabled="endTurnAction == -1"

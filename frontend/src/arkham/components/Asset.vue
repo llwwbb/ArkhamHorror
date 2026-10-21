@@ -36,7 +36,6 @@ import { useSettings } from '@/stores/settings';
 import { isManifestedSpiritAsset } from '@/arkham/spiritVisuals';
 import { useDbCardStore } from '@/stores/dbCards'
 import { useCardStore } from '@/stores/cards'
-import * as Api from '@/arkham/api'
 
 const props = withDefaults(defineProps<{
   game: Game
@@ -236,38 +235,13 @@ const abilities = computed(() => {
     }, []);
 })
 
-// Outside their own turn an investigator can have this card's fast abilities
-// dropped from window prompts instead of stopping to ask. The toggle rides on the
-// abilities menu, so it shows whenever a fast ability of this card is on offer,
-// and is set for the investigator that ability is offered to.
-const isFastType = (type: AbilityType): boolean => {
-  switch (type.tag) {
-    case "FastAbility": return true
-    case "DelayedAbility": return isFastType(type.abilityType)
-    case "Objective": return isFastType(type.abilityType)
-    default: return false
-  }
-}
-
-const skipFastInvestigatorId = computed(() => {
-  const label = abilities.value.find(({ contents }) =>
-    contents.tag === MessageType.ABILITY_LABEL && isFastType(contents.ability.type))
-  return label?.contents.tag === MessageType.ABILITY_LABEL ? label.contents.investigatorId : null
+// Set from the abilities menu (SkipFastToggle); marked on the card while on.
+const showSkipFastMark = computed(() => {
+  const controller = props.asset.controller
+  return controller
+    ? props.game.investigators[controller]?.settings.perCardSettings?.[cardCode.value]?.cardSkipFastOutsideTurn === true
+    : false
 })
-
-const skipsFastFor = (iid: string | null) =>
-  iid ? props.game.investigators[iid]?.settings.perCardSettings?.[cardCode.value]?.cardSkipFastOutsideTurn === true : false
-
-const skipFastOutsideTurn = computed(() =>
-  skipFastInvestigatorId.value ? skipsFastFor(skipFastInvestigatorId.value) : undefined)
-
-const showSkipFastMark = computed(() => skipsFastFor(props.asset.controller))
-
-function toggleSkipFast() {
-  const iid = skipFastInvestigatorId.value
-  if (!iid) return
-  Api.setCardSkipFastOutsideTurn(props.game.id, iid, cardCode.value, !skipsFastFor(iid))
-}
 
 const cardsUnderneath = computed(() => props.asset.cardsUnderneath)
 
@@ -568,9 +542,7 @@ function startDrag(event: DragEvent) {
           :frame="frame"
           :abilities="abilities"
           :game="game"
-          :skipFastOutsideTurn="skipFastOutsideTurn"
           @choose="chooseAbility"
-          @toggleSkipFast="toggleSkipFast"
           @hover="(value) => emits('abilities-hover', value)"
         />
         <CardConfig :game="game" :playerId="playerId" :cardCode="cardCode" />
