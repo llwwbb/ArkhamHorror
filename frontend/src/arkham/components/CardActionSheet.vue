@@ -94,8 +94,12 @@ const sheetCard = computed<ArkhamDBCard | null>(() =>
     : null
 )
 
+// ArkhamDB stores some single-sided fronts under an "a" suffix while the art uses the bare
+// code (09655 -> 09655a). That record is the front, not a back, so it must not read back_*.
 const sheetCardNeedsBack = computed(() =>
-  !!sheetCard.value && !!cardCode.value && sheetCard.value.code !== cardCode.value
+  !!sheetCard.value && !!cardCode.value
+    && sheetCard.value.code !== cardCode.value
+    && sheetCard.value.code !== `${cardCode.value}a`
 )
 
 const sheetCardName = computed(() => {
