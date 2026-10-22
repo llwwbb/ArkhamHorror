@@ -5,7 +5,7 @@ export type CardImageParts = {
 
 export function cardImagePartsFromImage(src: string | null | undefined): CardImageParts | null {
   if (!src) return null
-  const match = src.match(/(?:^|\/)cards\/(\d+[ab]?)(_[^/.?]+)?\.avif(?:\?.*)?$/)
+  const match = src.match(/(?:^|\/)cards\/(\d+[a-z]?)(_[^/.?]+)?\.avif(?:\?.*)?$/)
   return match ? { code: match[1], suffix: match[2] ?? '' } : null
 }
 
