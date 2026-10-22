@@ -428,7 +428,7 @@ const overlayCardCode = computed<string | null>(() => {
   // like an official card code to the fallback matcher below.
   if (!image || image.includes('/homebrew/')) return null
 
-  const match = image.match(/\/cards\/c?(\d+b?)\.(?:avif|jpg|jpeg|png|webp)(?:\?.*)?$/i)
+  const match = image.match(/\/cards\/c?(\d+[a-z]?)\.(?:avif|jpg|jpeg|png|webp)(?:\?.*)?$/i)
   return match ? originalArt(match[1]).replace(/b$/, '') : null
 })
 /* Card-def errata covers a whole card, but some errata only applies to one face —
@@ -1160,14 +1160,18 @@ const resolveHiddenFace = async (src: string, code: string, front: ArkhamDBCard,
   if (!faceDef) return applyDbCard(front, false, tabooSuffix)
 
   const face = store.getDbCardByRealName(faceDef.name.title)
-  if (face) applyDbCard(face, false, tabooSuffix)
+  if (face) return applyDbCard(face, false, tabooSuffix)
+  // Several records can share this name (The Beast in a Cowl of Crimson has three), so
+  // the name cannot pick one. When the front already carries that name it describes the
+  // same card, so use it rather than showing nothing.
+  if (front.real_name === faceDef.name.title) applyDbCard(front, false, tabooSuffix)
 }
 
 watchEffect(() => {
   dbCardName.value = dbCardTypeName.value = dbCardFactionName.value = dbCardFactionCode.value = dbCardTraits.value = dbCardText.value = dbCardCustomizationText.value = dbCardFlavor.value = ''
   const src = card.value
   if (!src) return
-  const m = src.match(/(\d+b?)(_.*)?\.avif$/)
+  const m = src.match(/(\d+[a-z]?)(_.*)?\.avif$/)
   if (!m) return
   const code = originalArt(m[1])
   const tabooSuffix = m[2]
