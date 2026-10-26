@@ -8,8 +8,11 @@ import Arkham.GameValue
 import Arkham.Helpers.Modifiers (ModifierType (..), modified_, modifySelect)
 import Arkham.Homebrew.AgesUnwound.CardDefs.Locations qualified as Cards
 import Arkham.Homebrew.AgesUnwound.Helpers (campaignI18n)
+import Arkham.I18n (ikey)
 import Arkham.Investigator.Types (Field (..))
 import Arkham.Location.Import.Lifted
+import Arkham.Log (idText, ikeyScoped, narrative, sendLog, (~>))
+import Arkham.Log.Refs (investigatorRefFor)
 import Arkham.Matcher
 import Arkham.Placement
 import Arkham.Projection
@@ -74,6 +77,54 @@ instance FromJSON Meta where
 meta :: LocationAttrs -> Meta
 meta = getLocationMetaDefault (Meta [] [])
 
+{- | What the log says when this card hands a seat back, in place of
+@"Daisy Walker moves to Ritual Circle: A Harnessed Future"@.
+
+A return is not a move -- the investigator was out of the game, and the default
+wording sends the reader hunting for the action that paid for it -- so the seat
+carries 'EntersLocationNarratedAs' while it is suspended and the narrator says
+this instead. A key rather than a sentence because the narrator builds the
+entry; it is handed the same @investigator@ and @location@ variables the
+default line uses. Through 'campaignI18n' rather than written out as a literal
+path, so the campaign's scope stays in one place.
+-}
+returnNarration :: Text
+returnNarration = campaignI18n $ ikey "ritualCircleAHarnessedFuture.returns"
+
+{- | The colour the circle takes you in, and gives you back in.
+
+Flavour rather than a signal, so deliberately none of the highlight palette:
+the frontend spends magenta on a choice the game is waiting for, gold on an
+actor and cyan on a target, and a half-second of smoke must not read as any of
+those.
+-}
+circleGreen :: Text
+circleGreen = "#57e07a"
+
+{- | Ask the client to play the bamf: the portrait implodes into a puff of
+'circleGreen' smoke on the way out, and comes back out of one.
+
+A one-shot over the UI channel rather than a modifier the client could notice
+appearing and disappearing, because __the client does not reliably see the
+states in between__. Measured on a solo game: the haunted ability, the rest of
+the round, the mythos phase and the return all arrived in a /single/ update, so
+the investigator went from at-the-location to at-the-location with nothing
+observable between. An animation has to be told, not inferred.
+
+The investigator goes out as 'idText' -- its JSON encoding, which is what keys
+@game.investigators@ and the board's @data-investigator-mini@ on the client, so
+the layer can find the portrait without translating anything. @tshow@ would
+wrap it in quotes.
+
+Sent before the placement messages it describes resolve, which is also when the
+portrait is still where the puff needs to draw it. The client holds its update
+lock for the length of each puff, so the state these announce lands after the
+smoke clears; see @SmokePuffLayer.vue@.
+-}
+smokePuff :: HasGameLogger m => Text -> InvestigatorId -> m ()
+smokePuff direction iid =
+  sendUI $ "smokePuff:" <> direction <> ":" <> idText iid <> ":" <> circleGreen
+
 {- | While an investigator is out of the game, nothing may reach them. Several
 core loops iterate investigators without checking placement, so the ban is
 spelled out as modifiers (the approach recorded in
@@ -86,6 +137,11 @@ game does to itself -- doom onto the agenda, an agenda advancing, a treachery's
 own forced text -- still happens; a generic @AnyAbility@ ban deliberately does
 not reach forced abilities (@Helpers/Ability.preventedByInvestigatorModifiers@),
 which is also what keeps ability 2 below able to fire and bring them back.
+
+'EntersLocationNarratedAs' rides along for the same stretch, and only on the
+suspended half: it replaces the log line for /any/ arrival while it holds, and
+the one arrival a suspended seat can have is this card putting it back. See
+'returnNarration'.
 
 'ResumesSuspendedTurn' rides on the seat from suspension until the resumed turn
 ends, which is what makes the turn pick up /at the start of/ the phase and
@@ -115,6 +171,7 @@ instance HasModifiersFor RitualCircle_224 where
         a
         s.investigator
         [ ResumesSuspendedTurn
+        , EntersLocationNarratedAs returnNarration
         , CannotDrawCards
         , CannotDrawEncounterCards
         , CannotGainResources
@@ -197,6 +254,16 @@ instance RunMessage RitualCircle_224 where
       setActions iid (attrs.ability 1) 0
       endYourTurn iid
       push $ PlaceInvestigator iid Unplaced
+      {- The seat leaving the game is the whole point of the ability and the
+      engine narrates none of it: @PlaceInvestigator _ Unplaced@ is silent, so
+      without this the log shows a haunted ability firing and then nothing at
+      all until the investigator turns up again a phase later. Sent here rather
+      than queued so it lands with the ability that caused it. -}
+      who <- investigatorRefFor iid
+      campaignI18n
+        $ sendLog
+        $ narrative [ikeyScoped "ritualCircleAHarnessedFuture.removed" ["investigator" ~> who]]
+      smokePuff "out" iid
       let m = meta attrs
       let kept = filter ((/= iid) . (.investigator)) m.suspended
       pure
@@ -205,6 +272,7 @@ instance RunMessage RitualCircle_224 where
         & setMeta m {suspended = Suspension iid (Just remaining) unspent : kept}
     UseThisAbility _ (isSource attrs -> True) 2 -> do
       for_ (meta attrs).suspended \s -> do
+        smokePuff "in" s.investigator
         push $ PlaceInvestigator s.investigator (AtLocation attrs.id)
         resumeActions attrs s
       -- The seats only become @resuming@ once 'resumeActions' has run, because

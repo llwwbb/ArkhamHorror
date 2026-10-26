@@ -129,5 +129,6 @@
   "fileBugPart3": "上传的调试文件只包含最后 30 步，因此请确保你的问题在此范围内，或另外提供重现问题的信息。",
   "watching": "有 1 人正在观战 | 有 {count} 人正在观战",
   "rotateLayout": "旋转地点布局",
-  "campaign": "战役"
+  "campaign": "战役",
+  "spectators": "旁观者"
 }

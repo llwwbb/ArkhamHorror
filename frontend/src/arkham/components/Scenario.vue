@@ -1,5 +1,10 @@
 <script lang="ts" setup>
 import UpgradeDeck from '@/arkham/components/UpgradeDeck.vue';
+import {
+  CARD_FLIGHT_PILE_ATTR,
+  cardFlightPileStyle,
+  useCardFlightState,
+} from '@/arkham/cardFlight'
 import { EyeIcon, QuestionMarkCircleIcon, ViewColumnsIcon, ArchiveBoxXMarkIcon, ArrowPathIcon, LockClosedIcon, LockOpenIcon, ArrowUturnLeftIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/vue/20/solid'
 import {
   watchEffect,
@@ -57,6 +62,7 @@ import KeyToken from '@/arkham/components/Key.vue';
 import PlayerTabs from '@/arkham/components/PlayerTabs.vue';
 import Connections from '@/arkham/components/Connections.vue';
 import RainOverlay from '@/arkham/components/RainOverlay.vue';
+import SmokePuffLayer from '@/arkham/components/SmokePuffLayer.vue';
 import { supportsHtmlInCanvas } from '@/arkham/droplets';
 import { createRainAudio, type RainAudioInstance } from '@/arkham/rainAudio';
 import { useSoundsDisabled } from '@/composable/useSoundsDisabled';
@@ -1618,6 +1624,16 @@ const topOfEncounterDiscard = computed(() => {
   return cardCodeImage(props.scenario.discard[0].cardCode)
 })
 
+/* The encounter discard as a card-flight destination. Every id in the pile, not
+ * just the rendered top one: a reveal is dismissed long after the engine has
+ * moved on, so the card being flown home has usually been buried by whatever
+ * resolved behind the overlay. See `laidOutPile` in Game.vue. */
+const cardFlightState = useCardFlightState()
+const encounterDiscardIds = computed(() => props.scenario.discard.map((c) => c.id))
+const encounterDiscardFlightStyle = computed(() =>
+  cardFlightPileStyle(cardFlightState, encounterDiscardIds.value),
+)
+
 const cardStore = useCardStore()
 const encounterDiscardDraggedOver = ref(false)
 // null while nothing is in flight, false when the dragged card has the wrong
@@ -2371,6 +2387,7 @@ async function addChaosToken(face: any){
     <UpgradeDeck :game="game" :key="playerId" :playerId="playerId" @choose="choose" @update="update"/>
   </div>
   <div v-else-if="!gameOver" id="scenario" class="scenario" :data-scenario="scenario.id">
+    <SmokePuffLayer />
     <div class="scenario-body" :class="{'split-view': splitView, 'scenario-body--notifier-overlays': showScenarioNotifierBar }">
       <Draggable v-if="showOutOfPlay || forcedShowOutOfPlay">
         <template #handle><header><h2>{{ $t('gameBar.outOfPlay') }}</h2></header></template>
@@ -2635,7 +2652,11 @@ async function addChaosToken(face: any){
             @dragend="encounterDiscardDraggedOver = false"
             @dragenter.prevent
           >
-            <div class="discard-card">
+            <div
+              class="discard-card"
+              :[CARD_FLIGHT_PILE_ATTR]="encounterDiscardIds.join(' ')"
+              :style="encounterDiscardFlightStyle"
+            >
               <img
                 :src="topOfEncounterDiscard"
                 class="card"
