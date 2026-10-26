@@ -168,8 +168,10 @@ import Arkham.Location.Types (
   toLocationLabel,
   toLocationSymbol,
  )
+import Arkham.Log (toLogRef)
 import Arkham.Log.Entry
 import Arkham.Log.Narrator
+import Arkham.Log.Refs (sourceRefFor)
 import Arkham.Matcher hiding (
   AssetCard,
   AssetDefeated,
@@ -601,6 +603,47 @@ withSkillTestMetadata st = do
   stmRevealStrategy <- getSkillTestRevealStrategy st
   pure $ st `with` SkillTestMetadata {..}
 
+{- | What an effect forbids doing with each card an investigator could use, and
+what is forbidding it.
+
+Prohibitions only -- 'preventsPlay' and 'preventsCommit', the same predicates
+'getIsPlayable' and 'getIsCommittable' consult. Cost, timing, icons, criteria
+and limits are deliberately left out: those change from moment to moment and the
+client already learns them from whether the card is offered as a choice, whereas
+"Dissonant Voices is in your threat area" holds all round and is invisible until
+you try. An entry is kept even when no ref resolves, so the card is still badged
+when the source has left play.
+-}
+prohibitionRefs :: HasGame m => [(Card, [Modifier])] -> m [(CardId, [LogRef])]
+prohibitionRefs prohibited = do
+  entries <- for prohibited \(c, mods) ->
+    if null mods
+      then pure Nothing
+      else do
+        refs <- modifierRefs mods
+        pure $ Just (toCardId c, refs)
+  pure (catMaybes entries)
+
+{- | What to name as responsible for a set of modifiers. May come back empty:
+the effect still applies, we just cannot say what did it.
+-}
+modifierRefs :: HasGame m => [Modifier] -> m [LogRef]
+modifierRefs mods = do
+  -- A modifier whose source has left play still has the card it came on.
+  refs <- for mods \m -> do
+    mRef <- sourceRefFor m.source
+    pure $ mRef <|> (toLogRef <$> modifierCard m)
+  pure $ nub (catMaybes refs)
+
+{- | A prohibition that is about the investigator rather than about one card:
+'Nothing' when they are not under it at all, and the refs naming what is
+responsible when they are.
+-}
+investigatorProhibition :: HasGame m => [Modifier] -> m (Maybe [LogRef])
+investigatorProhibition mods
+  | null mods = pure Nothing
+  | otherwise = Just <$> modifierRefs mods
+
 withInvestigatorConnectionData
   :: HasGame m
   => With WithDeckSize ModifierData
@@ -632,10 +675,20 @@ withInvestigatorConnectionData inner@(With target _) = case target of
     combat <- field InvestigatorBaseCombat (toId investigator')
     agility <- field InvestigatorBaseAgility (toId investigator')
     handSize <- getHandSize (toAttrs investigator')
+    playProhibitions <- prohibitionRefs =<< getPlayProhibitions (toId investigator')
+    commitProhibitions <- prohibitionRefs =<< getCommitProhibitions (toId investigator')
+    cannotDiscoverClues <-
+      investigatorProhibition =<< getCannotDiscoverCluesModifiers (toId investigator')
+    cannotSpendClues <-
+      investigatorProhibition =<< getCannotSpendCluesModifiers (toId investigator')
     let
       additionalData =
         object
           [ "additionalActions" .= additionalActions
+          , "playProhibitions" .= playProhibitions
+          , "commitProhibitions" .= commitProhibitions
+          , "cannotDiscoverClues" .= cannotDiscoverClues
+          , "cannotSpendClues" .= cannotSpendClues
           , "engagedEnemies" .= engagedEnemies
           , "assets" .= (assets <> assets')
           , "events" .= events
@@ -6457,6 +6510,7 @@ eventField e fld = do
     EventUses -> pure $ Map.filterWithKey (\k _ -> Token.tokenIsUse k) eventTokens
     EventTokens -> pure eventTokens
     EventPlacement -> pure eventPlacement
+    EventPlayedFrom -> pure eventPlayedFrom
     EventCustomizations -> pure eventCustomizations
     EventMeta -> pure eventMeta
     EventTraits -> pure $ cdCardTraits cdef
@@ -6919,33 +6973,11 @@ runMessages gameId observers = do
         InvestigationPhase {} | not (gameRunWindows g) -> pure ()
         InvestigationPhase {} -> do
           mTurnInvestigator <- runWithEnv $ traverse getInvestigator =<< selectOne TurnInvestigator
-          let
-            doneWithRound =
-              or
-                . sequence
-                  [ attr investigatorEndedTurn
-                  , attr investigatorResigned
-                  , attr investigatorDefeated
-                  ]
-          if all doneWithRound mTurnInvestigator
+          if all doneWithTurn mTurnInvestigator
             then do
-              playingInvestigators <-
-                runWithEnv $ filterM (fmap (not . doneWithRound) . getInvestigator) (gamePlayerOrder g)
-              case playingInvestigators of
-                [] -> pushEnd EndInvestigation
-                [x] -> push $ ChoosePlayer x SetTurnPlayer
-                xs -> do
-                  if view leadInvestigatorIdL g == "00000"
-                    then push ChooseLeadInvestigator
-                    else do
-                      player <- runWithEnv $ getPlayer (g ^. leadInvestigatorIdL)
-                      push
-                        $ questionLabel "$label.choosePlayerToTakeTurn" player
-                        $ ChooseOne
-                          [ PortraitLabel iid [ChoosePlayer iid SetTurnPlayer]
-                          | iid <- xs
-                          ]
-
+              -- Who takes the next turn is 'ChooseTurnPlayer''s decision alone, so
+              -- that a turn-order modifier has one place to be honored.
+              push ChooseTurnPlayer
               runMessages gameId observers
             else do
               let turnPlayer = fromJustNote "verified above" mTurnInvestigator
@@ -7027,6 +7059,9 @@ runMessages gameId observers = do
             Ask _ (ChooseOneAtATime []) -> runMessages gameId observers
             Ask _ (ChooseOneAtATimeWithAuto _ []) -> runMessages gameId observers
             Ask _ (ChooseN _ []) -> runMessages gameId observers
+            -- "Choose 0 of these" is nothing to choose. Asking anyway strands the player in a
+            -- question that never counts down (see @ChooseN@ in @Entity.Answer@).
+            Ask _ (ChooseN n _) | n <= 0 -> runMessages gameId observers
             Ask pid q -> do
               -- if we are choosing decks, we do not want to clobber other ChooseDeck
               moreChooseDecks <-

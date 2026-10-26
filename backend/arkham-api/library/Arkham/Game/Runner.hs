@@ -348,6 +348,29 @@ endGame mverdict g = do
   -- campaign's records, which cannot tell which scenario was last.
   withEnding o = o {outcomeEnding = ending <|> outcomeEnding o}
 
+{- | The state a turn is played out of, shared by beginning one ('BeginTurn') and
+picking a suspended one back up ('Arkham.Question.ResumeTurnPlayer'). The
+windows are the caller's business; this is only the bookkeeping, and a resumed
+turn needs all of it -- in particular the undo boundary, so an undo from inside
+the resumed turn lands at its first action and not back in the mythos phase.
+-}
+turnStartState :: InvestigatorId -> PlayerId -> Game -> Game
+turnStartState x player g =
+  g
+    & (activeInvestigatorIdL .~ x)
+    & (activePlayerIdL .~ player)
+    & (turnPlayerInvestigatorIdL ?~ x)
+    & (activeAbilitiesL .~ mempty)
+    & (logBlockStackL .~ mempty)
+    & (actionRemovedEntitiesL .~ mempty)
+    & (tombstonesL .~ mempty)
+    & (entitiesL %~ clearRemovedEntities)
+    -- +1 because the batch processing the turn's start ends at the next Ask
+    -- (the investigator's first action choice). We want undo to land there,
+    -- not at the prior batch (which would be the choose-player question or
+    -- the end of mythos).
+    & (undoTurnStepL ?~ (gameScenarioSteps g + 1))
+
 runGameMessage :: Runner Game
 runGameMessage msg g = case msg of
   -- ClearUI is pushed exactly once per accepted answer (Api Games.Shared), so
@@ -1252,6 +1275,13 @@ runGameMessage msg g = case msg of
   ChoosePlayer iid SetTurnPlayer -> do
     pushAll [BeginTurn iid, After (BeginTurn iid)]
     pure $ g & activeInvestigatorIdL .~ iid & turnPlayerInvestigatorIdL ?~ iid
+  {- A turn suspended mid-turn is picked back up: the bookkeeping 'BeginTurn'
+  does, with none of its windows, because the turn is not beginning. The queue
+  drain then opens this investigator's action window, so the phase resumes at
+  2.2.1 rather than 2.2. See 'Arkham.Modifier.ResumesSuspendedTurn'. -}
+  ChoosePlayer iid ResumeTurnPlayer -> do
+    player <- getPlayer iid
+    pure $ turnStartState iid player g
   After (MoveTo (moveTarget -> InvestigatorTarget iid)) -> do
     -- Where it ended up, as well as that it happened: "moved to a location with
     -- an enemy" is a question about the destination, and read afterwards, which
@@ -2913,9 +2943,12 @@ runGameMessage msg g = case msg of
   PlayerWindow iid _ _ _ -> do
     player <- getPlayer iid
     pure $ g & activeInvestigatorIdL .~ iid & activePlayerIdL .~ player
+  {- The first turn's player is chosen by 'ChooseTurnPlayer' rather than a
+  question built here, because the steps below are all queued before the "when
+  the investigation phase begins" window has run -- and a card in that window
+  can decide who takes the first turn. See 'ChooseTurnPlayer'. -}
   Begin InvestigationPhase -> do
     let phaseStep step msgs = Msg.PhaseStep (InvestigationPhaseStep step) msgs
-    investigatorIds <- getInvestigators
     phaseBeginsWindow <-
       checkWindows
         [ mkWhen Window.AnyPhaseBegins
@@ -2929,28 +2962,35 @@ runGameMessage msg g = case msg of
         ]
 
     fastWindow <- checkWindows [mkWhen Window.FastPlayerWindow]
-    case investigatorIds of
-      [] -> error "no investigators"
-      [iid] ->
-        pushAll
-          [ phaseStep InvestigationPhaseBeginsStep [phaseBeginsWindow, afterPhaseBeginsWindow]
-          , phaseStep InvestigationPhaseBeginsWindow [fastWindow]
-          , phaseStep NextInvestigatorsTurnBeginsStep [ChoosePlayer iid SetTurnPlayer]
-          ]
-      xs@(x : _) -> do
-        let fixId z = if z == "00000" then x else z
-        player <- getPlayer (fixId (g ^. leadInvestigatorIdL))
-        pushAll
-          [ phaseStep InvestigationPhaseBeginsStep [phaseBeginsWindow, afterPhaseBeginsWindow]
-          , phaseStep InvestigationPhaseBeginsWindow [fastWindow]
-          , phaseStep
-              NextInvestigatorsTurnBeginsStep
-              [ questionLabel "$label.choosePlayerToTakeTurn" player
-                  $ ChooseOne
-                    [PortraitLabel iid [ChoosePlayer iid SetTurnPlayer] | iid <- xs]
-              ]
-          ]
+    {- The window between 2.1 and 2.2 is left out when a turn is resuming: that
+    turn is already in progress when the phase begins, so the phase never
+    reaches a point between turns for a player window to sit in. Read here, not
+    in the window itself, because the step is queued either way. -}
+    resuming <- anyM (`hasModifier` ResumesSuspendedTurn) (g ^. playerOrderL)
+    pushAll
+      $ [phaseStep InvestigationPhaseBeginsStep [phaseBeginsWindow, afterPhaseBeginsWindow]]
+      <> [phaseStep InvestigationPhaseBeginsWindow [fastWindow] | not resuming]
+      <> [phaseStep NextInvestigatorsTurnBeginsStep [ChooseTurnPlayer]]
     pure $ g & phaseL .~ InvestigationPhase & undoPhaseStepL ?~ (gameScenarioSteps g + 1)
+  ChooseTurnPlayer -> do
+    playing <- filterM (fmap (not . doneWithTurn) . getInvestigator) (g ^. playerOrderL)
+    -- A seat owed the rest of a suspended turn narrows the offer and is resumed
+    -- rather than begun; several of them are still chosen between, which is
+    -- what the players expect to be asked.
+    resuming <- filterM (`hasModifier` ResumesSuspendedTurn) playing
+    let choice = if null resuming then SetTurnPlayer else ResumeTurnPlayer
+    case if null resuming then playing else resuming of
+      [] -> pushEnd EndInvestigation
+      [x] -> push $ ChoosePlayer x choice
+      xs
+        -- No lead yet: settle that first, then come back and ask them.
+        | g ^. leadInvestigatorIdL == "00000" -> pushAll [ChooseLeadInvestigator, ChooseTurnPlayer]
+        | otherwise -> do
+            player <- getPlayer (g ^. leadInvestigatorIdL)
+            push
+              $ questionLabel "$label.choosePlayerToTakeTurn" player
+              $ ChooseOne [PortraitLabel iid [ChoosePlayer iid choice] | iid <- xs]
+    pure g
   BeginTurn x -> do
     player <- getPlayer x
     -- Two checks, not one batch: a `When your turn begins` reaction is a different timing
@@ -2969,21 +3009,7 @@ runGameMessage msg g = case msg of
         $ map (uncurry $ AbilityPrevented x)
         <$> getPreventedPlayerAbilities x
     pushAll $ prevented <> [whenWindow, afterWindow]
-    pure
-      $ g
-      & (activeInvestigatorIdL .~ x)
-      & (activePlayerIdL .~ player)
-      & (turnPlayerInvestigatorIdL ?~ x)
-      & (activeAbilitiesL .~ mempty)
-      & (logBlockStackL .~ mempty)
-      & (actionRemovedEntitiesL .~ mempty)
-      & (tombstonesL .~ mempty)
-      & (entitiesL %~ clearRemovedEntities)
-      -- +1 because the batch processing this BeginTurn ends at the next Ask
-      -- (the investigator's first action choice). We want undo to land there,
-      -- not at the prior batch (which would be the choose-player question or
-      -- the end of mythos).
-      & (undoTurnStepL ?~ (gameScenarioSteps g + 1))
+    pure $ turnStartState x player g
   SetPlayerOrder -> do
     lead <- getLead
     players <- getInvestigators
@@ -3314,15 +3340,23 @@ runGameMessage msg g = case msg of
   AllDrawEncounterCard -> do
     push $ SetActiveInvestigator $ g ^. activeInvestigatorIdL
     mGloria <- selectOne $ investigatorIs Investigators.gloriaGoldberg
-    investigators <- filterM (fmap not . isEliminated) =<< getInvestigatorsInOrder
+    -- A seat that cannot draw one is dropped from the draw rather than handed one
+    -- that does nothing, so it is also absent from Gloria Goldberg's draw order.
+    investigators <-
+      filterM
+        (\iid -> andM [not <$> isEliminated iid, not <$> hasModifier iid CannotDrawEncounterCards])
+        =<< getInvestigatorsInOrder
     case mGloria of
-      Just gloria -> push $ SendMessage (toTarget gloria) (ForInvestigators investigators AllDrawEncounterCard)
-      Nothing -> do
-        for_ (reverse investigators) \iid -> push $ ForInvestigator iid AllDrawEncounterCard
+      Just gloria | gloria `elem` investigators -> do
+        push $ SendMessage (toTarget gloria) (ForInvestigators investigators AllDrawEncounterCard)
+      _ -> for_ (reverse investigators) \iid -> push $ ForInvestigator iid AllDrawEncounterCard
     pure g
   ForInvestigator iid AllDrawEncounterCard -> do
     iid' <- fromMaybe iid <$> selectOne (InvestigatorWithModifier DrawsEachEncounterCard)
-    whenM (not <$> isEliminated iid) do
+    -- Also guarded here, not only in the fan-out above: a scenario that rebuilds
+    -- the draw pushes these directly (Ages Unwound VI).
+    cannotDraw <- hasModifier iid CannotDrawEncounterCards
+    unless cannotDraw $ whenM (not <$> isEliminated iid) do
       player <- getPlayer iid'
       mods <- getModifiers iid'
       viaTargets <- nub . concat <$> traverse select [tm | DrawEncounterCardsVia tm <- mods]
@@ -4003,16 +4037,28 @@ runGameMessage msg g = case msg of
           assetId <- getRandom
           let asset = createAsset card assetId
           -- Story assets can be drawn from encounter decks while still having AssetType.
-          pushAll $ afterDraw
+          -- Active while the revelation resolves, so the card is visible in the
+          -- play area the way a resolving treachery or a spawning enemy is.
+          pushAll
+            $ afterDraw
             : (guard (not ignoreRevelation) *> resolve (Revelation iid $ AssetSource assetId))
-          pure $ g' & (entitiesL . assetsL . at assetId ?~ asset)
+              <> [UnsetActiveCard]
+          pure
+            $ g'
+            & (entitiesL . assetsL . at assetId ?~ asset)
+            & (activeCardL ?~ toCard card)
         EncounterAssetType -> do
           assetId <- getRandom
           let asset = createAsset card assetId
           -- Asset is assumed to have a revelation ability if drawn from encounter deck
-          pushAll $ afterDraw
+          pushAll
+            $ afterDraw
             : (guard (not ignoreRevelation) *> resolve (Revelation iid $ AssetSource assetId))
-          pure $ g' & (entitiesL . assetsL . at assetId ?~ asset)
+              <> [UnsetActiveCard]
+          pure
+            $ g'
+            & (entitiesL . assetsL . at assetId ?~ asset)
+            & (activeCardL ?~ toCard card)
         EncounterEventType -> do
           eventId <- getRandom
           let owner = fromMaybe iid (toCardOwner card)
@@ -4558,7 +4604,35 @@ runActionRemovedEntities msg g = case msg of
               , entitiesAssets = entitiesAssets removed' <> parkedAssets
               }
         }
+  -- A parked copy is never the entity entering play: a card that re-enters play gets a fresh
+  -- entity, so the `card.id == attrs.cardId` guard every "I entered play" handler uses fires on
+  -- the corpse as well. The King in Yellow, discarded by its own reaction and then redrawn after
+  -- a reshuffle in the same action, placed a second, dead copy into the threat area that way and
+  -- forced an unrelated hand asset to be discarded (#5899).
+  CardIsEnteringPlay _ card -> withoutCardId card.id
+  CardEnteredPlay _ card -> withoutCardId card.id
   _ -> actionRemovedEntitiesL (runMessage msg) g
+ where
+  withoutCardId cid = do
+    let
+      removed = gameActionRemovedEntities g
+      -- assets, events and skills are the card-backed entity kinds (cf. `loadedCardIds`)
+      (parkedAssets, ownAssets) = Map.partition (\x -> (toAttrs x).cardId == cid) (entitiesAssets removed)
+      (parkedEvents, ownEvents) = Map.partition (\x -> (toAttrs x).cardId == cid) (entitiesEvents removed)
+      (parkedSkills, ownSkills) = Map.partition (\x -> (toAttrs x).cardId == cid) (entitiesSkills removed)
+    removed' <-
+      runMessage
+        msg
+        removed {entitiesAssets = ownAssets, entitiesEvents = ownEvents, entitiesSkills = ownSkills}
+    pure
+      $ g
+        { gameActionRemovedEntities =
+            removed'
+              { entitiesAssets = entitiesAssets removed' <> parkedAssets
+              , entitiesEvents = entitiesEvents removed' <> parkedEvents
+              , entitiesSkills = entitiesSkills removed' <> parkedSkills
+              }
+        }
 
 -- NOTE: We need preloadEntities to be a the end because the game state is not
 -- "saved" between steps here. For example if we discard a card with in discard

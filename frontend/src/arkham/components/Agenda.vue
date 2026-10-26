@@ -593,7 +593,7 @@ const wards = computed(() => props.agenda.tokens[TokenType.Ward])
   transform: translateX(calc(var(--attachment-index, 0) * 50px));
 }
 
-.treachery {
+.treachery :deep(.card) {
   box-shadow: 1px 1px 6px rgba(0, 0, 0, 0.45);
 }
 
@@ -604,6 +604,14 @@ const wards = computed(() => props.agenda.tokens[TokenType.Ward])
 
   &:first-of-type {
     margin-left: 0;
+  }
+
+  /* Only the strip below the agenda is on show while the card is tucked, so the
+     pool has to live down there -- at its usual place near the top it sits
+     behind the agenda card and the doom is invisible. */
+  :deep(.pool) {
+    top: auto;
+    bottom: 5%;
   }
 }
 

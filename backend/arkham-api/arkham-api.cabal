@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.39.6.
 --
 -- see: https://github.com/sol/hpack
 
@@ -9709,6 +9709,7 @@ test-suite spec
       Arkham.Agenda.Cards.TheScarletKeys.DeadHeat.EmptyStreetsSpec
       Arkham.Asset.Assets.AncientAnkhSpec
       Arkham.Asset.Assets.Aquinnah1Spec
+      Arkham.Asset.Assets.Aquinnah3Spec
       Arkham.Asset.Assets.ArcaneInitiateSpec
       Arkham.Asset.Assets.ArcaneStudies2Spec
       Arkham.Asset.Assets.ArcaneStudiesSpec
@@ -9771,6 +9772,7 @@ test-suite spec
       Arkham.Asset.Assets.LeatherCoatSpec
       Arkham.Asset.Assets.LeoDeLuca1Spec
       Arkham.Asset.Assets.LeoDeLucaSpec
+      Arkham.Asset.Assets.LolaSantiago3Spec
       Arkham.Asset.Assets.MacheteSpec
       Arkham.Asset.Assets.MagnifyingGlass1Spec
       Arkham.Asset.Assets.MagnifyingGlassSpec
@@ -9811,6 +9813,7 @@ test-suite spec
       Arkham.Asset.Assets.SpringfieldM19034Spec
       Arkham.Asset.Assets.StrayCatSpec
       Arkham.Asset.Assets.SummonedHound1Spec
+      Arkham.Asset.Assets.SurvivalKnife2Spec
       Arkham.Asset.Assets.SurvivalKnifeSpec
       Arkham.Asset.Assets.SwitchbladeSpec
       Arkham.Asset.Assets.TheBlackCat5Spec
@@ -9819,6 +9822,7 @@ test-suite spec
       Arkham.Asset.Assets.TheGrapevineSpec
       Arkham.Asset.Assets.TheHierophantV3Spec
       Arkham.Asset.Assets.TheHungeringBlade1Spec
+      Arkham.Asset.Assets.TheKingInYellowSpec
       Arkham.Asset.Assets.TheMuscleUnpracticedSpec
       Arkham.Asset.Assets.TheNecronomiconSpec
       Arkham.Asset.Assets.ThirtyFiveWinchesterSpec
@@ -9845,10 +9849,12 @@ test-suite spec
       Arkham.CampaignLogKeySpec
       Arkham.Card.CardCodeSpec
       Arkham.ChaosTokenFaceSpec
+      Arkham.Custom.OverlaySpec
       Arkham.Debug.ActionsSpec
       Arkham.Debug.CampaignLogSpec
       Arkham.Debug.SandboxSpec
       Arkham.Debug.SealSpec
+      Arkham.Decklist.ArkhamBuildCodesSpec
       Arkham.DecklistSpec
       Arkham.EncounterSetSpec
       Arkham.Enemy.Cards.BrethrenOfAsh.FlyingTerrors.BatHorrorSpec
@@ -9995,6 +10001,7 @@ test-suite spec
       Arkham.Matcher.LegacyJSONSpec
       Arkham.Matcher.NearestLocationToMostSpec
       Arkham.Matcher.OutOfPlayEnemySpec
+      Arkham.MissingCustomCardSpec
       Arkham.Modifier.CannotAttackDuringEnemyPhaseSpec
       Arkham.Modifier.SearchAllInvestigatorsSpec
       Arkham.Scenario.DancingMadSpec

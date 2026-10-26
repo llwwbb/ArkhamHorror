@@ -229,11 +229,52 @@ db-unstick-kill:
 .PHONY: db-unstick-kill
 
 ## Sync local images to s3 bucket (public/ plus homebrew campaign and third edition images)
-sync-images:
-	cd frontend/public && aws s3 sync . s3://arkham-horror-assets --acl public-read --exclude ".DS_Store" --exclude "img/custom/*"
+##
+## Card faces are split in two: the clean masters go to the PRIVATE originals
+## bucket, and only the watermarked, resolution-capped renditions built by
+## scripts/watermark-cards.sh reach the public bucket. Everything else (boxes,
+## sets, portraits, homebrew, 3ed) syncs from public/ as before.
+##
+## No --acl public-read anywhere: CloudFront reads the bucket through its origin
+## access identity, so objects do not need to be world-readable, and dropping it
+## closes the direct s3.amazonaws.com path. scripts/fetch-assets.sh is unaffected
+## -- it lists via S3 (still public) and downloads via CloudFront.
+# Card faces are supplied by the watermarked tree, so they are held back from
+# the public/ sync -- except back_*, the face-down card back, which must stay
+# unmarked and has no rendition. Stale .jpg/.png under some card dirs are no
+# longer served and simply stop being re-synced.
+CARD_EXCLUDES = --exclude "img/arkham/cards/*" --include "img/arkham/cards/back_*" \
+                --exclude "img/arkham/es/cards/*" --exclude "img/arkham/fr/cards/*" \
+                --exclude "img/arkham/ita/cards/*" --exclude "img/arkham/ko/cards/*" \
+                --exclude "img/arkham/rus/cards/*" --exclude "img/arkham/zh/cards/*"
+
+# Card art is not content-addressed -- a card keeps its URL when its art is
+# replaced -- so `immutable` or a year would mean a year of stale art after any
+# re-upload. A week removes the repeat downloads without that trap. Only files
+# a sync actually uploads get this; `make set-cache-control` backfills the rest.
+IMAGE_CACHE_CONTROL = public, max-age=604800
+
+sync-images: watermark-cards
+	cd frontend/public && aws s3 sync . s3://arkham-horror-assets --exclude "*.DS_Store" --exclude "img/custom/*" --cache-control "$(IMAGE_CACHE_CONTROL)" $(CARD_EXCLUDES)
+	aws s3 sync frontend/.watermarked/img/arkham s3://arkham-horror-assets/img/arkham --exclude "*.DS_Store" --exclude ".build-settings" --cache-control "$(IMAGE_CACHE_CONTROL)"
+	cd frontend/public && aws s3 sync . s3://arkham-horror-originals --exclude "*" \
+		--include "img/arkham/cards/*" --include "img/arkham/es/cards/*" \
+		--include "img/arkham/fr/cards/*" --include "img/arkham/ita/cards/*" \
+		--include "img/arkham/ko/cards/*" --include "img/arkham/rus/cards/*" \
+		--include "img/arkham/zh/cards/*" --exclude "*.DS_Store"
 	./scripts/sync-homebrew-images.sh
-	aws s3 sync frontend-3ed/public/img/ah3e s3://arkham-horror-assets/img/ah3e --acl public-read --exclude ".DS_Store"
+	aws s3 sync frontend-3ed/public/img/ah3e s3://arkham-horror-assets/img/ah3e --exclude "*.DS_Store" --cache-control "$(IMAGE_CACHE_CONTROL)"
 .PHONY: sync-images
+
+## Build the watermarked, resolution-capped card renditions (incremental)
+watermark-cards:
+	./scripts/watermark-cards.sh
+.PHONY: watermark-cards
+
+## Backfill Cache-Control on images already in the bucket (see --canary first)
+set-cache-control:
+	./scripts/set-cache-control.sh
+.PHONY: set-cache-control
 
 ## Fetch all images via CloudFront (requires aws + curl)
 fetch-images:

@@ -234,6 +234,20 @@ data ModifierType
   | CannotDisengageEnemies
   | CannotDrawCards
   | CannotDrawCardsFromPlayerCardEffects
+  | {- | This investigator is left out of the game's own "each investigator draws
+    an encounter card" entirely -- out of the draw and out of Gloria Goldberg's
+    draw-order choice, rather than handed a draw that then does nothing. Honored
+    by 'Arkham.Message.AllDrawEncounterCard' and its per-investigator
+    @ForInvestigator@, which is the mythos draw and the handful of cards that
+    re-run it.
+
+    It does NOT cover an effect that names this investigator and tells them to
+    draw an encounter card; 'CannotDrawCards' does not either (it gates what may
+    be offered and the opening hand, not a draw the game pushes). An out-of-play
+    seat that must be unreachable by everything needs its own enumerated list of
+    bans -- see /Ritual Circle: A Harnessed Future/.
+    -}
+    CannotDrawEncounterCards
   | {- | "Cannot willingly end their turn". Drops the end-turn button from the
     player window, and nothing else: an effect that ends the turn for you is
     not the investigator choosing to, so it still resolves.
@@ -529,6 +543,27 @@ data ModifierType
   | MustFight EnemyId
   | MustTakeAction ActionTarget
   | MustPerformAbilityIfCan AbilityRef
+  | {- | This investigator has a turn that was suspended mid-turn and is owed the
+    rest of it. Carried from the moment of suspension until the resumed turn
+    ends, and honored in three places, all in the investigation phase:
+
+    * 'Arkham.Message.ChooseTurnPlayer' narrows the offer to the investigators
+      carrying this while any of them still has a turn coming, so a resumed turn
+      comes before anyone else's. Several of them are still /chosen between/
+      rather than ordered for the players.
+    * that same choice resolves as 'Arkham.Question.ResumeTurnPlayer' rather
+      than @SetTurnPlayer@, so the turn is picked back up instead of begun: no
+      @TurnBegins@ windows, and the investigator lands in 2.2.1.
+    * @Begin InvestigationPhase@ leaves out its own player window between 2.1
+      and 2.2, because a turn that resumes as the phase begins is already in
+      progress -- the phase never reaches a point between turns.
+
+    /Ritual Circle: A Harnessed Future/ is what wants it. What it still cannot
+    carry across the phase boundary is per-turn bookkeeping: @actionsTaken@,
+    @actionsPerformed@ and per-turn ability limits are reset by @Do BeginRound@
+    before the phase is reached.
+    -}
+    ResumesSuspendedTurn
   | NegativeToPositive
   | NoDamageDealt
   | NoInitialSwarm

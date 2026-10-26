@@ -16,7 +16,7 @@
   <template v-else>
     <NavBar/>
     <main class="router-container">
-      <Suspense>
+      <Suspense @resolve="hideAppLoading">
         <router-view v-slot="{ Component }">
           <transition name="fade">
             <component :is="Component" />
@@ -39,6 +39,8 @@ import { ref, onMounted } from 'vue'
 import { useSiteSettingsStore } from '@/stores/site_settings'
 import { maintenanceActive, maintenanceMessage } from '@/maintenance'
 import { checkImageExists } from '@/arkham/helpers'
+import { hideAppLoading } from '@/appLoading'
+import { primeWatermark } from '@/arkham/unwatermark'
 import NavBar from '@/components/NavBar.vue'
 import Toasts from '@/components/Toasts.vue'
 
@@ -52,9 +54,16 @@ function retry() {
 }
 
 onMounted(async () => {
+  /* 13KB, needed before any card can be un-watermarked; fetching it now keeps
+   * it off the critical path of the first card someone looks at. */
+  primeWatermark()
   await settingsStore.init()
   avifSupported.value = await checkAvifSupport();
   await checkImageExists()
+  /* Maintenance and the unsupported-browser notice render INSTEAD of the router
+   * view, so Suspense never resolves and would leave the splash sitting on top
+   * of the very message the player needs to read. */
+  if (maintenanceActive.value || !avifSupported.value) hideAppLoading()
 })
 const avifSupported = ref(true);
 const checkAvifSupport = (): Promise<boolean> => {

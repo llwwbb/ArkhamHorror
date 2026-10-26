@@ -65,6 +65,9 @@ missingCustomCardDef cardType cardCode =
   (emptyCardDef cardCode ("Missing card" :: Name) cardType)
     { cdCardTraits = mempty
     , cdTags = [missingCustomCardTag]
+    , -- Building an investigator reads its class, so a stand-in without one
+      -- throws rather than losing the one card this exists to lose.
+      cdClassSymbols = singleton #neutral
     }
 
 {- | The def for a custom code, or a stand-in when it is not to hand.
@@ -129,6 +132,36 @@ arkhamBuildCustomCardCode :: Text -> CardCode
 arkhamBuildCustomCardCode t =
   CardCode $ customCardPrefix <> T.toLower (T.filter (/= '-') t) <> "0"
 
+{- | arkham.build's "Investigator Placeholders" pack.
+
+Johnny Anybody and Jane Doe: blank investigators the site ships so a deck can be
+built without one. They print no ability, -2 in every skill, and "this front is
+left intentionally blank" -- they are not meant to be played there either. A deck
+built on one is a deck with no investigator of its own, waiting for an overlay to
+say whose it is (see "Arkham.Custom.Overlay"), which is how a deck for a card
+builder investigator gets built on a site that cannot know them.
+
+Recognized by pack wherever the deck carries one, so a card the pack gains later
+counts without being listed here; the two ids are what a deck arriving without
+that meta is recognized by. Mirrored in @customCards.ts@ for the same reason
+'arkhamBuildCustomCardCode' is.
+-}
+arkhamBuildPlaceholderPack :: Text
+arkhamBuildPlaceholderPack = "d12a4d9c-8c65-4df0-be0c-c2e14af65a21"
+
+arkhamBuildPlaceholderCodes :: Set CardCode
+arkhamBuildPlaceholderCodes =
+  setFromList
+    $ map
+      arkhamBuildCustomCardCode
+      [ "347ff5d0-8521-4d9b-a0fe-90c06114057d" -- Johnny Anybody
+      , "c13c4114-0769-410c-864b-e43f5a596c0d" -- Jane Doe
+      ]
+
+isArkhamBuildPlaceholder :: HasCardCode a => a -> Bool
+isArkhamBuildPlaceholder (toCardCode -> cardCode) =
+  sanitizeCustomCardCode cardCode `member` arkhamBuildPlaceholderCodes
+
 -- | The meta key a card records 'arkhamBuildIdOf' under.
 arkhamBuildIdKey :: Text
 arkhamBuildIdKey = "arkhamBuildId"
@@ -162,6 +195,23 @@ customCardCodes card =
   cdCardCode def : map arkhamBuildCustomCardCode (maybeToList $ arkhamBuildIdOf def)
  where
   def = customCardDef card
+
+{- | A library keyed by every code its cards answer to, ready for the registry.
+
+Aliases underneath, so a card's own code always wins one. Importing the
+arkham.build pack gives its card a code derived from the same id a hand-built
+card can claim, and in that collision the imported card is the one the deck
+means. Left-biased union rather than row order, which is `updatedAt` and says
+nothing about which card is which.
+
+One function because every path that loads a deck has to resolve the same codes:
+keying it by hand at each of them drifted once already, and a deck naming a card
+by the id it claims then missed it (#5891).
+-}
+customCardsByCode :: [CustomCard] -> Map CardCode CustomCard
+customCardsByCode cards =
+  Map.fromList [(cdCardCode (customCardDef c), c) | c <- cards]
+    `Map.union` Map.fromList [(code, c) | c <- cards, code <- drop 1 (customCardCodes c)]
 
 {- | The registry, with the one thing that can only be known from all of it.
 
