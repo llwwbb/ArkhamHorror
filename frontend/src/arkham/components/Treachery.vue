@@ -159,16 +159,26 @@ const attachedTreacheries = computed(() =>
       :game="game"
       @click="$emit('choose', ability.index)"
     />
-    <img
-      ref="cardFrame"
-      :src="image"
-      class="card"
-      :class="{ 'treachery--can-interact': canHighlight, attached, 'in-hand': isInHand }"
-      :draggable="tuckable || undefined"
-      @dragstart="startDrag"
-      @click="handleCardClick"
-      :data-delay="overlayDelay"
-    />
+    <div class="treachery-face">
+      <img
+        ref="cardFrame"
+        :src="image"
+        class="card"
+        :class="{ 'treachery--can-interact': canHighlight, attached, 'in-hand': isInHand }"
+        :draggable="tuckable || undefined"
+        @dragstart="startDrag"
+        @click="handleCardClick"
+        :data-delay="overlayDelay"
+      />
+      <div class="pool">
+        <TokenPool
+          :tokens="treachery.tokens"
+          :overrides="tokenOverrides"
+          :target="{ tag: 'TreacheryTarget', contents: treachery.id }"
+        />
+        <Token v-for="(sealedToken, index) in treachery.sealedChaosTokens" :key="index" :token="sealedToken" :playerId="playerId" :game="game" @choose="choose" />
+      </div>
+    </div>
     <AbilityButton
       v-if="!isInHand"
       v-for="ability in abilities"
@@ -188,14 +198,6 @@ const attachedTreacheries = computed(() =>
       position="top"
       @choose="$emit('choose', $event)"
     />
-    <div class="pool">
-      <TokenPool
-        :tokens="treachery.tokens"
-        :overrides="tokenOverrides"
-        :target="{ tag: 'TreacheryTarget', contents: treachery.id }"
-      />
-      <Token v-for="(sealedToken, index) in treachery.sealedChaosTokens" :key="index" :token="sealedToken" :playerId="playerId" :game="game" @choose="choose" />
-    </div>
 
     <!-- A treachery attached to this one, drawn as a strip under the host card
          the way an enemy's attachments are. Recursive by implicit self-reference. -->
@@ -243,6 +245,14 @@ const attachedTreacheries = computed(() =>
   flex-direction: column;
   position: relative;
   width: fit-content;
+}
+
+.treachery-face {
+  position: relative;
+}
+
+.treachery-face > .card {
+  display: block;
 }
 
 .attached .card {
